@@ -1973,13 +1973,14 @@ function updateHud() {
   $('splitCost').textContent = `${fmtUsd(cc)} / ${fmtUsd(xc)}`;
   $('splitBar').style.width = (cc + xc > 0 ? cc / (cc + xc) * 100 : 50) + '%';
 
-  // データ同期ステータス(5分毎コレクターの死活)
+  // データ同期ステータス(5分毎コレクターの死活+最終受信時刻)
   {
     const ageMin = snapAt > 0 ? (Date.now() - snapAt) / 60000 : Infinity;
     const el = $('syncHud');
-    if (ageMin >= (CFG.staleMin || 20)) { el.textContent = '⚠ 止まってます!'; el.style.color = 'var(--bad)'; }
-    else if (ageMin < 7) { el.textContent = '● OK(5分毎)'; el.style.color = 'var(--good)'; }
-    else { el.textContent = `受信待ち(${Math.round(ageMin)}分前)`; el.style.color = 'var(--warn)'; }
+    const rxTime = snapAt > 0 ? new Date(snapAt).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' }) : '--:--';
+    if (ageMin >= (CFG.staleMin || 20)) { el.textContent = `⚠ 止まってます!(最終 ${rxTime})`; el.style.color = 'var(--bad)'; }
+    else if (ageMin < 7) { el.textContent = `● OK ${rxTime}受信(5分毎)`; el.style.color = 'var(--good)'; }
+    else { el.textContent = `受信待ち(最終 ${rxTime})`; el.style.color = 'var(--warn)'; }
   }
 
   const subs = $('subs');
@@ -2186,8 +2187,8 @@ function loop(t) {
   for (const [k, ox, oy, ow, oh] of OCCLUDERS) {
     items.push({ y: oy + oh - 6, draw: g => drawProp(g, k, ox, oy, ow, oh) });
   }
-  // 救急箱: 受付カウンター天板の右端に置く(受付スプライトの後に描く)
-  items.push({ y: 321, draw: g => drawProp(g, 'firstaid', 344, 287, 13, 13) });
+  // 救急箱: 受付カウンター右端の天板に平置き(受付スプライトの後に描く)
+  items.push({ y: 321, draw: g => drawProp(g, 'firstaid', 346, 292, 11, 12) });
   for (const e of employees) {
     if (e.def.source === 'janitor') continue;
     const atDesk = e.present && (e.action === 'sit' || e.action === 'sleep') && !e.resting && !e.atMeeting;
