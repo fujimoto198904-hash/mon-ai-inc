@@ -215,7 +215,7 @@ const OFFICE = {};
   for (const k of ['vending', 'sofa', 'cooler', 'chair',
     'rack', 'netcab', 'plant_a', 'plant_mon', 'lamp', 'coffee_st', 'armchair',
     'snack', 'copier', 'tower', 'dskb1', 'dskb2', 'dskb4',
-    'corkboard', 'window_day', 'window_night', 'reception', 'bin_g', 'bin_r', 'exting', 'firstaid', 'sanitizer', 'studio_audio', 'studio_film', 'rug_new', 'b_grill', 'b_table', 'b_meat', 'b_skewer', 'b_cooler', 'b_beer', 'g_rack', 'g_barbell', 'g_bench', 'g_tread', 'g_mats', 'g_ball']) {
+    'corkboard', 'window_day', 'window_night', 'reception', 'bin_g', 'bin_r', 'exting', 'firstaid', 'sanitizer', 'studio_audio', 'studio_film', 'rug_green', 'b_grill', 'b_table', 'b_meat', 'b_skewer', 'b_cooler', 'b_beer', 'g_rack', 'g_barbell', 'g_bench', 'g_tread', 'g_mats', 'g_ball']) {
     const im = new Image();
     im.onload = () => { OFFICE[k] = keyOutBackground(im); };
     im.src = `assets/office/${k}.png`;
@@ -225,17 +225,33 @@ const SWEEPS = {};
 for (const k of ['sweep1', 'sweep2', 'mop1', 'wipe1', 'bucket1']) {
   const im = new Image();
   im.onload = () => {
+    // 素材に隣コマの断片が混入していても壊れないよう、最大連結成分のbboxだけを使う
+    // (全体bboxだと断片まで含んで縮小+浮きバグになる)
     const cv2 = keyOutBackground(im);
-    const g2 = cv2.getContext('2d');
-    const d2 = g2.getImageData(0, 0, cv2.width, cv2.height).data;
-    let x0 = cv2.width, x1 = 0, y0 = cv2.height, y1 = 0;
-    for (let yy = 0; yy < cv2.height; yy++) for (let xx = 0; xx < cv2.width; xx++) {
-      if (d2[(yy * cv2.width + xx) * 4 + 3] > 16) {
-        if (xx < x0) x0 = xx; if (xx > x1) x1 = xx;
-        if (yy < y0) y0 = yy; if (yy > y1) y1 = yy;
+    const W2 = cv2.width, H2 = cv2.height;
+    const d2 = cv2.getContext('2d').getImageData(0, 0, W2, H2).data;
+    const lbl = new Int32Array(W2 * H2);
+    let best = null;
+    for (let i = 0; i < W2 * H2; i++) {
+      if (lbl[i] || d2[i * 4 + 3] <= 16) continue;
+      const stack = [i];
+      lbl[i] = 1;
+      let n = 0, x0 = W2, x1 = 0, y0 = H2, y1 = 0;
+      while (stack.length) {
+        const p = stack.pop();
+        const px2 = p % W2, py2 = (p / W2) | 0;
+        n++;
+        if (px2 < x0) x0 = px2; if (px2 > x1) x1 = px2;
+        if (py2 < y0) y0 = py2; if (py2 > y1) y1 = py2;
+        if (px2 > 0 && !lbl[p - 1] && d2[(p - 1) * 4 + 3] > 16) { lbl[p - 1] = 1; stack.push(p - 1); }
+        if (px2 < W2 - 1 && !lbl[p + 1] && d2[(p + 1) * 4 + 3] > 16) { lbl[p + 1] = 1; stack.push(p + 1); }
+        if (py2 > 0 && !lbl[p - W2] && d2[(p - W2) * 4 + 3] > 16) { lbl[p - W2] = 1; stack.push(p - W2); }
+        if (py2 < H2 - 1 && !lbl[p + W2] && d2[(p + W2) * 4 + 3] > 16) { lbl[p + W2] = 1; stack.push(p + W2); }
       }
+      if (!best || n > best.n) best = { n, x0, x1, y0, y1 };
     }
-    SWEEPS[k] = { cv: cv2, box: { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 } };
+    const b = best || { x0: 0, x1: W2 - 1, y0: 0, y1: H2 - 1 };
+    SWEEPS[k] = { cv: cv2, box: { x: b.x0, y: b.y0, w: b.x1 - b.x0 + 1, h: b.y1 - b.y0 + 1 } };
   };
   im.src = `assets/office/${k}.png`;
 }
@@ -583,6 +599,8 @@ function drawOffice(g, t, tm) {
 
   if (!drawProp(g, 'room_break', 16, 208, 176, 132)) rr(g, 16, 208, 176, 132, '#ecd8c0', '#d0b898');
   rr(g, 16, 338, 176, 4, 'rgba(120,90,60,.35)');
+  // 休憩室のラグ: 部屋中央に置き、壁からは四方とも必ず離す(壁接触の再発防止)
+  drawProp(g, 'rug_green', 49, 248, 110, 66);
 
 
   // スタジオ2部屋(ユーザー製ルームアート)
@@ -637,6 +655,7 @@ function outPath(pt, lane) {
   if (y > 276 && x >= 236 && x <= 380) return [{ x, y: 278 }, { x: 374, y: 278 }, { x: 374, y: L }]; // 受付まわり: 右の通路から
   if (y > 198 && y < 285 && x >= 228 && x <= 368) return [{ x, y: 254 }, { x: 370, y: 254 }, { x: 370, y: L }]; // 総務部: 机の下→右通路
   if (y > 195 && x < 226) return [{ x, y: 256 }, { x: 206, y: 256 }, { x: 206, y: L }];      // 休憩室: 中央通路→右端列
+  if (y > 250 && y < 320 && x > 490 && x <= 622) return [{ x, y: 324 }, { x: 480, y: 324 }, { x: 480, y: L }]; // 音声スタジオ: スタジオ間の隙間から出入り
   return [{ x, y: L }];
 }
 
@@ -686,6 +705,11 @@ class Person {
       this.action = 'cleaning';
       this.cleanUntil = t + 9000 + Math.random() * 9000;
       this.dir = this.cleanDir || 'left';
+      return;
+    }
+    if (a === 'studio') {
+      this.action = 'studio';
+      this.dir = 'up';   // ミキシング卓に向かって立つ
       return;
     }
     if (a === 'sabori') {
@@ -793,6 +817,28 @@ const JANITOR_SABORI_SPOTS = [
   { x: 56, y: 306, d: 'down' },   // ロビーのソファ前
   { x: 210, y: 330, d: 'left' },  // 受付脇の柱の影
 ];
+// 月城(TSUKI)は稼働中、自席でなく音声スタジオで収録する
+const TSUKI_STUDIO_POST = { x: 560, y: 296 };
+const TSUKI_STUDIO_TALK = [
+  'テイク3、いきます', 'ん、リップノイズ入った…録り直し', 'マイクゲイン、あと3dB下げよ',
+  '「こんばんは、TSUKIです」…よし、声出た', 'サ行が刺さるなぁ…', 'ポップガード、仕事して',
+  '今日は声の調子いいかも', 'BGMは-18dBくらいがいいな', '冒頭のあいさつ、噛んだ…',
+  'ここ、間を2秒置きたい', '原稿のここ、読みにくい…直そ', 'エアコン切ると無音が深い',
+  '波形がきれいに揃うと気持ちいい', 'この章、感情もう少し乗せたい', 'ノイズゲートかけすぎた…語尾が消える',
+  'リバーブは薄めが好き', '書き出し完了…よし', 'サムネ用の一言も録っておこ',
+  'のど飴補給', '深夜の声、ちょっと低くていい感じ', 'コンプのかかり具合、ちょうどいい',
+  '台本のルビ、助かる', 'この固有名詞、アクセント合ってる?', '録り直し3回目…集中',
+  'モニターヘッドホン、耳が蒸れる', '息継ぎの位置、ここだ', '1本録り終えた…次',
+  '「ですます」が続くと単調…語尾変えよ', '今日のノルマ、あと2本', '静かすぎて心臓の音が入りそう',
+  'マスタリング、音圧どこまで上げる?', 'この話、我ながらいい話', 'ラウドネス-16、OK',
+  '口の開き、意識', '収録ブースあったかくて眠い…', 'えーっと、どこまで読んだっけ',
+  '効果音はここでポン', 'テイク重ねるほど下手になる説', '白湯が最強',
+  'アナウンサー気分で肩の力を抜こ', 'フェーダーの滑りがいい', '今日は朝までに上げたい',
+  'この間(ま)、大事', '語りは「届ける」意識で', '外の音、拾ってないよね?',
+  '完成品を聴き返す時間が好き', '明日の分の台本も見ておこ', '声を張らずに芯を出す…むずい',
+  'ON AIRランプ、今日も相棒', '…納品!今日もいい仕事',
+];
+
 const JANITOR_SABORI = [
   '…5分だけ', '掃除は逃げない…', '腰が…限界…', '社長来たら掃くフリしよ',
   'ここはさっき掃いたことにしよ', 'ほこりも休憩中だし…', '働き方改革です',
@@ -870,11 +916,17 @@ class Employee extends Person {
     this.sweat = false;
   }
 
+  // 稼働時の持ち場へ(月城だけは特別に音声スタジオで収録)
+  gotoWork() {
+    if (this.id === 'tsukishiro') { this.goto(TSUKI_STUDIO_POST, 'studio'); return; }
+    this.goto(this.seat, 'sit');
+  }
+
   setMode(m) {
     if (this.mode === m) return;
     this.mode = m;
     if (m !== 'idle') { this.resting = false; this.releaseSpot(); this.releaseReception(); }
-    if (m === 'working') this.goto(this.seat, 'sit');
+    if (m === 'working') this.gotoWork();
     else if (m === 'sleep') this.goto(this.seat, 'sleep');
     else if (m === 'off' || m === 'out' || m === 'sleephome') this.goto({ x: 374, y: 346 }, 'leave');
     else this.nextThink = 0;
@@ -1113,7 +1165,7 @@ class Employee extends Person {
     }
     if (this.action === 'coffee') { g.font = '9px DotGothic16'; g.fillText('☕', x + 8, y - 8); }
     // 作業タグ: いま何をしているかを常時表示
-    if (this.mode === 'working' && seated && this.jobText) {
+    if (this.mode === 'working' && (seated || this.action === 'studio') && this.jobText) {
       g.font = '5px DotGothic16';
       const jt = this.jobText.length > 14 ? this.jobText.slice(0, 13) + '…' : this.jobText;
       const jw = g.measureText(jt).width + 7;
@@ -1136,8 +1188,13 @@ class Employee extends Person {
     }
     if (this.mode === 'working' && this.def.source !== 'janitor') {
       if (t > this.nextBubble) {
-        this.say(t, pickFresh('grumble', WORK_GRUMBLES), 3800);
-        this.nextBubble = t + 50000 + Math.random() * 60000;   // 愚痴は控えめに
+        if (this.id === 'tsukishiro' && this.action === 'studio') {
+          this.say(t, pickFresh('tsukistudio', TSUKI_STUDIO_TALK), 3800);
+          this.nextBubble = t + 36000 + Math.random() * 40000;   // 収録独り言は少し多め
+        } else {
+          this.say(t, pickFresh('grumble', WORK_GRUMBLES), 3800);
+          this.nextBubble = t + 50000 + Math.random() * 60000;   // 愚痴は控えめに
+        }
       }
       return;
     }
@@ -1426,17 +1483,61 @@ function startEvent(kind, members, t) {
   officeEvent.active = { kind, members, until: t + 160000 + Math.random() * 60000, nextLine: t + 6000, nextReact: t + 9000 };
 }
 
+// イベントの終わり=社長が怒りに来る
+const BOSS_BUST = [
+  'おいこら!仕事はどうした!!', '誰が宴会を許可した!?', 'ずいぶん楽しそうだなぁ?????',
+  'はい解散!解散!!', '経費で肉焼くなーー!!', 'ダンベルより納期を持てー!!',
+  '全員、席に戻れ〜!!', '俺も混ぜ…じゃなくて、解散だ!!', '煙で火災報知器鳴ったらどうする!!',
+  '筋肉は裏切らないが納期は裏切るぞ!!', 'いい匂いさせやがって…解散!!', '会社をジムにするな!!',
+];
+const EVENT_SORRY = [
+  'すみません社長!', '片付けます!', '解散ー!', '戻ります戻ります', 'あと一本だけ…だめですよね',
+  '社長もどうぞ…すみません', 'はい、ただいま!', '見てました?…見てましたか…', '火は消しておきます!',
+  'ストレッチは仕事のうち…はい、違います', '証拠隠滅!', 'プロテインしまいます!',
+];
+
 function runEvent(t) {
   const ev = officeEvent.active;
   // 仕事が来た人は離脱
   for (const e of ev.members.slice()) {
     if (!e.present || e.mode !== 'idle') {
       e.inChat = false; e.inEvent = false;
-      if (e.mode === 'working') { e.say(t, '仕事きた!離脱!', 2400); e.goto(e.seat, 'sit'); }
+      if (e.mode === 'working') { e.say(t, '仕事きた!離脱!', 2400); e.gotoWork(); }
       ev.members = ev.members.filter(x => x !== e);
     }
   }
-  if (ev.members.length < 2 || t > ev.until) { endEvent(t); return; }
+  // 社長の解散劇(お叱り)フェーズ
+  if (ev.phase === 'bust') {
+    const boss = ev.boss;
+    if (!boss || !boss.present || !ev.members.length) { endEvent(t); return; }
+    if (ev.bustStage === 'walk') {
+      if (boss.action !== 'walk') {
+        ev.bustStage = 'scold';
+        ev.bustAt = t;
+        boss.say(t, pickFresh('bossbust', BOSS_BUST), 3800);
+        ev.members.forEach((e, i) => {
+          e.dir = e.pos.x > boss.pos.x ? 'left' : 'right';
+          e.say(t + 1400 + i * 750, pickFresh('evsorry', EVENT_SORRY), 2600);
+        });
+      }
+      return;
+    }
+    if (t > ev.bustAt + 4800) endEvent(t);
+    return;
+  }
+  if (ev.members.length < 2) { endEvent(t); return; }
+  if (t > ev.until) {
+    const boss = employees.find(e => e.def.source === 'boss');
+    if (boss && boss.present && !boss.inChat && !boss.directing && boss.action !== 'walk') {
+      ev.phase = 'bust'; ev.bustStage = 'walk'; ev.boss = boss;
+      boss.releaseSpot(); boss.releaseReception(); boss.resting = false;
+      boss.inChat = true;
+      boss.goto({ x: 310, y: 224 }, 'faceU');   // イベントゾーンの手前で仁王立ち
+    } else {
+      endEvent(t);   // 社長不在なら自然解散
+    }
+    return;
+  }
   if (t > ev.nextLine) {
     const talker = ev.members[Math.floor(Math.random() * ev.members.length)];
     if (talker.action !== 'walk') {
@@ -1460,7 +1561,13 @@ function endEvent(t) {
   if (ev) {
     for (const e of ev.members) {
       e.inChat = false; e.inEvent = false; e.nextThink = 0;
-      if (e.mode === 'working') e.goto(e.seat, 'sit');
+      if (e.mode === 'working') e.gotoWork();
+      else if (e.mode === 'sleep') e.goto(e.seat, 'sleep');
+    }
+    if (ev.boss) {
+      ev.boss.inChat = false;
+      ev.boss.nextThink = 0;
+      if (ev.boss.mode === 'working') ev.boss.goto(ev.boss.seat, 'sit');
     }
   }
   officeEvent.active = null;
@@ -1511,7 +1618,7 @@ function endStandup(t) {
     for (const e of st.members) {
       e.inChat = false;
       e.nextThink = 0;
-      if (e.mode === 'working') e.goto(e.seat, 'sit');
+      if (e.mode === 'working') e.gotoWork();
     }
   }
   standup.active = null;
@@ -1548,7 +1655,8 @@ function stepDirective(t) {
   if (!tgt || !tgt.present || tgt.mode !== 'working') { directive.next = t + 5000; return; }
   boss.releaseSpot(); boss.releaseReception(); boss.resting = false;
   boss.inChat = true; boss.directing = true;
-  boss.goto({ x: tgt.desk.x - 30, y: tgt.desk.y + 20 }, 'faceR');
+  if (tgt.id === 'tsukishiro') boss.goto({ x: TSUKI_STUDIO_POST.x - 26, y: TSUKI_STUDIO_POST.y + 2 }, 'faceR');
+  else boss.goto({ x: tgt.desk.x - 30, y: tgt.desk.y + 20 }, 'faceR');
   directive.active = { target: tgt, phase: 'go' };
 }
 
@@ -1601,7 +1709,7 @@ function endFight(t) {
     for (const e of [f.a, f.b]) {
       e.inChat = false;
       e.nextThink = 0;
-      if (e.mode === 'working') e.goto(e.seat, 'sit');
+      if (e.mode === 'working') e.gotoWork();
       else if (e.mode === 'sleep') e.goto(e.seat, 'sleep');
       else if (e.mode === 'off' || e.mode === 'out' || e.mode === 'sleephome') e.goto({ x: 374, y: 346 }, 'leave');
     }
