@@ -209,7 +209,7 @@ const OFFICE = {};
   for (const k of ['vending', 'sofa', 'cooler', 'room_break', 'room_studio', 'room_film', 'chair',
     'rack', 'netcab', 'plant_a', 'plant_snake', 'plant_mon', 'lamp', 'coffee_st', 'armchair', 'ctable',
     'snack', 'copier', 'tvstand', 'projcart', 'tower', 'dskb1', 'dskb2', 'dskb4',
-    'corkboard', 'window_day', 'window_night', 'reception', 'bin_g', 'bin_r', 'exting', 'firstaid', 'sanitizer', 'ladder', 'ccart', 'studio_audio', 'studio_film']) {
+    'corkboard', 'window_day', 'window_night', 'reception', 'bin_g', 'bin_r', 'exting', 'firstaid', 'sanitizer', 'studio_audio', 'studio_film', 'rug_new']) {
     const im = new Image();
     im.onload = () => { OFFICE[k] = keyOutBackground(im); };
     im.src = `assets/office/${k}.png`;
@@ -474,28 +474,19 @@ function drawOffice(g, t, tm) {
     // 掲示板: コルクボード+紙ミッション+保留タグ(bg側の台帳ボードを完全に覆う)
     rr(g, 16, 0, 142, 60, '#f3edda');
     drawProp(g, 'corkboard', 18, 2, 132, 56);
-    rr(g, 30, 12, 108, 22, '#fbf6ea', '#c8bca0');
+    rr(g, 30, 17, 108, 24, '#fbf6ea', '#c8bca0');
     g.fillStyle = '#e05a4e';
-    g.beginPath(); g.arc(36, 16, 1.5, 0, 7); g.fill();
-    g.beginPath(); g.arc(132, 16, 1.5, 0, 7); g.fill();
+    g.beginPath(); g.arc(36, 21, 1.5, 0, 7); g.fill();
+    g.beginPath(); g.arc(132, 21, 1.5, 0, 7); g.fill();
     g.font = '9px DotGothic16';
     g.fillStyle = '#3a2e20';
     const mtxt = CFG.mission || '物語を、毎日届ける。';
-    g.fillText(mtxt, 84 - g.measureText(mtxt).width / 2, 28);
-    const n = snap && snap.tasks && snap.tasks.count != null ? snap.tasks.count : 0;
-    g.font = '6px DotGothic16';
-    const bt = `保留タスク ${n}件`;
-    const bw = g.measureText(bt).width + 12;
-    g.fillStyle = 'rgba(255,253,246,.96)';
-    g.beginPath(); g.roundRect(84 - bw / 2 + .5, 38.5, bw, 10, 2); g.fill();
-    g.strokeStyle = 'rgba(74,59,42,.35)'; g.stroke();
-    g.fillStyle = '#e05a4e'; g.beginPath(); g.arc(84 - bw / 2 + 5, 43.5, 2, 0, 7); g.fill();
-    g.fillStyle = '#4a3b2a'; g.fillText(bt, 84 - bw / 2 + 9.5, 46);
+    g.fillText(mtxt, 84 - g.measureText(mtxt).width / 2, 33);
 
     // 時計: 下絵を完全に覆う文字盤+リアル時刻
-    const ccx = 353, ccy = 30;
+    const ccx = 352, ccy = 28.5;
     g.fillStyle = '#8a6a4a';
-    g.beginPath(); g.arc(ccx, ccy, 18, 0, 7); g.fill();
+    g.beginPath(); g.arc(ccx, ccy, 18.6, 0, 7); g.fill();
     g.fillStyle = '#fffdf6';
     g.beginPath(); g.arc(ccx, ccy, 15, 0, 7); g.fill();
     g.fillStyle = 'rgba(74,59,42,.85)';
@@ -608,8 +599,6 @@ function drawOffice(g, t, tm) {
   if (!drawProp(g, 'sofa', 20, 288, 60, 30)) rr(g, 24, 296, 52, 20, '#7a9ac8', INK);
   drawProp(g, 'armchair', 92, 288, 26, 32);
   drawProp(g, 'armchair', 126, 288, 26, 32);
-  drawProp(g, 'armchair', 158, 288, 26, 32);
-  drawProp(g, 'armchair', 190, 288, 26, 32);
 
   // ミーティングスペース(丸テーブル)
 
@@ -663,6 +652,7 @@ class Person {
 
   goto(target, arrival) {
     this.arrival = arrival;
+    this._yielded = false;
     if (!this.present) { this.pos = { x: 374, y: 346 }; this.present = true; }
     if (Math.hypot(target.x - this.pos.x, target.y - this.pos.y) < 3) {
       this.pos = { x: target.x, y: target.y };
@@ -740,8 +730,6 @@ const REST_SPOTS = [
   { x: 60, y: 314, sy: 314, a: 'sit', via: 256 },   // ソファ右
   { x: 104, y: 316, sy: 316, a: 'sit', via: 256 },  // アームチェア1
   { x: 138, y: 316, sy: 316, a: 'sit', via: 256 },  // アームチェア2
-  { x: 170, y: 316, sy: 316, a: 'sit', via: 256 },  // アームチェア3
-  { x: 202, y: 316, sy: 316, a: 'sit', via: 256 },  // アームチェア4
   { x: 34, y: 224, a: 'faceU' },                    // コーヒー前
   { x: 68, y: 224, a: 'faceU' },                    // 自販機前
   { x: 102, y: 224, a: 'faceU' },                   // スナック棚前
@@ -767,7 +755,7 @@ const CLEAN_SPOTS = [
   { x: 420, y: 205, k: 'sweep' }, { x: 550, y: 205, k: 'sweep' }, { x: 366, y: 330, k: 'sweep' },
   { x: 130, y: 262, k: 'mop' }, { x: 436, y: 328, k: 'mop' }, { x: 500, y: 205, k: 'mop' }, { x: 202, y: 336, k: 'mop' },
   { x: 285, y: 64, k: 'wipe' }, { x: 424, y: 300, k: 'wipe' },
-  { x: 607, y: 222, k: 'bucket' }, { x: 410, y: 330, k: 'sweep' },
+  { x: 607, y: 214, k: 'bucket' }, { x: 410, y: 330, k: 'sweep' },
 ];
 
 const IDLE_MUTTER = ['のび〜', '肩回すか', '水飲みに行こうかな', '今日の晩ごはん何にしよ', 'ちょっと眠い',
@@ -1653,7 +1641,19 @@ function loop(t) {
         const push = (11 - d) * 0.25;
         A.pos.x -= dx / d * push; A.pos.y -= dy / d * push;
         B.pos.x += dx / d * push; B.pos.y += dy / d * push;
-        if (d < 8 && Math.random() < 0.3) startFight(A, B, t);   // 正面衝突は喧嘩に発展することがある
+        if (d < 8) {
+          if (Math.random() < 0.3) startFight(A, B, t);            // 正面衝突は喧嘩に発展することがある
+          else {
+            const yielder = (A.seed % 2) ? A : B;                  // どちらかが一歩下がって道を譲る
+            if (yielder.action === 'walk' && yielder.path.length && !yielder._yielded) {
+              yielder._yielded = true;
+              const bx2 = yielder.dir === 'left' ? 14 : yielder.dir === 'right' ? -14 : 0;
+              const by2 = yielder.dir === 'up' ? 14 : yielder.dir === 'down' ? -14 : 0;
+              yielder.path.unshift({ x: yielder.pos.x, y: yielder.pos.y });
+              yielder.path.unshift({ x: yielder.pos.x + bx2, y: yielder.pos.y + by2 });
+            }
+          }
+        }
       }
     }
     const dxd = dog.pos.x - movers[i].pos.x, dyd = dog.pos.y - movers[i].pos.y;
@@ -1680,9 +1680,8 @@ function loop(t) {
     ['coffee_st', 20, 182, 30, 36], ['vending', 58, 180, 24, 38], ['snack', 90, 182, 28, 36],
     ['cooler', 126, 182, 20, 36], ['bin_g', 154, 186, 11, 16], ['plant_a', 232, 282, 20, 34],
 
-    ['copier', 554, 154, 26, 32], ['netcab', 584, 150, 22, 36], ['rack', 610, 140, 26, 46],
-    ['ccart', 556, 192, 22, 24], ['ladder', 582, 196, 14, 18],
-    ['bin_g', 600, 199, 10, 15], ['bin_r', 613, 199, 10, 15], ['exting', 632, 146, 8, 17],
+    ['copier', 524, 154, 26, 32], ['tower', 554, 148, 20, 38], ['netcab', 578, 150, 22, 36], ['rack', 604, 140, 26, 46],
+    ['bin_g', 600, 192, 10, 15], ['bin_r', 613, 192, 10, 15], ['exting', 11, 66, 8, 17],
     ['reception', 252, 284, 112, 42], ['sanitizer', 388, 314, 10, 24],
   ];
 
