@@ -206,9 +206,9 @@ const OFFICE = {};
   const bg = new Image();
   bg.onload = () => { OFFICE.bg = bg; };
   bg.src = 'assets/office/bg.png';
-  for (const k of ['vending', 'sofa', 'cooler', 'room_break', 'room_studio', 'room_film', 'chair',
-    'rack', 'netcab', 'plant_a', 'plant_snake', 'plant_mon', 'lamp', 'coffee_st', 'armchair', 'ctable',
-    'snack', 'copier', 'tvstand', 'projcart', 'tower', 'dskb1', 'dskb2', 'dskb4',
+  for (const k of ['vending', 'sofa', 'cooler', 'chair',
+    'rack', 'netcab', 'plant_a', 'plant_mon', 'lamp', 'coffee_st', 'armchair',
+    'snack', 'copier', 'tower', 'dskb1', 'dskb2', 'dskb4',
     'corkboard', 'window_day', 'window_night', 'reception', 'bin_g', 'bin_r', 'exting', 'firstaid', 'sanitizer', 'studio_audio', 'studio_film', 'rug_new']) {
     const im = new Image();
     im.onload = () => { OFFICE[k] = keyOutBackground(im); };
@@ -216,7 +216,7 @@ const OFFICE = {};
   }
 }
 const SWEEPS = {};
-for (const k of ['sweep1', 'sweep2']) {
+for (const k of ['sweep1', 'sweep2', 'mop1', 'wipe1', 'bucket1']) {
   const im = new Image();
   im.onload = () => {
     const cv2 = keyOutBackground(im);
@@ -361,13 +361,6 @@ function drawBubble(g, x, y, text) {
   lines.forEach((l, i) => g.fillText(l, bx + 4, by + 7.5 + i * 8));
 }
 
-function drawHp(g, x, y, pct) {
-  const w = 14;
-  g.fillStyle = INK; g.fillRect(x - w / 2 - 1, y - 22, w + 2, 4);
-  g.fillStyle = '#e7dcc3'; g.fillRect(x - w / 2, y - 21, w, 2);
-  g.fillStyle = pct > 50 ? '#4caf6e' : pct > 20 ? '#e8b93c' : '#e05a4e';
-  g.fillRect(x - w / 2, y - 21, Math.max(1, Math.round(w * pct / 100)), 2);
-}
 
 /* ---------- パーティクル(煙・ハート・音符) ---------- */
 const particles = [];
@@ -576,16 +569,6 @@ function drawOffice(g, t, tm) {
   if (!drawProp(g, 'room_break', 16, 208, 176, 132)) rr(g, 16, 208, 176, 132, '#ecd8c0', '#d0b898');
   rr(g, 16, 338, 176, 4, 'rgba(120,90,60,.35)');
 
-  function deptSign(text, x, y, color) {
-    g.font = '6px DotGothic16';
-    const w = g.measureText(text).width + 10;
-    g.fillStyle = 'rgba(0,0,0,.15)';
-    g.beginPath(); g.roundRect(x + 1, y + 1, w, 10, 2); g.fill();
-    g.fillStyle = 'rgba(40,42,54,.92)';
-    g.beginPath(); g.roundRect(x + .5, y + .5, w, 10, 2); g.fill();
-    g.fillStyle = color; g.fillRect(x + 3, y + 2.5, 2, 5);
-    g.fillStyle = '#f2f0e8'; g.fillText(text, x + 7, y + 7.5);
-  }
 
   // スタジオ2部屋(ユーザー製ルームアート)
   const onAir = snap && snap.launchd && snap.launchd['com.mon.tsuki.watcher'] && snap.launchd['com.mon.tsuki.watcher'].running;
@@ -595,6 +578,19 @@ function drawOffice(g, t, tm) {
   g.fillStyle = '#fff'; g.font = '6px DotGothic16'; g.fillText('ON AIR', 581, 239);
   if (!onAir) { g.fillStyle = '#ff6a5e'; g.font = '6px DotGothic16'; g.fillText('TTS停止中!', 520, 239); }
 
+
+  // 社長室の調度
+  drawProp(g, 'plant_mon', 20, 64, 18, 40);
+  drawProp(g, 'lamp', 100, 66, 17, 38);
+
+  // コレクター受信ステータス(サーバー列の下)
+  const freshRx = lastArrivalT >= 0 && (t - lastArrivalT) < 30000;
+  const deadRx = snapAt > 0 && (Date.now() - snapAt) > (CFG.staleMin || 20) * 60000;
+  g.fillStyle = deadRx ? '#e05a4e' : freshRx ? (Math.floor(t / 300) % 2 ? '#5aff8e' : '#4caf6e') : '#4caf6e';
+  g.fillRect(524, 214, 5, 3);
+  g.font = '6px DotGothic16';
+  g.fillStyle = deadRx ? '#e05a4e' : 'rgba(74,59,42,.7)';
+  g.fillText(deadRx ? 'コレクター受信断!' : freshRx ? 'コレクター受信中' : 'コレクター待受', 532, 219);
 
   if (!drawProp(g, 'sofa', 20, 288, 60, 30)) rr(g, 24, 296, 52, 20, '#7a9ac8', INK);
   drawProp(g, 'armchair', 92, 288, 26, 32);
@@ -619,6 +615,7 @@ function outPath(pt, lane) {
   const { x, y } = pt;
   if (y < 160 && x < 132) return [{ x, y: 168 }, { x: 240, y: 168 }, { x: 240, y: L }];      // 社長室: 休憩室の上の帯を東へ
   if (y < 160) { const a = x - 31; return [{ x: a, y }, { x: a, y: L }]; }                   // 上段: 机の間の隙間から
+  if (y > 306 && x > 380 && x < 480) return [{ x, y: 342 }, { x: 374, y: 342 }, { x: 374, y: L }]; // 撮影スタジオ南: 入口通路経由
   if (y > 276 && x >= 236 && x <= 380) return [{ x, y: 278 }, { x: 374, y: 278 }, { x: 374, y: L }]; // 受付まわり: 右の通路から
   if (y > 198 && y < 285 && x >= 228 && x <= 368) return [{ x, y: 254 }, { x: 370, y: 254 }, { x: 370, y: L }]; // 総務部: 机の下→右通路
   if (y > 195 && x < 226) return [{ x, y: 256 }, { x: 206, y: 256 }, { x: 206, y: L }];      // 休憩室: 中央通路→右端列
@@ -653,6 +650,7 @@ class Person {
   goto(target, arrival) {
     this.arrival = arrival;
     this._yielded = false;
+    this.arrivalSitY = null;
     if (!this.present) { this.pos = { x: 374, y: 346 }; this.present = true; }
     if (Math.hypot(target.x - this.pos.x, target.y - this.pos.y) < 3) {
       this.pos = { x: target.x, y: target.y };
@@ -754,13 +752,13 @@ const CLEAN_SPOTS = [
   { x: 460, y: 200, k: 'sweep' }, { x: 90, y: 250, k: 'sweep' }, { x: 222, y: 334, k: 'sweep' },
   { x: 420, y: 205, k: 'sweep' }, { x: 550, y: 205, k: 'sweep' }, { x: 366, y: 330, k: 'sweep' },
   { x: 130, y: 262, k: 'mop' }, { x: 436, y: 328, k: 'mop' }, { x: 500, y: 205, k: 'mop' }, { x: 202, y: 336, k: 'mop' },
-  { x: 285, y: 64, k: 'wipe' }, { x: 424, y: 300, k: 'wipe' },
+  { x: 285, y: 64, k: 'wipe' }, { x: 424, y: 312, k: 'wipe' },
   { x: 607, y: 214, k: 'bucket' }, { x: 410, y: 330, k: 'sweep' },
 ];
 
-const IDLE_MUTTER = ['のび〜', '肩回すか', '水飲みに行こうかな', '今日の晩ごはん何にしよ', 'ちょっと眠い',
+const IDLE_MUTTER = ['肩回すか', '水飲みに行こうかな', '今日の晩ごはん何にしよ', 'ちょっと眠い',
   'デスク片付けようかな', 'ウィンドウ整理しよ', '壁紙変えたいな', '5分だけぼーっとする', '天気どうなるかな',
-  '夜景きれいだな', 'ストレッチしよ', 'ふぅ、ひと息…', 'マウスの感度いじろ', '次の仕事なにかな',
+  '夜景きれいだな', 'ストレッチしよ', 'マウスの感度いじろ', '次の仕事なにかな',
   '指ならし完了', 'メモ帳きれいにしよ', 'ショートカット覚えたい'];
 
 const PERSONAL_MUTTER = {
@@ -858,8 +856,8 @@ class Employee extends Person {
     this.releaseSpot();
     sp.busy = true;
     this.restSpot = sp;
-    this.arrivalSitY = sp.sy || null;
     this.goto(sp.via ? { x: sp.x, y: sp.via } : sp, sp.a);
+    this.arrivalSitY = sp.sy || null;
   }
 
   think(t, tm) {
@@ -1033,7 +1031,7 @@ const employees = CFG.employees.map((d, i) => new Employee(d, i));
    ================================================================ */
 const chat = { next: 25000, active: null };
 
-const MEET_SEATS = [ { x: 296, y: 204, a: 'faceR' }, { x: 312, y: 204, a: 'faceL' } ];
+const MEET_SEATS = [ { x: 404, y: 214, a: 'faceR' }, { x: 424, y: 214, a: 'faceL' } ];
 let meetBusy = false;
 
 const CHAT_OPENERS = [
@@ -1109,7 +1107,7 @@ function stepChat(t) {
     return;
   }
   if (t < chat.next) return;
-  const idlers = employees.filter(e => e.present && e.mode === 'idle' && e.action !== 'walk' && !e.inChat && !e.atMeeting);
+  const idlers = employees.filter(e => e.present && e.mode === 'idle' && e.action !== 'walk' && !e.inChat && !e.atMeeting && !e.receptionOn);
   if (idlers.length < 2) { chat.next = t + 30000; return; }
   let best = null, bestD = 1e9;
   for (let i = 0; i < idlers.length; i++) for (let j = i + 1; j < idlers.length; j++) {
@@ -1206,6 +1204,7 @@ function stepDirective(t) {
   const id = directive.queue.shift();
   const tgt = employees.find(e => e.id === id);
   if (!tgt || !tgt.present || tgt.mode !== 'working') { directive.next = t + 5000; return; }
+  boss.releaseSpot(); boss.releaseReception(); boss.resting = false;
   boss.inChat = true; boss.directing = true;
   boss.goto({ x: tgt.desk.x - 30, y: tgt.desk.y + 20 }, 'faceR');
   directive.active = { target: tgt, phase: 'go' };
@@ -1222,6 +1221,7 @@ function endDirective(boss, t) {
 function startFight(a, b, t) {
   if (fight.active || t < fight.cooldown) return;
   if (a.inChat || b.inChat || a.atMeeting || b.atMeeting) return;
+  if ((a.mode !== 'idle' && a.mode !== 'working') || (b.mode !== 'idle' && b.mode !== 'working')) return;
   a.inChat = b.inChat = true;
   a.action = 'stand'; b.action = 'stand';
   a.path = []; b.path = [];
@@ -1243,7 +1243,7 @@ function startFight(a, b, t) {
 function stepFight(t) {
   if (!fight.active) return;
   const f = fight.active;
-  if (!f.a.present || !f.b.present || f.a.mode === 'panic') { endFight(t); return; }
+  if (!f.a.present || !f.b.present || f.a.mode === 'panic' || f.b.mode === 'panic') { endFight(t); return; }
   if (t > f.nextLine) {
     const line = f.lines[f.li];
     if (line == null) { endFight(t); return; }
@@ -1259,7 +1259,9 @@ function endFight(t) {
     for (const e of [f.a, f.b]) {
       e.inChat = false;
       e.nextThink = 0;
-      if (e.mode === 'working') e.goto(e.seat, 'sit');   // 仕事に戻る
+      if (e.mode === 'working') e.goto(e.seat, 'sit');
+      else if (e.mode === 'sleep') e.goto(e.seat, 'sleep');
+      else if (e.mode === 'off' || e.mode === 'out' || e.mode === 'sleephome') e.goto({ x: 374, y: 346 }, 'leave');
     }
   }
   fight.active = null;
@@ -1291,7 +1293,7 @@ function stepGroupChat(t) {
     return;
   }
   if (t < groupChat.next) return;
-  const rest = employees.filter(e => e.present && e.mode === 'idle' && e.resting && e.action !== 'walk' && !e.inChat && !e.atMeeting);
+  const rest = employees.filter(e => e.present && e.mode === 'idle' && e.resting && e.action !== 'walk' && !e.inChat && !e.atMeeting && !e.receptionOn);
   if (rest.length < 3) { groupChat.next = t + 40000; return; }
   const members = rest.slice(0, 5);
   for (const e of members) e.inChat = true;
@@ -1490,6 +1492,7 @@ function onSnapshot() {
    HUD
    ================================================================ */
 const $ = id => document.getElementById(id);
+const esc = t => String(t).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const CHIP = {
   working: ['work', '稼働中'], idle: ['idle', '待機'], break: ['rest', '休憩'],
   sleep: ['sleep', '睡眠'], off: ['off', '退勤'], panic: ['panic', '停止!'],
@@ -1500,13 +1503,17 @@ function updateHud() {
   const tm = jstNow();
   $('time').textContent = tm.hm;
   $('date').textContent = tm.dateStr;
-  if (!snap) return;
+  if (!snap) {
+    if (fetchFail) { $('stale').style.display = 'block'; $('staleAge').textContent = '未受信'; }
+    return;
+  }
   const s = snap, rate = (s.billing && s.billing.jpyPerUsd) || 155;
 
   const tv = s.totals.todayCost || 0;
   const subsCfg = CFG.subscriptions || (s.billing && s.billing.subscriptions) || [];
   const fixedMonthly = subsCfg.reduce((a, x) => a + (x.monthlyJPY || 0), 0);
-  const dim = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+  const jstNowD = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+  const dim = new Date(jstNowD.getFullYear(), jstNowD.getMonth() + 1, 0).getDate();
   const unset = subsCfg.some(x => !x.monthlyJPY);
   $('todayFixed').textContent = fixedMonthly ? `${fmtYen(fixedMonthly / dim)}${unset ? '+α' : ''}` : '未設定';
   $('monthFixed').textContent = fixedMonthly ? `${fmtYen(fixedMonthly)}${unset ? ' (一部未記入)' : ''}` : 'config.jsに記入';
@@ -1528,7 +1535,7 @@ function updateHud() {
   if (s.codex.rateLimit && s.codex.rateLimit.plan) {
     const div = document.createElement('div');
     div.className = 'row';
-    div.innerHTML = `<span class="lbl">Codexプラン検出</span><span>${s.codex.rateLimit.plan}</span>`;
+    div.innerHTML = `<span class="lbl">Codexプラン検出</span><span>${esc(s.codex.rateLimit.plan)}</span>`;
     subs.appendChild(div);
   }
 
@@ -1558,7 +1565,7 @@ function updateHud() {
       row.appendChild(av);
     }
     const mid = document.createElement('div');
-    mid.innerHTML = `<div class="nm">${e.name} <span class="rl">${e.dept}・${e.role}</span></div>`;
+    mid.innerHTML = `<div class="nm">${esc(e.name)} <span class="rl">${esc(e.dept)}・${esc(e.role)}</span></div>`;
     row.appendChild(mid);
     const right = document.createElement('div');
     right.style.textAlign = 'right';
@@ -1581,7 +1588,7 @@ function updateHud() {
   if (s.youtube && s.youtube.subs != null) {
     const goal = CFG.youtubeGoal || 0;
     const pct = goal ? Math.min(100, Math.round(s.youtube.subs / goal * 100)) : 0;
-    yt.innerHTML = `<span>📺 登録者 <b>${s.youtube.subs.toLocaleString('ja-JP')}</b>人</span><span>🎯 目標比 <b>${pct}%</b></span><span>🎬 動画 <b>${(s.youtube.videos ?? '-').toLocaleString ? s.youtube.videos.toLocaleString('ja-JP') : s.youtube.videos}</b>本</span>`;
+    yt.innerHTML = `<span>📺 登録者 <b>${s.youtube.subs.toLocaleString('ja-JP')}</b>人</span><span>🎯 目標比 <b>${pct}%</b></span><span>🎬 動画 <b>${s.youtube.videos != null ? s.youtube.videos.toLocaleString('ja-JP') : '-'}</b>本</span>`;
   } else {
     yt.innerHTML = `<span style="opacity:.6">未接続 — collector/config.json の youtube に APIキー/チャンネルID を設定すると表示されます</span>`;
   }
@@ -1598,7 +1605,7 @@ function updateHud() {
   ul.innerHTML = '';
   for (const it of (s.tasks.items || [])) {
     const li = document.createElement('li');
-    li.innerHTML = `<b>${it.id}</b>${it.text}`;
+    li.innerHTML = `<b>${esc(it.id)}</b>${esc(it.text)}`;
     ul.appendChild(li);
   }
   if (s.tasks.count > (s.tasks.items || []).length) {
@@ -1705,7 +1712,6 @@ function loop(t) {
   }
   // ソファ前面(座ったキャラの脚を隠す)
   for (const e of employees) if (e.present) items.push({ y: e.pos.y, draw: g => e.drawSprite(g, t) });
-  items.sort((a, b) => a.y - b.y);
   items.push({ y: dog.pos.y, draw: g => drawDog(g, t) });
   items.sort((a, b) => a.y - b.y);
   for (const it of items) it.draw(cx);
@@ -1738,9 +1744,11 @@ chime.volume = 0.55;
 let chimeUnlocked = false;
 let lastChimeKey = '';
 document.addEventListener('click', () => {
-  if (chimeUnlocked) return;
   chime.muted = true;
-  chime.play().then(() => { chime.pause(); chime.currentTime = 0; chime.muted = false; chimeUnlocked = true; }).catch(() => {});
+  chime.play()
+    .then(() => { chime.pause(); chime.currentTime = 0; })
+    .catch(() => {})
+    .then(() => { chime.muted = false; chimeUnlocked = true; });
 }, { once: true });
 
 setInterval(() => {

@@ -59,7 +59,7 @@ window.OFFICE_CONFIG = {
       hair: '#8a5a2e', shirt: '#c8a04a', desk: { x: 290, y: 216 }, tag: '雑務全般',
       source: 'claude', pc: 'laptop' },
     { id: 'shirayanagi', name: '白柳', dept: '清掃', role: 'クリーンスタッフ',
-      hair: '#2a2a2a', shirt: '#b8d8cc', desk: { x: 462, y: 322 }, source: 'janitor' },
+      hair: '#2a2a2a', shirt: '#b8d8cc', desk: { x: 236, y: 320 }, source: 'janitor' },
     { id: 'zama', name: '座間', dept: '総務部', role: 'コーデックス作業(その他)',
       hair: '#8a5a2e', slim: true, shirt: '#48a08a', desk: { x: 340, y: 216 }, tag: 'その他案件',
       source: 'codex', pc: 'laptop' },
