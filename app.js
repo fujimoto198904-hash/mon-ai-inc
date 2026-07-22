@@ -1035,6 +1035,73 @@ const GROUP_REACTS = [
 ];
 const groupChat = { next: 60000, active: null };
 
+/* ================================================================
+   口喧嘩: 歩行中にぶつかると「どけよ」「お前がどけよ」の言い合い
+   ================================================================ */
+const FIGHT_LINES = [
+  ['ぶつかったら、どけよ', 'お前がどけよ'],
+  ['ちょ、前見て歩けよ', 'そっちこそ見ろよ'],
+  ['ここ俺の通り道なんだけど', '廊下はみんなのものだが?'],
+  ['道譲るのが礼儀でしょ', '先に居たのはこっちだが?'],
+  ['歩幅がでかいんだよ', '関係なくない?'],
+  ['わざとだろ今の', '被害妄想やば'],
+  ['謝ったら?', 'そっちが謝れば?'],
+  ['俺、急いでるんだけど', '俺も急いでるんだが'],
+  ['社訓読んだ? 品質第一だぞ', '衝突の品質の話じゃない'],
+  ['もういい、社長に言うわ', 'どうぞどうぞ'],
+  ['はぁ…もういいよ', '最初からそう言え'],
+  ['じゃあジャンケンで決めよう', '子供か'],
+];
+const fight = { active: null, cooldown: 0 };
+
+function startFight(a, b, t) {
+  if (fight.active || t < fight.cooldown) return;
+  if (a.inChat || b.inChat || a.atMeeting || b.atMeeting) return;
+  a.inChat = b.inChat = true;
+  a.action = 'stand'; b.action = 'stand';
+  a.path = []; b.path = [];
+  a.dir = b.pos.x >= a.pos.x ? 'right' : 'left';
+  b.dir = a.pos.x >= b.pos.x ? 'right' : 'left';
+  const rounds = 2 + Math.floor(Math.random() * 9);   // 2〜10往復
+  const lines = [];
+  const used = new Set();
+  for (let k = 0; k < rounds; k++) {
+    let idx;
+    do { idx = Math.floor(Math.random() * FIGHT_LINES.length); } while (used.has(idx) && used.size < FIGHT_LINES.length);
+    used.add(idx);
+    lines.push(FIGHT_LINES[idx][0], FIGHT_LINES[idx][1]);
+  }
+  lines.push('…ふん'); lines.push('…ふんだ');
+  fight.active = { a, b, lines, li: 0, nextLine: t + 300 };
+}
+
+function stepFight(t) {
+  if (!fight.active) return;
+  const f = fight.active;
+  if (!f.a.present || !f.b.present || f.a.mode === 'panic') { endFight(t); return; }
+  if (t > f.nextLine) {
+    const line = f.lines[f.li];
+    if (line == null) { endFight(t); return; }
+    (f.li % 2 === 0 ? f.a : f.b).say(t, line, 2600);
+    f.li++;
+    f.nextLine = t + 2900;
+  }
+}
+
+function endFight(t) {
+  const f = fight.active;
+  if (f) {
+    for (const e of [f.a, f.b]) {
+      e.inChat = false;
+      e.nextThink = 0;
+      if (e.mode === 'working') e.goto(e.seat, 'sit');   // 仕事に戻る
+    }
+  }
+  fight.active = null;
+  fight.cooldown = t + 120000 + Math.random() * 180000;   // 喧嘩は2〜5分に1回まで
+}
+
+
 function stepGroupChat(t) {
   if (chat.active) return;
   if (groupChat.active) {
@@ -1378,6 +1445,7 @@ function loop(t) {
   for (const e of employees) { e.think(t, tm); e.step(dt, t); e.tickBubble(t); }
   stepChat(t);
   stepGroupChat(t);
+  stepFight(t);
   stepDog(dt, t);
   // 簡易衝突回避(座っていない者同士を押し離す)
   const movers = employees.filter(e => e.present && e.action === 'walk');
@@ -1390,6 +1458,7 @@ function loop(t) {
         const push = (11 - d) * 0.25;
         A.pos.x -= dx / d * push; A.pos.y -= dy / d * push;
         B.pos.x += dx / d * push; B.pos.y += dy / d * push;
+        if (d < 8 && Math.random() < 0.3) startFight(A, B, t);   // 正面衝突は喧嘩に発展することがある
       }
     }
     const dxd = dog.pos.x - movers[i].pos.x, dyd = dog.pos.y - movers[i].pos.y;
