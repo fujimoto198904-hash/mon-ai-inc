@@ -564,11 +564,6 @@ function drawOffice(g, t, tm) {
     g.fillStyle = color; g.fillRect(x + 3, y + 2.5, 2, 5);
     g.fillStyle = '#f2f0e8'; g.fillText(text, x + 7, y + 7.5);
   }
-  drawProp(g, 'partition', 16, 58, 104, 15);
-  drawProp(g, 'partition', 138, 58, 184, 15);
-  drawProp(g, 'partition', 336, 58, 116, 15);
-  drawProp(g, 'partition', 468, 58, 120, 15);
-  drawProp(g, 'partition', 197, 224, 112, 15);
   deptSign('社長室', 20, 75, '#b06ac0');
   deptSign('プロジェクト-T', 142, 75, '#4a7ac8');
   deptSign('アプリ制作部', 340, 75, '#4aa86a');
