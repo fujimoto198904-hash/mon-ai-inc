@@ -55,7 +55,7 @@ async function poll() {
       snap = rows[0].data;
       snapAt = newAt;
       onSnapshot();
-      if (isNew) triggerRollCall();
+      if (isNew) lastArrivalT = performance.now();  // コレクター受信ランプ用
     }
     fetchFail = false;
   } catch (e) {
@@ -64,21 +64,7 @@ async function poll() {
   updateHud();
 }
 
-// ミミ(=本物のコレクター)が新データを届けるたびに社内を点呼して回る
-function triggerRollCall() {
-  const m = typeof npcById !== 'undefined' && npcById.mimi;
-  if (!m || !m.onduty || !snap) return;
-  const nC = (snap.claude.active || []).length;
-  const nX = (snap.codex.active || []).length;
-  const watcherOk = snap.launchd && snap.launchd['com.mon.tsuki.watcher'] && snap.launchd['com.mon.tsuki.watcher'].running;
-  m.patrol = [
-    { x: 120, y: 190, b: '点呼しま〜す!' },
-    { x: 250, y: 190, b: `開発部 ${nC + nX}名稼働!` },
-    { x: 440, y: 190, b: '制作部よし!' },
-    { x: 460, y: 280, b: watcherOk ? 'スタジオON AIRよし!' : 'スタジオ応答なし!?' },
-  ];
-  m.nextThink = 0;
-}
+let lastArrivalT = -1;
 
 /* ---------- ポートレート(assets/ にGPT素材が置かれたら自動採用) ---------- */
 const portraits = {};
@@ -131,7 +117,6 @@ function drawChar(g, px, py, emp, dir, frame, expr, t) {
   g.fillRect(1, 2 + bob, 2, 3); g.fillRect(9, 2 + bob, 2, 3);
   if (emp.id === 'mon') { g.fillRect(1, 0 + bob, 10, 2); g.fillRect(0, 1 + bob, 2, 2); }
   if (emp.id === 'watcher') { g.fillStyle = '#8a7ab0'; g.fillRect(0, 0 + bob, 3, 2); g.fillRect(9, 0 + bob, 3, 2); } // ヘッドホン
-  if (emp.id === 'tetsu') { g.fillStyle = '#5a8a5a'; g.fillRect(1, 0 + bob, 10, 2); } // 帽子
   if (dir === 'up') { g.fillStyle = hair; g.fillRect(2, 2 + bob, 8, 6); g.restore(); return; }
 
   // 顔
@@ -332,10 +317,10 @@ function drawOffice(g, t, tm) {
   rr(g, 184, 60, 140, 104, '#c8dce8', '#a0bcd0');  // 開発部(2列5席)
   rr(g, 368, 60, 208, 92, '#d0e8c8', '#a8cca0');   // 制作部
   rr(g, 16, 208, 176, 136, '#ecd8c0', '#d0b898');  // 休憩室
-  rr(g, 240, 240, 128, 76, '#e8e4c8', '#c8c4a0');  // 総務部
+  rr(g, 240, 240, 128, 76, '#e0e0e8', '#b8b8c8');  // 機材室(システムはツールとして置く)
   g.font = '9px DotGothic16'; g.fillStyle = 'rgba(74,59,42,.55)';
   g.fillText('社長室', 26, 72); g.fillText('開発部', 194, 72); g.fillText('コンテンツ制作部', 378, 72);
-  g.fillText('休憩室', 26, 222); g.fillText('総務部', 248, 252);
+  g.fillText('休憩室', 26, 222); g.fillText('機材室', 248, 252);
 
   // 収録スタジオ
   rr(g, 488, 224, 132, 112, '#e8e0f0', '#b0a8c0');
@@ -372,16 +357,40 @@ function drawOffice(g, t, tm) {
   g.fillStyle = '#4caf6e';
   g.fillRect(170, 202, 8, 12); g.fillRect(166, 206, 6, 6); g.fillRect(176, 205, 6, 7);
 
-  // ウォーターサーバー / プリンタ / 喫煙所
+  // ウォーターサーバー / プリンタ
   rr(g, 404, 240, 10, 22, '#d8e8f0', INK);
   rr(g, 406, 234, 6, 8, '#8ec8e8', INK);
   rr(g, 400, 296, 26, 14, '#b8905c', INK);
   rr(g, 404, 288, 18, 10, '#8a8a96', INK);
   if (Math.floor(t / 700) % 4 === 0) { g.fillStyle = '#fff'; g.fillRect(407, 296, 12, 2); }
-  g.font = '8px DotGothic16'; g.fillStyle = 'rgba(74,59,42,.55)';
-  g.fillText('喫煙所', 588, 178);
-  rr(g, 600, 184, 12, 4, '#8a8a96', INK);
-  rr(g, 604, 188, 3, 12, '#6a6a74');
+
+  // コレクター受信ラック(実machine: launchd com.mon.ai-office が5分毎にpush)
+  rr(g, 256, 248, 40, 56, '#3a3a44', INK);
+  g.fillStyle = '#2a2a34'; g.fillRect(258, 250, 36, 52);
+  for (let row = 0; row < 5; row++) {
+    for (let led = 0; led < 4; led++) {
+      const on = Math.floor(t / 400 + row * 1.7 + led * 2.3) % 5 !== 0;
+      g.fillStyle = on ? (led % 2 ? '#4caf6e' : '#e8b93c') : '#3a3a44';
+      g.fillRect(262 + led * 8, 254 + row * 9, 3, 2);
+    }
+  }
+  const fresh = lastArrivalT >= 0 && (t - lastArrivalT) < 30000;
+  const dead = snapAt > 0 && (Date.now() - snapAt) > (CFG.staleMin || 20) * 60000;
+  g.fillStyle = dead ? '#e05a4e' : fresh ? (Math.floor(t / 300) % 2 ? '#5aff8e' : '#4caf6e') : '#4caf6e';
+  g.fillRect(262, 296, 6, 4);
+  g.font = '8px DotGothic16';
+  g.fillStyle = dead ? '#e05a4e' : 'rgba(74,59,42,.75)';
+  g.fillText(dead ? '受信断!' : fresh ? '受信中' : '待受', 272, 302);
+  g.fillStyle = 'rgba(74,59,42,.55)';
+  g.fillText('コレクター', 254, 316);
+  // BGM/ラック横の予備サーバー
+  rr(g, 306, 262, 30, 42, '#4a4a54', INK);
+  g.fillStyle = '#3a3a44'; g.fillRect(308, 264, 26, 38);
+  for (let row = 0; row < 3; row++) {
+    g.fillStyle = Math.floor(t / 700 + row) % 4 ? '#5a8ac8' : '#3a3a44';
+    g.fillRect(311 + row * 8, 268, 3, 2);
+  }
+  g.fillStyle = 'rgba(74,59,42,.55)'; g.fillText('ルーチン基盤', 300, 316);
 
   // 入口マット
   rr(g, 296, 344, 48, 12, '#c0a878', '#a08858');
@@ -590,226 +599,6 @@ class Employee extends Person {
 
 const employees = CFG.employees.map((d, i) => new Employee(d, i));
 
-/* ================================================================
-   NPC(会社の空気をつくる人たち)
-   ================================================================ */
-const NPC_DEFS = [
-  { id: 'tetsu', name: 'テツ', kind: 'janitor', hair: '#9a9aa2', shirt: '#7a8a7a',
-    hours: h => (h >= 5 && h < 10) || (h >= 17 && h < 22) },
-  { id: 'nonbiri', name: 'ノンビリ', kind: 'slacker', hair: '#c8a878', shirt: '#a8926a',
-    hours: h => h >= 9 && h < 20 },
-  { id: 'smoky', name: 'スモーキー', kind: 'smoker', hair: '#5a6a5a', shirt: '#48584a',
-    hours: h => h >= 9 && h < 22 },
-  { id: 'pecha', name: 'ペチャ', kind: 'chatA', hair: '#e8a0b8', shirt: '#d888a8',
-    hours: h => h >= 9 && h < 18 },
-  { id: 'kucha', name: 'クチャ', kind: 'chatB', hair: '#e8c060', shirt: '#d0a848',
-    hours: h => h >= 9 && h < 18 },
-  { id: 'ai', name: 'アイ', kind: 'coupleA', hair: '#e06a6a', shirt: '#c85858',
-    desk: { x: 256, y: 262 }, hours: h => h >= 9 && h < 21 },
-  { id: 'yu', name: 'ユウ', kind: 'coupleB', hair: '#6a8ae0', shirt: '#5878c8',
-    desk: { x: 304, y: 262 }, hours: h => h >= 9 && h < 21 },
-  { id: 'mimi', name: 'ミミ', kind: 'rollcall', hair: '#c8b83c', shirt: '#b8a832',
-    desk: { x: 352, y: 262 }, hours: () => true },
-];
-
-const JANITOR_SPOTS = [
-  { x: 120, y: 190 }, { x: 250, y: 200 }, { x: 420, y: 190 }, { x: 460, y: 210 },
-  { x: 160, y: 300 }, { x: 210, y: 330 }, { x: 340, y: 330 }, { x: 100, y: 250 }, { x: 590, y: 200 },
-];
-const SMOKE_SPOT = { x: 596, y: 200 };
-const VENDING_SPOT = { x: 64, y: 258 };
-const SOFA_SPOT = { x: 60, y: 306 };
-const COOLER_SPOT = { x: 409, y: 268 };
-const PRINTER_SPOT = { x: 413, y: 312 };
-
-class Npc extends Person {
-  constructor(def, i) {
-    super(def, 20 + i);
-    this.kind = def.kind;
-    this.nextThink = 2000 + Math.random() * 6000;
-    this.busyUntil = 0;
-    this.present = false;
-    this.onduty = false;
-    this.speed = 24;
-  }
-
-  duty(tm, t) {
-    const on = this.hours(tm.h);
-    if (on && !this.onduty) {
-      this.onduty = true;
-      this.pos = { x: 318, y: 348 };
-      this.present = true;
-      this.goto(this.homeSpot(), this.kind.startsWith('couple') ? 'sit' : 'stand');
-    } else if (!on && this.onduty) {
-      this.onduty = false;
-      this.goto({ x: 318, y: 348 }, 'leave');
-    }
-  }
-
-  homeSpot() {
-    if (this.kind === 'slacker') return SOFA_SPOT;
-    if (this.kind === 'smoker') return SMOKE_SPOT;
-    if (this.desk) return this.desk;
-    return JANITOR_SPOTS[0];
-  }
-
-  think(t, tm) {
-    if (!this.onduty || this.action === 'walk' || t < this.nextThink) return;
-    switch (this.kind) {
-      case 'janitor': {
-        // 燃焼率が高いほどオフィスが「散らかる」ので掃除が忙しくなる
-        const burning = snap && snap.claude && snap.claude.block && snap.claude.block.costPerHour > 60;
-        this.goto(JANITOR_SPOTS[Math.floor(Math.random() * JANITOR_SPOTS.length)], 'stand');
-        this.nextThink = t + (burning ? 6000 : 12000) + Math.random() * (burning ? 6000 : 10000);
-        const lines = burning
-          ? ['今日はよう散らかるのう…', 'トークンの燃えかすが…', 'そうじ そうじ!']
-          : ['そうじ そうじ♪', 'きれいにな〜れ', '床はワシの鏡'];
-        if (Math.random() < 0.45) this.say(t, lines[Math.floor(Math.random() * lines.length)]);
-        break;
-      }
-      case 'rollcall': {
-        if (this.patrol && this.patrol.length) {
-          const stop = this.patrol.shift();
-          this.goto({ x: stop.x, y: stop.y }, 'stand');
-          if (stop.b) this.say(t, stop.b, 4000);
-          this.nextThink = t + 5500;
-        } else {
-          this.goto(this.desk, 'sit');
-          this.nextThink = t + 20000;
-        }
-        break;
-      }
-      case 'slacker': {
-        const busyOffice = snap ? ((snap.claude.active || []).length + (snap.codex.active || []).length) >= 3 : false;
-        if (this.pos.y > 290 && Math.random() < 0.3) {
-          this.goto(VENDING_SPOT, 'faceU');
-          this.nextThink = t + 8000;
-        } else {
-          this.goto(SOFA_SPOT, 'sit');
-          this.nextThink = t + 20000 + Math.random() * 20000;
-        }
-        const lines = busyOffice
-          ? ['み、みんな働いてる…', '俺も…5分後にやる', '空気がいたたまれない']
-          : ['休憩なう', 'あとでやる', 'もうちょいだけ…', '5分だけ…'];
-        if (Math.random() < 0.5) this.say(t, lines[Math.floor(Math.random() * lines.length)]);
-        break;
-      }
-      case 'smoker': {
-        if (Math.random() < 0.25) { this.goto(COOLER_SPOT, 'faceU'); this.nextThink = t + 9000; }
-        else { this.goto(SMOKE_SPOT, 'faceU'); this.nextThink = t + 18000 + Math.random() * 15000; }
-        if (Math.random() < 0.5) this.say(t, ['ふぅ…', 'これ吸ったら本気出す', '風が語りかけます'][Math.floor(Math.random() * 3)]);
-        break;
-      }
-      case 'coupleA': case 'coupleB': {
-        this.goto(this.desk, 'sit');
-        this.nextThink = t + 30000;
-        break;
-      }
-      default: {
-        this.goto(WANDER[Math.floor(Math.random() * WANDER.length)], 'stand');
-        this.nextThink = t + 14000 + Math.random() * 12000;
-      }
-    }
-  }
-
-  drawSprite(g, t) {
-    if (!this.present) return;
-    const seated = this.action === 'sit';
-    const typing = seated && this.kind.startsWith('couple') && Math.floor((t + this.seed) / 4000) % 2 === 0;
-    drawChar(g, this.pos.x, this.pos.y, this.def, seated ? 'sit' : this.dir, this.frame, typing ? 'typing' : 'normal', t);
-    // モップ
-    if (this.kind === 'janitor' && this.action !== 'sit') {
-      const mx = this.pos.x + (this.dir === 'left' ? -8 : 8);
-      const wob = this.action === 'walk' ? 0 : Math.floor(t / 300) % 2;
-      g.fillStyle = '#a06a3c'; g.fillRect(mx + wob, this.pos.y - 12, 2, 12);
-      g.fillStyle = '#e8e8e8'; g.fillRect(mx - 2 + wob, this.pos.y - 1, 6, 3);
-    }
-    // スマホ
-    if (this.kind === 'slacker' && seated) {
-      g.fillStyle = '#2a2a34'; g.fillRect(this.pos.x - 2, this.pos.y - 7, 4, 5);
-      g.fillStyle = '#8ec8e8'; g.fillRect(this.pos.x - 1, this.pos.y - 6, 2, 3);
-    }
-    // 点呼ボード
-    if (this.kind === 'rollcall' && this.action !== 'sit') {
-      const bx = this.pos.x + (this.dir === 'left' ? -9 : 7);
-      g.fillStyle = '#fff'; g.fillRect(bx, this.pos.y - 10, 5, 7);
-      g.fillStyle = '#b8905c'; g.fillRect(bx, this.pos.y - 11, 5, 2);
-      g.fillStyle = '#8a8a96'; g.fillRect(bx + 1, this.pos.y - 7, 3, 1); g.fillRect(bx + 1, this.pos.y - 5, 3, 1);
-    }
-  }
-
-  drawOverlay(g, t) {
-    if (!this.present) return;
-    const { x, y } = this.pos;
-    g.font = '8px DotGothic16';
-    g.fillStyle = 'rgba(74,59,42,.65)';
-    const nw = g.measureText(this.name).width;
-    g.fillText(this.name, x - nw / 2, this.action === 'sit' ? y + 24 : y + 10);
-    if (this.bubble && t < this.bubbleUntil) drawBubble(g, x, y, this.bubble);
-  }
-}
-
-const npcs = NPC_DEFS.map((d, i) => new Npc(d, i));
-const npcById = Object.fromEntries(npcs.map(n => [n.id, n]));
-
-/* 無駄話コンビ・社内恋愛の演出コントローラ */
-const social = { chatNext: 20000, chatPhase: 0, loveNext: 45000, lovePhase: 0 };
-function stepSocial(t, tm) {
-  const A = npcById.pecha, B = npcById.kucha;
-  if (A.onduty && B.onduty) {
-    if (social.chatPhase === 0 && t > social.chatNext) {
-      A.goto({ x: PRINTER_SPOT.x - 8, y: PRINTER_SPOT.y }, 'faceR');
-      B.goto({ x: PRINTER_SPOT.x + 8, y: PRINTER_SPOT.y }, 'faceL');
-      social.chatPhase = 1; social.chatNext = t + 26000;
-      A.nextThink = B.nextThink = t + 30000;
-    } else if (social.chatPhase === 1) {
-      if (A.action === 'stand' && B.action === 'stand' && Math.floor(t / 3000) % 2 === 0 && t + 2500 > A.bubbleUntil) {
-        const lines = gossipLines || [['それでさ〜', 'えー!マジで?'], ['きいた? 例の件', 'うそでしょ!?']];
-        const l = lines[Math.floor(Math.random() * lines.length)];
-        A.say(t, l[0], 2800); B.say(t + 100, l[1], 2800);
-      }
-      if (t > social.chatNext) {
-        social.chatPhase = 0; social.chatNext = t + 30000 + Math.random() * 30000;
-        A.goto(JANITOR_SPOTS[1], 'stand'); B.goto(WANDER[3], 'stand');
-        A.nextThink = B.nextThink = t + 12000;
-      }
-    }
-  } else social.chatPhase = 0;
-
-  const C = npcById.ai, D = npcById.yu;
-  if (C.onduty && D.onduty) {
-    if (social.lovePhase === 0 && t > social.loveNext) {
-      // 半々で「給水機デート」or「保留タスク台帳の整理(仕事)」
-      social.loveSpot = Math.random() < 0.5 ? 'cooler' : 'board';
-      if (social.loveSpot === 'cooler') {
-        C.goto({ x: COOLER_SPOT.x - 7, y: COOLER_SPOT.y }, 'faceR');
-        D.goto({ x: COOLER_SPOT.x + 9, y: COOLER_SPOT.y }, 'faceL');
-      } else {
-        C.goto({ x: 76, y: 188 }, 'faceU');
-        D.goto({ x: 94, y: 188 }, 'faceU');
-      }
-      social.lovePhase = 1; social.loveNext = t + 12000;
-      C.nextThink = D.nextThink = t + 16000;
-    } else if (social.lovePhase === 1) {
-      if (C.action === 'stand' && D.action === 'stand') {
-        if (social.loveSpot === 'board' && t + 2500 > C.bubbleUntil && Math.random() < 0.04) {
-          const tc = snap && snap.tasks && snap.tasks.count != null ? snap.tasks.count : '?';
-          C.say(t, `保留${tc}件を整理中…`, 2800); D.say(t + 100, '手伝うよ', 2800);
-        }
-        if (Math.random() < (social.loveSpot === 'cooler' ? 0.06 : 0.02)) {
-          spawnParticle('heart', (C.pos.x + D.pos.x) / 2 - 2, C.pos.y - 22);
-        }
-      }
-      if (t > social.loveNext) {
-        social.lovePhase = 0; social.loveNext = t + 60000 + Math.random() * 60000;
-        C.goto(C.desk, 'sit');
-        D.goto(D.desk, 'sit');
-        C.nextThink = D.nextThink = t + 40000;
-      }
-    }
-  } else social.lovePhase = 0;
-}
-
 /* ---------- 猫 ---------- */
 const cat = { pos: { x: 130, y: 300 }, target: null, next: 0, napUntil: 0, dir: 1 };
 function stepCat(dt, t) {
@@ -859,8 +648,6 @@ function shiftActive(shift, tm) {
 const fmtYen = n => '¥' + Math.round(n).toLocaleString('ja-JP');
 const fmtUsd = n => '$' + (n >= 100 ? Math.round(n) : n.toFixed(1));
 const fmtTok = n => n >= 1e9 ? (n / 1e9).toFixed(1) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'K' : String(n);
-
-let gossipLines = null;
 
 function onSnapshot() {
   const tm = jstNow();
@@ -968,15 +755,6 @@ function onSnapshot() {
     }
   }
 
-  // 無駄話コンビのネタも実データから(ゴシップ化)
-  const nAct = (s.claude.active || []).length + (s.codex.active || []).length;
-  gossipLines = [
-    [`今日もう${fmtYen((s.totals.todayCost || 0) * rate)}使ってるって`, 'えー!マジで!?'],
-    [`クロードズ、いま${nAct}窓だって`, '働きすぎ〜'],
-    [`保留タスク${s.tasks && s.tasks.count != null ? s.tasks.count : '?'}件だって`, '社長がんばれ〜'],
-    ['きいた? 例の件', 'うそでしょ!?'],
-    ['社長また徹夜だって', 'AIは寝ないからね…'],
-  ];
 }
 
 /* ================================================================
@@ -1055,7 +833,7 @@ function updateHud() {
     row.appendChild(job);
     roster.appendChild(row);
   }
-  $('staffNote').textContent = 'ほかのスタッフ: ミミ(点呼=コレクター連動)/テツ(清掃)/ノンビリ/スモーキー/ペチャ&クチャ/アイ&ユウ(総務)/モチ(猫)';
+  $('staffNote').textContent = '設備: 受信ラック=コレクター(5分毎) / ON AIRランプ=watcher / ペット: モチ(猫)';
 
   const yt = $('youtube');
   if (s.youtube && s.youtube.subs != null) {
@@ -1087,9 +865,6 @@ function updateHud() {
   const stale = age > (CFG.staleMin || 20) || fetchFail;
   $('stale').style.display = stale ? 'block' : 'none';
   $('staleAge').textContent = `${age}分前`;
-  if (stale && typeof npcById !== 'undefined' && npcById.mimi && npcById.mimi.present) {
-    npcById.mimi.say(performance.now(), 'データが届かない…!', 8000);
-  }
 }
 
 /* ================================================================
@@ -1102,18 +877,12 @@ function loop(t) {
   const tm = jstNow();
 
   for (const e of employees) { e.think(t, tm); e.step(dt, t); e.tickBubble(t); }
-  for (const n of npcs) { n.duty(tm, t); n.think(t, tm); n.stepMove(dt, t); }
-  stepSocial(t, tm);
   stepCat(dt, t);
   stepParticles(dt);
 
   // 環境パーティクル
   if (t - lastAmbient > 600) {
     lastAmbient = t;
-    const sm = npcById.smoky;
-    if (sm.present && sm.action !== 'walk' && Math.hypot(sm.pos.x - SMOKE_SPOT.x, sm.pos.y - SMOKE_SPOT.y) < 12) {
-      spawnParticle('smoke', sm.pos.x + 5, sm.pos.y - 16);
-    }
     const tsuki = employees.find(e => e.id === 'watcher');
     if (tsuki && tsuki.mode === 'working' && Math.random() < 0.35) {
       spawnParticle('note', tsuki.desk.x - 14 + Math.random() * 10, tsuki.desk.y - 14);
@@ -1125,15 +894,12 @@ function loop(t) {
 
   const items = [];
   for (const e of employees) items.push({ y: e.desk.y + 20, draw: g => drawDesk(g, e.desk, e.mode === 'working' && e.present, t + e.seed) });
-  for (const n of npcs) if (n.desk) items.push({ y: n.desk.y + 20, draw: g => drawDesk(g, n.desk, n.present && n.action === 'sit', t + n.seed) });
   for (const e of employees) if (e.present) items.push({ y: e.pos.y, draw: g => e.drawSprite(g, t) });
-  for (const n of npcs) if (n.present) items.push({ y: n.pos.y, draw: g => n.drawSprite(g, t) });
   items.sort((a, b) => a.y - b.y);
   for (const it of items) it.draw(cx);
   drawCat(cx, t);
   drawParticles(cx);
   for (const e of employees) e.drawOverlay(cx, t);
-  for (const n of npcs) n.drawOverlay(cx, t);
 
   if (night) {
     cx.fillStyle = 'rgba(30,30,80,.16)';
