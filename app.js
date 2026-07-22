@@ -50,9 +50,12 @@ async function poll() {
     if (!r.ok) throw new Error(r.status);
     const rows = await r.json();
     if (rows.length) {
+      const newAt = new Date(rows[0].created_at).getTime();
+      const isNew = newAt !== snapAt;
       snap = rows[0].data;
-      snapAt = new Date(rows[0].created_at).getTime();
+      snapAt = newAt;
       onSnapshot();
+      if (isNew) triggerRollCall();
     }
     fetchFail = false;
   } catch (e) {
@@ -61,12 +64,28 @@ async function poll() {
   updateHud();
 }
 
+// ミミ(=本物のコレクター)が新データを届けるたびに社内を点呼して回る
+function triggerRollCall() {
+  const m = typeof npcById !== 'undefined' && npcById.mimi;
+  if (!m || !m.onduty || !snap) return;
+  const nC = (snap.claude.active || []).length;
+  const nX = (snap.codex.active || []).length;
+  const watcherOk = snap.launchd && snap.launchd['com.mon.tsuki.watcher'] && snap.launchd['com.mon.tsuki.watcher'].running;
+  m.patrol = [
+    { x: 120, y: 190, b: '点呼しま〜す!' },
+    { x: 250, y: 190, b: `開発部 ${nC + nX}名稼働!` },
+    { x: 440, y: 190, b: '制作部よし!' },
+    { x: 460, y: 280, b: watcherOk ? 'スタジオON AIRよし!' : 'スタジオ応答なし!?' },
+  ];
+  m.nextThink = 0;
+}
+
 /* ---------- ポートレート(assets/ にGPT素材が置かれたら自動採用) ---------- */
 const portraits = {};
 for (const d of CFG.employees) {
   const img = new Image();
   img.onload = () => { portraits[d.id] = img; };
-  img.src = `assets/${d.id}.png`;
+  img.src = `assets/${d.portrait || d.id}.png`;
 }
 
 /* ================================================================
@@ -310,7 +329,7 @@ function drawOffice(g, t, tm) {
 
   // ラグ
   rr(g, 16, 60, 144, 92, '#e0c8e8', '#c0a0c8');    // 社長室
-  rr(g, 184, 60, 140, 92, '#c8dce8', '#a0bcd0');   // 開発部
+  rr(g, 184, 60, 140, 104, '#c8dce8', '#a0bcd0');  // 開発部(2列5席)
   rr(g, 368, 60, 208, 92, '#d0e8c8', '#a8cca0');   // 制作部
   rr(g, 16, 208, 176, 136, '#ecd8c0', '#d0b898');  // 休憩室
   rr(g, 240, 240, 128, 76, '#e8e4c8', '#c8c4a0');  // 総務部
@@ -586,9 +605,11 @@ const NPC_DEFS = [
   { id: 'kucha', name: 'クチャ', kind: 'chatB', hair: '#e8c060', shirt: '#d0a848',
     hours: h => h >= 9 && h < 18 },
   { id: 'ai', name: 'アイ', kind: 'coupleA', hair: '#e06a6a', shirt: '#c85858',
-    desk: { x: 272, y: 262 }, hours: h => h >= 9 && h < 21 },
+    desk: { x: 256, y: 262 }, hours: h => h >= 9 && h < 21 },
   { id: 'yu', name: 'ユウ', kind: 'coupleB', hair: '#6a8ae0', shirt: '#5878c8',
-    desk: { x: 336, y: 262 }, hours: h => h >= 9 && h < 21 },
+    desk: { x: 304, y: 262 }, hours: h => h >= 9 && h < 21 },
+  { id: 'mimi', name: 'ミミ', kind: 'rollcall', hair: '#c8b83c', shirt: '#b8a832',
+    desk: { x: 352, y: 262 }, hours: () => true },
 ];
 
 const JANITOR_SPOTS = [
@@ -636,13 +657,30 @@ class Npc extends Person {
     if (!this.onduty || this.action === 'walk' || t < this.nextThink) return;
     switch (this.kind) {
       case 'janitor': {
+        // 燃焼率が高いほどオフィスが「散らかる」ので掃除が忙しくなる
+        const burning = snap && snap.claude && snap.claude.block && snap.claude.block.costPerHour > 60;
         this.goto(JANITOR_SPOTS[Math.floor(Math.random() * JANITOR_SPOTS.length)], 'stand');
-        this.sweepUntil = 0;
-        this.nextThink = t + 12000 + Math.random() * 10000;
-        if (Math.random() < 0.4) this.say(t, ['そうじ そうじ♪', 'きれいにな〜れ', '床はワシの鏡'][Math.floor(Math.random() * 3)]);
+        this.nextThink = t + (burning ? 6000 : 12000) + Math.random() * (burning ? 6000 : 10000);
+        const lines = burning
+          ? ['今日はよう散らかるのう…', 'トークンの燃えかすが…', 'そうじ そうじ!']
+          : ['そうじ そうじ♪', 'きれいにな〜れ', '床はワシの鏡'];
+        if (Math.random() < 0.45) this.say(t, lines[Math.floor(Math.random() * lines.length)]);
+        break;
+      }
+      case 'rollcall': {
+        if (this.patrol && this.patrol.length) {
+          const stop = this.patrol.shift();
+          this.goto({ x: stop.x, y: stop.y }, 'stand');
+          if (stop.b) this.say(t, stop.b, 4000);
+          this.nextThink = t + 5500;
+        } else {
+          this.goto(this.desk, 'sit');
+          this.nextThink = t + 20000;
+        }
         break;
       }
       case 'slacker': {
+        const busyOffice = snap ? ((snap.claude.active || []).length + (snap.codex.active || []).length) >= 3 : false;
         if (this.pos.y > 290 && Math.random() < 0.3) {
           this.goto(VENDING_SPOT, 'faceU');
           this.nextThink = t + 8000;
@@ -650,7 +688,10 @@ class Npc extends Person {
           this.goto(SOFA_SPOT, 'sit');
           this.nextThink = t + 20000 + Math.random() * 20000;
         }
-        if (Math.random() < 0.5) this.say(t, ['休憩なう', 'あとでやる', 'もうちょいだけ…', '5分だけ…'][Math.floor(Math.random() * 4)]);
+        const lines = busyOffice
+          ? ['み、みんな働いてる…', '俺も…5分後にやる', '空気がいたたまれない']
+          : ['休憩なう', 'あとでやる', 'もうちょいだけ…', '5分だけ…'];
+        if (Math.random() < 0.5) this.say(t, lines[Math.floor(Math.random() * lines.length)]);
         break;
       }
       case 'smoker': {
@@ -688,6 +729,13 @@ class Npc extends Person {
       g.fillStyle = '#2a2a34'; g.fillRect(this.pos.x - 2, this.pos.y - 7, 4, 5);
       g.fillStyle = '#8ec8e8'; g.fillRect(this.pos.x - 1, this.pos.y - 6, 2, 3);
     }
+    // 点呼ボード
+    if (this.kind === 'rollcall' && this.action !== 'sit') {
+      const bx = this.pos.x + (this.dir === 'left' ? -9 : 7);
+      g.fillStyle = '#fff'; g.fillRect(bx, this.pos.y - 10, 5, 7);
+      g.fillStyle = '#b8905c'; g.fillRect(bx, this.pos.y - 11, 5, 2);
+      g.fillStyle = '#8a8a96'; g.fillRect(bx + 1, this.pos.y - 7, 3, 1); g.fillRect(bx + 1, this.pos.y - 5, 3, 1);
+    }
   }
 
   drawOverlay(g, t) {
@@ -716,7 +764,7 @@ function stepSocial(t, tm) {
       A.nextThink = B.nextThink = t + 30000;
     } else if (social.chatPhase === 1) {
       if (A.action === 'stand' && B.action === 'stand' && Math.floor(t / 3000) % 2 === 0 && t + 2500 > A.bubbleUntil) {
-        const lines = [['それでさ〜', 'えー!マジで?'], ['きいた? 例の件', 'うそでしょ!?'], ['社長また徹夜だって', 'AIは寝ないからね…']];
+        const lines = gossipLines || [['それでさ〜', 'えー!マジで?'], ['きいた? 例の件', 'うそでしょ!?']];
         const l = lines[Math.floor(Math.random() * lines.length)];
         A.say(t, l[0], 2800); B.say(t + 100, l[1], 2800);
       }
@@ -731,13 +779,26 @@ function stepSocial(t, tm) {
   const C = npcById.ai, D = npcById.yu;
   if (C.onduty && D.onduty) {
     if (social.lovePhase === 0 && t > social.loveNext) {
-      C.goto({ x: COOLER_SPOT.x - 7, y: COOLER_SPOT.y }, 'faceR');
-      D.goto({ x: COOLER_SPOT.x + 9, y: COOLER_SPOT.y }, 'faceL');
+      // 半々で「給水機デート」or「保留タスク台帳の整理(仕事)」
+      social.loveSpot = Math.random() < 0.5 ? 'cooler' : 'board';
+      if (social.loveSpot === 'cooler') {
+        C.goto({ x: COOLER_SPOT.x - 7, y: COOLER_SPOT.y }, 'faceR');
+        D.goto({ x: COOLER_SPOT.x + 9, y: COOLER_SPOT.y }, 'faceL');
+      } else {
+        C.goto({ x: 76, y: 188 }, 'faceU');
+        D.goto({ x: 94, y: 188 }, 'faceU');
+      }
       social.lovePhase = 1; social.loveNext = t + 12000;
       C.nextThink = D.nextThink = t + 16000;
     } else if (social.lovePhase === 1) {
-      if (C.action === 'stand' && D.action === 'stand' && Math.random() < 0.06) {
-        spawnParticle('heart', (C.pos.x + D.pos.x) / 2 - 2, C.pos.y - 22);
+      if (C.action === 'stand' && D.action === 'stand') {
+        if (social.loveSpot === 'board' && t + 2500 > C.bubbleUntil && Math.random() < 0.04) {
+          const tc = snap && snap.tasks && snap.tasks.count != null ? snap.tasks.count : '?';
+          C.say(t, `保留${tc}件を整理中…`, 2800); D.say(t + 100, '手伝うよ', 2800);
+        }
+        if (Math.random() < (social.loveSpot === 'cooler' ? 0.06 : 0.02)) {
+          spawnParticle('heart', (C.pos.x + D.pos.x) / 2 - 2, C.pos.y - 22);
+        }
       }
       if (t > social.loveNext) {
         social.lovePhase = 0; social.loveNext = t + 60000 + Math.random() * 60000;
@@ -799,24 +860,38 @@ const fmtYen = n => '¥' + Math.round(n).toLocaleString('ja-JP');
 const fmtUsd = n => '$' + (n >= 100 ? Math.round(n) : n.toFixed(1));
 const fmtTok = n => n >= 1e9 ? (n / 1e9).toFixed(1) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'K' : String(n);
 
+let gossipLines = null;
+
 function onSnapshot() {
   const tm = jstNow();
   const s = snap;
   const rate = (s.billing && s.billing.jpyPerUsd) || 155;
+
+  // Claude分身へのセッション振り分け(match正規表現→該当なしは遊撃X)
+  const claudeEmps = employees.filter(e => e.source === 'claude');
+  const claudeFallback = claudeEmps.find(e => !e.match);
+  const buckets = {};
+  for (const e of claudeEmps) buckets[e.id] = [];
+  for (const a of (s.claude.active || [])) {
+    const owner = claudeEmps.find(e => e.match && new RegExp(e.match).test(a.project)) || claudeFallback;
+    if (owner) buckets[owner.id].push(a);
+  }
+  const blk = s.claude.block;
+  const blockHp = blk && blk.remainingMinutes != null ? Math.max(0, Math.min(100, Math.round(blk.remainingMinutes / 3))) : 100;
+
   for (const e of employees) {
     e.bubbles = [];
     e.happy = false; e.sweat = false; e.tired = false;
     if (e.source === 'claude') {
-      const act = s.claude.active || [];
-      const blk = s.claude.block;
-      e.hp = blk && blk.remainingMinutes != null ? Math.max(0, Math.min(100, Math.round(blk.remainingMinutes / 3))) : 100;
-      e.tired = e.hp < 22;
+      const act = buckets[e.id] || [];
+      e.hp = e.showHp ? blockHp : null;
+      e.tired = blockHp < 22;
       if (act.length) {
         e.setMode('working');
-        e.sweat = (blk && blk.costPerHour > 90) || act.reduce((a, b) => a + (b.sessions || 1), 0) >= 3;
+        e.sweat = (blk && blk.costPerHour > 90) || act.reduce((a, b) => a + (b.sessions || 1), 0) >= 2;
         e.jobText = act.map(a => a.project + (a.sessions > 1 ? `×${a.sessions}` : '')).join(' / ');
         e.bubbles = act.map(a => `「${a.project}」作業中`);
-        if (s.claude.today) e.bubbles.push(`本日 ${fmtTok(s.claude.today.tokensOut)}tok 出力`);
+        if (e.showHp && s.claude.today) e.bubbles.push(`本日 ${fmtTok(s.claude.today.tokensOut)}tok 出力`);
         if (e.tired) e.bubbles.push('5h枠がもうすぐ…');
       } else {
         e.setMode(tm.h >= 1 && tm.h < 7 ? 'sleep' : 'idle');
@@ -892,6 +967,16 @@ function onSnapshot() {
       }
     }
   }
+
+  // 無駄話コンビのネタも実データから(ゴシップ化)
+  const nAct = (s.claude.active || []).length + (s.codex.active || []).length;
+  gossipLines = [
+    [`今日もう${fmtYen((s.totals.todayCost || 0) * rate)}使ってるって`, 'えー!マジで!?'],
+    [`クロードズ、いま${nAct}窓だって`, '働きすぎ〜'],
+    [`保留タスク${s.tasks && s.tasks.count != null ? s.tasks.count : '?'}件だって`, '社長がんばれ〜'],
+    ['きいた? 例の件', 'うそでしょ!?'],
+    ['社長また徹夜だって', 'AIは寝ないからね…'],
+  ];
 }
 
 /* ================================================================
@@ -970,7 +1055,7 @@ function updateHud() {
     row.appendChild(job);
     roster.appendChild(row);
   }
-  $('staffNote').textContent = 'ほかのスタッフ: テツ(清掃)/ノンビリ/スモーキー/ペチャ&クチャ/アイ&ユウ(総務)/モチ(猫)';
+  $('staffNote').textContent = 'ほかのスタッフ: ミミ(点呼=コレクター連動)/テツ(清掃)/ノンビリ/スモーキー/ペチャ&クチャ/アイ&ユウ(総務)/モチ(猫)';
 
   const yt = $('youtube');
   if (s.youtube && s.youtube.subs != null) {
@@ -1002,6 +1087,9 @@ function updateHud() {
   const stale = age > (CFG.staleMin || 20) || fetchFail;
   $('stale').style.display = stale ? 'block' : 'none';
   $('staleAge').textContent = `${age}分前`;
+  if (stale && typeof npcById !== 'undefined' && npcById.mimi && npcById.mimi.present) {
+    npcById.mimi.say(performance.now(), 'データが届かない…!', 8000);
+  }
 }
 
 /* ================================================================

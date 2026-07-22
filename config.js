@@ -11,11 +11,22 @@ window.OFFICE_CONFIG = {
   youtubeGoal: 10000,
 
   // AI社員名簿(実データ連動)
+  // match: collectorが送るプロジェクト名(正規表現)。match無しのclaudeは遊撃(その他全部)
   employees: [
-    { id: 'claude', name: 'クロード', dept: '開発部', role: '主任エンジニア',
-      hair: '#e8843c', shirt: '#d96c2e', desk: { x: 208, y: 96 }, source: 'claude' },
-    { id: 'codex', name: 'コデックス', dept: '開発部', role: 'エンジニア',
-      hair: '#3ca88c', shirt: '#2e8a72', desk: { x: 272, y: 96 }, source: 'codex' },
+    { id: 'claudeT', name: 'クロードT', dept: '開発部', role: '主任・Project-T担当',
+      hair: '#e8843c', shirt: '#d96c2e', desk: { x: 200, y: 96 }, source: 'claude',
+      match: '^(Project-T|koen|youtubesozai)', portrait: 'claude', showHp: true },
+    { id: 'claudeX', name: 'クロードX', dept: '開発部', role: '遊撃・新規案件担当',
+      hair: '#e8a05c', shirt: '#b85a2e', desk: { x: 248, y: 96 }, source: 'claude',
+      portrait: 'claude' },
+    { id: 'codex', name: 'コデックス', dept: '開発部', role: 'エンジニア(Codex)',
+      hair: '#3ca88c', shirt: '#2e8a72', desk: { x: 296, y: 96 }, source: 'codex', showHp: true },
+    { id: 'claudeY', name: 'クロードY', dept: '開発部', role: 'アプリ・yorutool担当',
+      hair: '#d87a3c', shirt: '#c8622e', desk: { x: 224, y: 134 }, source: 'claude',
+      match: '^yorutool', portrait: 'claude' },
+    { id: 'claudeI', name: 'クロードI', dept: '開発部', role: '音声基盤・TTS担当',
+      hair: '#c86a2e', shirt: '#a8521e', desk: { x: 280, y: 134 }, source: 'claude',
+      match: '^Irodori', portrait: 'claude' },
     { id: 'koen', name: 'コウ', dept: 'コンテンツ制作部', role: '講演ライター',
       hair: '#7a5cc8', shirt: '#8a70c8', desk: { x: 400, y: 96 }, source: 'schedule',
       shift: [3, 0, 4, 30], deliveryKey: 'koen' },
