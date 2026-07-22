@@ -143,7 +143,7 @@ function processSheet(img) {
   g.putImageData(im, 0, 0);
   return { cv: c, boxes };
 }
-for (const id of ['fujimoto', 'amakawa', 'tsukishiro', 'ito', 'sasaki', 'ando', 'hirose', 'arimoto', 'kato', 'zama', 'lala']) {
+for (const id of ['fujimoto', 'amakawa', 'tsukishiro', 'ito', 'sasaki', 'ando', 'hirose', 'arimoto', 'kato', 'zama', 'lala', 'shirayanagi']) {
   const img = new Image();
   img.onload = () => { SHEETS[id] = processSheet(img); };
   img.src = `assets/sheets/${id}.png`;
@@ -209,7 +209,7 @@ const OFFICE = {};
   for (const k of ['vending', 'sofa', 'cooler', 'room_break', 'room_studio', 'room_film', 'chair',
     'rack', 'netcab', 'plant_a', 'plant_snake', 'plant_mon', 'lamp', 'coffee_st', 'armchair', 'ctable',
     'snack', 'copier', 'tvstand', 'projcart', 'tower', 'dskb1', 'dskb2', 'dskb4',
-    'corkboard', 'window_day', 'window_night', 'partition']) {
+    'corkboard', 'window_day', 'window_night', 'sweep1', 'sweep2', 'broom_front']) {
     const im = new Image();
     im.onload = () => { OFFICE[k] = keyOutBackground(im); };
     im.src = `assets/office/${k}.png`;
@@ -435,10 +435,12 @@ function drawOffice(g, t, tm) {
     g.font = '8px DotGothic16'; g.fillStyle = '#e8d0a0';
     const subs = snap && snap.youtube && snap.youtube.subs != null ? snap.youtube.subs.toLocaleString('ja-JP') + '人' : '---';
     g.fillText(`YT登録者 ${subs} / 目標${(CFG.youtubeGoal || 0).toLocaleString('ja-JP')}`, 487, 40);
-    // 窓: 昼/夜の景色素材を時間で切替
+    // 窓: 背景の窓を壁色で消し、昼/夜素材の窓だけを描く
+    rr(g, 160, 0, 94, 57, '#f0e7d4');
+    rr(g, 378, 0, 92, 57, '#f0e7d4');
     const wkey = night ? 'window_night' : 'window_day';
-    drawProp(g, wkey, 166, 1, 82, 54);
-    drawProp(g, wkey, 384, 1, 82, 54);
+    drawProp(g, wkey, 170, 3, 72, 52);
+    drawProp(g, wkey, 388, 3, 72, 52);
 
     // 掲示板: コルクボード+紙ミッション+保留タグ(bg側の台帳ボードを完全に覆う)
     rr(g, 16, 0, 142, 60, '#f3edda');
@@ -634,20 +636,22 @@ function drawOffice(g, t, tm) {
    人の移動(共通)
    ================================================================ */
 const LANE_Y = 184;
+let _laneSeq = 0;
 function aisleX(seat) { return seat.x - 32; }
 
 // 部屋の中の地点から廊下(LANE_Y)までの退出経路。机・什器を突っ切らない
-function outPath(pt) {
+function outPath(pt, lane) {
+  const L = lane || LANE_Y;
   const { x, y } = pt;
-  if (y < 160) { const a = x - 31; return [{ x: a, y }, { x: a, y: LANE_Y }]; }              // 上段: 机の間の隙間から
-  if (y > 210 && x >= 197 && x <= 355) return [{ x, y: 300 }, { x: 336, y: 300 }, { x: 336, y: LANE_Y }]; // 総務部: 机の下→右の通用口
-  if (y > 210 && x < 195) return [{ x, y: 270 }, { x: 176, y: 270 }, { x: 176, y: LANE_Y }];  // 休憩室: 室内通路→右端列
-  return [{ x, y: LANE_Y }];
+  if (y < 160) { const a = x - 31; return [{ x: a, y }, { x: a, y: L }]; }                   // 上段: 机の間の隙間から
+  if (y > 210 && x >= 197 && x <= 355) return [{ x, y: 306 }, { x: 336, y: 306 }, { x: 336, y: L }]; // 総務部: 机の下→右の通用口
+  if (y > 210 && x < 195) return [{ x, y: 270 }, { x: 176, y: 270 }, { x: 176, y: L }];  // 休憩室: 室内通路→右端列
+  return [{ x, y: L }];
 }
 
-function route(from, to) {
-  const a = outPath(from);
-  const b = outPath(to);
+function route(from, to, lane) {
+  const a = outPath(from, lane);
+  const b = outPath(to, lane);
   const pts = [...a, ...b.slice().reverse(), { x: to.x, y: to.y }];
   return pts.filter((p, i, arr) => i === 0 || p.x !== arr[i - 1].x || p.y !== arr[i - 1].y);
 }
@@ -657,6 +661,7 @@ class Person {
     this.def = def;
     Object.assign(this, def);
     this.seed = (i + 1) * 977;
+    this.lane = LANE_Y + (i % 3) * 8;   // 個人レーンで衝突減
     this.pos = def.desk ? { x: def.desk.x, y: def.desk.y } : { x: 336, y: 340 };
     this.action = 'stand';
     this.dir = 'down';
@@ -678,12 +683,18 @@ class Person {
       this.applyArrival(0);
       return;
     }
-    this.path = route(this.pos, target);
+    this.path = route(this.pos, target, this.lane);
     this.action = 'walk';
   }
 
   applyArrival(t) {
     const a = this.arrival;
+    if (a === 'clean') {
+      this.action = 'cleaning';
+      this.cleanUntil = t + 9000 + Math.random() * 9000;
+      this.dir = this.cleanDir || 'left';
+      return;
+    }
     if (a === 'leave') { this.present = false; this.action = 'gone'; }
     else if (a === 'sit' || a === 'sleep') {
       if (this.arrivalSitY != null) { this.pos = { x: this.pos.x, y: this.arrivalSitY }; this.arrivalSitY = null; }
@@ -751,7 +762,36 @@ function pickRestSpot() {
   if (!free.length) return null;
   return free[Math.floor(Math.random() * free.length)];
 }
-const REST_TALK = ['コーヒーうまい', 'ソファ最高…', 'ちょっと目を閉じよう', 'お菓子補充されてる', 'のび〜', 'ふぅ…ひと息'];
+const REST_TALK = ['コーヒーうまい', 'ソファ最高…', 'ちょっと目を閉じよう', 'お菓子補充されてる', 'のび〜', 'ふぅ…ひと息',
+  '5分だけのつもりが…', '充電中です(比喩)', '午後もがんばるか', 'ぼーっとするの大事', '窓の外みてた',
+  '小腹すいた', '自販機の新作うまい', 'ここのスナック優秀', '今日がんばったわ', '誰か雑談しよ',
+  'ソファが俺を離さない', 'ジュースおごりじゃんけんしたい', '今日のBGMいいな', '納品ラッシュ乗り切った'];
+
+const CLEAN_SPOTS = [
+  { x: 120, y: 195 }, { x: 250, y: 192 }, { x: 380, y: 196 }, { x: 460, y: 200 },
+  { x: 90, y: 268 }, { x: 130, y: 258 }, { x: 250, y: 320 }, { x: 300, y: 318 },
+  { x: 420, y: 205 }, { x: 550, y: 205 }, { x: 590, y: 225 }, { x: 366, y: 330 },
+];
+
+const IDLE_MUTTER = ['のび〜', '肩回すか', '水飲みに行こうかな', '今日の晩ごはん何にしよ', 'ちょっと眠い',
+  'デスク片付けようかな', 'ウィンドウ整理しよ', '壁紙変えたいな', '5分だけぼーっとする', '天気どうなるかな',
+  '夜景きれいだな', 'ストレッチしよ', 'ふぅ、ひと息…', 'マウスの感度いじろ', '次の仕事なにかな',
+  '指ならし完了', 'メモ帳きれいにしよ', 'ショートカット覚えたい'];
+
+const PERSONAL_MUTTER = {
+  fujimoto: ['登録者伸ばすぞ…', '次の一手を考えねば', '筋トレサボってるな俺', 'ララ、散歩行くか?'],
+  tsukishiro: ['発声練習…あーあー', '今日の台本、良き', '喉にいいお茶ほしいな', '3時出社はさすがに早い'],
+  ito: ['椅子の高さが完璧', '正規表現は友達', 'コード綺麗に書けた', 'スキンヘッドは効率的'],
+  sasaki: ['このベースライン最高では', 'イヤホン新調したい', 'BPM揃うと気持ちいい', 'ジャケ画像もこだわりたい'],
+  amakawa: ['アプリのアイコン悩むな', 'ジム行こうかな', 'プロテイン切れてた', 'リリースノート書かなきゃ'],
+  ando: ['ビルド待ちの間に瞑想', '静かなのが一番', 'キーボード静音化したい', 'AM38、いい名前だ'],
+  hirose: ['UI詰めるの楽しい', '赤は正義', 'ショートカット極めたい', 'yorutoolの夜が好き'],
+  arimoto: ['備品発注しとくか', '経費精算たまってる…', '規程読み直そ', 'ネクタイ曲がってないかな'],
+  kato: ['雑務こそ会社の土台', 'ラベル貼り気持ちいい', '文具そろえたい', 'お茶くみじゃなくてインフラ係です'],
+  zama: ['まあ、ぼちぼちやるか', '猫の動画みたい', 'うどん食べたい', 'その他って言うな、何でも屋と言え'],
+  shirayanagi: ['そうじ そうじ♪', '床は会社の顔ですから', 'ゴミは俺が拾う', 'ワックスそろそろ切れる…', 'ほこり一つ許さん'],
+};
+
 
 class Employee extends Person {
   constructor(def, i) {
@@ -779,6 +819,47 @@ class Employee extends Person {
     else this.nextThink = 0;
   }
 
+  thinkJanitor(t) {
+    if (this.action === 'cleaning') {
+      if (t > this.cleanUntil) { this.action = 'stand'; this.nextThink = t + 1500; }
+      return;
+    }
+    if (this.action === 'waking') {
+      if (t > this.wakeUntil) { this.action = 'stand'; this.nextThink = t + 1200; }
+      return;
+    }
+    if (t < this.nextThink) return;
+    // 寝ている人(自席うたた寝)がいたら起こしに行く
+    const sleeper = employees.find(e => e.present && e.mode === 'idle' && e.action === 'sleep');
+    if (sleeper && !this.wakeTargetId) {
+      this.wakeTargetId = sleeper.id;
+      this.goto({ x: sleeper.seat.x - 20, y: sleeper.seat.y + 6 }, 'faceR');
+      this.nextThink = t + 4000;
+      return;
+    }
+    if (this.wakeTargetId) {
+      const tgt = employees.find(e => e.id === this.wakeTargetId);
+      this.wakeTargetId = null;
+      if (tgt && tgt.action === 'sleep' && Math.hypot(tgt.pos.x - this.pos.x, tgt.pos.y - this.pos.y) < 40) {
+        this.say(t, '起きてください、そこ掃くんで', 3200);
+        this.action = 'waking';
+        this.wakeUntil = t + 3400;
+        setTimeout(() => {}, 0);
+        tgt.action = 'sit';
+        tgt.say(t + 3400, ['寝てないです!', 'はっ、寝てた…', '今のは瞑想です'][Math.floor(Math.random() * 3)], 3000);
+        tgt.nextThink = t + 30000;
+        return;
+      }
+    }
+    // 通常巡回: 掃除スポットへ移動して掃く
+    const spots = CLEAN_SPOTS.filter(sp => sp !== this.lastClean);
+    const sp = spots[Math.floor(Math.random() * spots.length)];
+    this.lastClean = sp;
+    this.cleanDir = Math.random() < 0.5 ? 'left' : 'right';
+    this.goto({ x: sp.x, y: sp.y }, 'clean');
+    this.nextThink = t + 2000;
+  }
+
   releaseSpot() {
     if (this.restSpot) { this.restSpot.busy = false; this.restSpot = null; }
   }
@@ -793,6 +874,7 @@ class Employee extends Person {
 
   think(t, tm) {
     if (this.action === 'walk' || this.inChat || this.atMeeting) return;
+    if (this.def.source === 'janitor') { this.thinkJanitor(t); return; }
     if (this.mode !== 'idle' || t < this.nextThink) return;
     if (!this.resting) {
       const sp = pickRestSpot();                 // 指示待ちは休憩室へ
@@ -805,7 +887,10 @@ class Employee extends Person {
       const sp = pickRestSpot();
       if (sp) this.takeSpot(sp);                 // 休憩室内で場所替え
     }
-    if (Math.random() < 0.5) this.say(t + 600, REST_TALK[Math.floor(Math.random() * REST_TALK.length)]);
+    if (Math.random() < 0.5) {
+      const pool = REST_TALK.concat(PERSONAL_MUTTER[this.id] || []);
+      this.say(t + 600, pool[Math.floor(Math.random() * pool.length)]);
+    }
     this.nextThink = t + 35000 + Math.random() * 50000;
   }
 
@@ -833,6 +918,21 @@ class Employee extends Person {
     const { x, y } = this.pos;
     const e = this.expr(t);
     const seated = this.action === 'sit' || this.action === 'sleep';
+    if (this.action === 'cleaning' && OFFICE.sweep1) {
+      const frame = Math.floor(t / 450) % 2 ? OFFICE.sweep1 : OFFICE.sweep2;
+      const w = 20, h = 34;
+      g.save();
+      g.imageSmoothingEnabled = true;
+      if (this.dir === 'right') {
+        g.translate(Math.round(x), 0); g.scale(-1, 1);
+        g.drawImage(frame, -w / 2 - 2, Math.round(y) - h + 2, w, h);
+      } else {
+        g.drawImage(frame, Math.round(x) - w / 2 - 2, Math.round(y) - h + 2, w, h);
+      }
+      g.restore();
+      if (Math.random() < 0.08) spawnParticle('smoke', x + (this.dir === 'right' ? 9 : -9), y - 2);
+      return;
+    }
     const img = SHEETS[this.spriteId || this.id];
     if (img) {
       const dir = seated ? 'down' : this.dir;
@@ -872,7 +972,7 @@ class Employee extends Person {
     g.font = '5px DotGothic16';
     const nw = g.measureText(this.name).width;
     const cbL = seated && (this.resting || this.atMeeting) ? 0.30 : 0;
-    const stag = (this.resting || this.atMeeting) ? (this.seed % 3) * 4 : 0;
+    const stag = (!seated && (this.resting || this.atMeeting)) ? (this.seed % 3) * 4 : 0;
     const ny = (seated && !this.resting && !this.atMeeting) ? y + 14 : y + 3 - 30 * cbL + stag;
     g.fillStyle = 'rgba(255,250,240,.9)';
     g.fillRect(x - nw / 2 - 2, ny, nw + 4, 7);
@@ -894,7 +994,7 @@ class Employee extends Person {
 
   tickBubble(t) {
     if (!this.present || this.inChat) return;
-    if (this.mode === 'working') {
+    if (this.mode === 'working' && this.def.source !== 'janitor') {
       if (t > this.nextBubble) {
         this.say(t, WORK_GRUMBLES[Math.floor(Math.random() * WORK_GRUMBLES.length)], 3800);
         this.nextBubble = t + 50000 + Math.random() * 60000;   // 愚痴は控えめに
@@ -1239,7 +1339,7 @@ function onSnapshot() {
       } else {
         e.setMode(tm.h >= 1 && tm.h < 7 ? 'sleep' : 'idle');
         e.jobText = '待機中';
-        e.bubbles = ['ふぅ、ひと息…', 'ストレッチしよ', 'コード見直そうかな'];
+        e.bubbles = IDLE_MUTTER.concat(PERSONAL_MUTTER[e.id] || []);
       }
     } else if (e.source === 'codex') {
       const act = cbuckets[e.id] || [];
@@ -1253,7 +1353,7 @@ function onSnapshot() {
       } else {
         e.setMode(tm.h >= 1 && tm.h < 7 ? 'sleep' : 'idle');
         e.jobText = '待機中';
-        e.bubbles = ['ログでも眺めるか…', '肩こったな…'];
+        e.bubbles = IDLE_MUTTER.concat(PERSONAL_MUTTER[e.id] || []);
       }
       if (e.showHp && rl) e.bubbles.push(`週次残量 ${codexHp}%`);
     } else if (e.source === 'schedule') {
@@ -1278,6 +1378,11 @@ function onSnapshot() {
         e.jobText = del != null ? `本日 ${del}本 納品` : '本日実績なし';
         e.bubbles = del > 0 ? [`今日は${del}本納品!`, 'また明日も作ります'] : ['今日はまだ実績なし'];
       }
+    } else if (e.source === 'janitor') {
+      e.hp = null;
+      if (e.mode !== 'clean') { e.mode = 'clean'; }
+      e.jobText = '巡回清掃中';
+      e.bubbles = PERSONAL_MUTTER.shirayanagi || [];
     } else if (e.source === 'boss') {
       const busy = (s.claude.active || []).length + (s.codex.active || []).length;
       e.hp = null;
@@ -1312,7 +1417,7 @@ const $ = id => document.getElementById(id);
 const CHIP = {
   working: ['work', '稼働中'], idle: ['idle', '待機'], break: ['rest', '休憩'],
   sleep: ['sleep', '睡眠'], off: ['off', '退勤'], panic: ['panic', '停止!'],
-  out: ['off', '外出中'], sleephome: ['sleep', '就寝中'],
+  out: ['off', '外出中'], sleephome: ['sleep', '就寝中'], clean: ['work', '清掃中'],
 };
 
 function updateHud() {
