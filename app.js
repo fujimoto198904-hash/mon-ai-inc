@@ -39,6 +39,7 @@ function fitCanvas() {
   cv.style.height = Math.round(H * s) + 'px';
 }
 window.addEventListener('resize', fitCanvas);
+window.addEventListener('orientationchange', () => setTimeout(fitCanvas, 300));
 
 /* ---------- データ取得 ---------- */
 let snap = null, snapAt = 0, fetchFail = false;

@@ -2,7 +2,10 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f3ead8">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="robots" content="noindex,nofollow">
 <title>MON-AI Inc. 社内モニター</title>
 <link rel="icon" href="favicon.svg">
@@ -107,6 +110,18 @@
     position: fixed; inset: 0; background: var(--bg);
     display: none; align-items: center; justify-content: center;
     z-index: 10; text-align: center; line-height: 2;
+  }
+  /* スマホ(iPhone)対応: 縦積み+スクロール */
+  @media (max-width: 760px) {
+    html, body { height: auto; overflow: auto; }
+    #topbar { padding: 6px 10px 2px; gap: 8px; flex-wrap: wrap; }
+    #topbar h1 { font-size: 16px; }
+    #topbar .sub { font-size: 10px; }
+    #clock { font-size: 16px; }
+    #clock small { font-size: 10px; }
+    #main { flex-direction: column; }
+    #stage { width: 100%; flex: none; aspect-ratio: 16 / 9; padding: 4px; }
+    #hud { width: 100%; flex: none; overflow: visible; padding: 4px 10px 24px; }
   }
 </style>
 </head>
