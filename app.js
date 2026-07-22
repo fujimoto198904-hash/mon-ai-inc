@@ -1449,18 +1449,19 @@ const STANDUP_POS = [
 const officeEvent = { active: null, next: 90000, cooldown: 0 };
 const EVENT_PROPS = {
   bbq: [
-    ['b_grill', 266, 164, 38, 31], ['b_table', 310, 166, 42, 31], ['b_meat', 314, 158, 18, 14],
-    ['b_skewer', 336, 160, 16, 13], ['b_cooler', 246, 184, 16, 16], ['b_beer', 296, 198, 11, 16],
+    ['b_grill', 266, 150, 38, 31], ['b_table', 310, 152, 42, 31], ['b_meat', 314, 144, 18, 14],
+    ['b_skewer', 336, 146, 16, 13], ['b_cooler', 246, 170, 16, 16], ['b_beer', 296, 180, 11, 16],
   ],
   gym: [
-    ['g_rack', 252, 150, 36, 21], ['g_barbell', 294, 160, 40, 13], ['g_bench', 340, 154, 26, 23],
-    ['g_mats', 274, 184, 30, 16], ['g_ball', 350, 186, 15, 16],
+    ['g_rack', 252, 148, 36, 21], ['g_barbell', 294, 152, 40, 13], ['g_bench', 340, 152, 26, 23],
+    ['g_mats', 274, 172, 30, 16], ['g_ball', 350, 174, 15, 16],
   ],
 };
+// 総務部(y216の机列)と被らないよう、イベントの立ち位置はy198以下に収める
 const EVENT_SPOTS = {
-  bbq: [ { x: 284, y: 206, a: 'faceU' }, { x: 258, y: 196, a: 'faceR' }, { x: 310, y: 210, a: 'faceU' },
-         { x: 336, y: 206, a: 'faceU' }, { x: 358, y: 200, a: 'faceL' }, { x: 246, y: 172, a: 'faceR' }, { x: 372, y: 172, a: 'faceL' } ],
-  gym:  [ { x: 264, y: 208, a: 'faceU' }, { x: 296, y: 210, a: 'faceU' }, { x: 328, y: 208, a: 'faceU' }, { x: 356, y: 212, a: 'faceU' } ],
+  bbq: [ { x: 284, y: 194, a: 'faceU' }, { x: 258, y: 190, a: 'faceR' }, { x: 310, y: 198, a: 'faceU' },
+         { x: 336, y: 194, a: 'faceU' }, { x: 358, y: 190, a: 'faceL' }, { x: 238, y: 162, a: 'faceR' }, { x: 372, y: 162, a: 'faceL' } ],
+  gym:  [ { x: 264, y: 192, a: 'faceU' }, { x: 296, y: 196, a: 'faceU' }, { x: 328, y: 192, a: 'faceU' }, { x: 356, y: 196, a: 'faceU' } ],
 };
 
 function stepEvent(t) {
@@ -1533,7 +1534,7 @@ function runEvent(t) {
       ev.phase = 'bust'; ev.bustStage = 'walk'; ev.boss = boss;
       boss.releaseSpot(); boss.releaseReception(); boss.resting = false;
       boss.inChat = true;
-      boss.goto({ x: 310, y: 224 }, 'faceU');   // イベントゾーンの手前で仁王立ち
+      boss.goto({ x: 310, y: 208 }, 'faceU');   // イベントゾーンの手前で仁王立ち
     } else {
       endEvent(t);   // 社長不在なら自然解散
     }
