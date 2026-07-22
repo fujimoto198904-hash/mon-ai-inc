@@ -336,7 +336,11 @@ function drawOffice(g, t, tm) {
     g.font = '8px DotGothic16'; g.fillStyle = 'rgba(74,59,42,.85)';
     g.fillText('《社訓》', 272, 13);
     (CFG.mottos || []).slice(0, 3).forEach((m, k) => g.fillText(String(m).slice(0, 8), 258, 22 + k * 9));
-    // 時計の針
+    // 時計: 下絵の針を消してリアル時刻の針だけ描く
+    g.fillStyle = '#fdf8f0';
+    g.beginPath(); g.arc(352, 28, 10.5, 0, 7); g.fill();
+    g.fillStyle = INK;
+    g.fillRect(351, 19, 2, 2); g.fillRect(351, 35, 2, 2); g.fillRect(343, 27, 2, 2); g.fillRect(359, 27, 2, 2);
     g.strokeStyle = INK; g.lineWidth = 1.4;
     const mA = tm.m / 60 * Math.PI * 2 - Math.PI / 2, hA = (tm.h % 12 + tm.m / 60) / 12 * Math.PI * 2 - Math.PI / 2;
     g.beginPath(); g.moveTo(352, 28); g.lineTo(352 + Math.cos(hA) * 6, 28 + Math.sin(hA) * 6); g.stroke();
@@ -545,22 +549,21 @@ function drawOffice(g, t, tm) {
 const LANE_Y = 184;
 function aisleX(seat) { return seat.x - 32; }
 
+// 部屋の中の地点から廊下(LANE_Y)までの退出経路。机・什器を突っ切らない
+function outPath(pt) {
+  const { x, y } = pt;
+  if (y < 160) { const a = x - 32; return [{ x: a, y }, { x: a, y: LANE_Y }]; }            // 上段の部署: 机の左脇
+  if (y > 210 && x >= 216 && x <= 368) { const a = x - 26; return [{ x: a, y }, { x: a, y: LANE_Y }]; } // 総務部
+  if (y > 210 && x < 210) { return [{ x: 105, y }, { x: 105, y: LANE_Y }]; }               // 休憩室: 中央通路
+  if (y > 224 && x > 470) { return [{ x: 460, y: 280 }, { x: 460, y: LANE_Y }]; }          // スタジオ側
+  return [{ x, y: LANE_Y }];
+}
+
 function route(from, to) {
-  const pts = [];
-  const fy = from.y;
-  const ty = to.y;
-  if (fy < 160) { const a = aisleX(from); pts.push({ x: a, y: fy }); pts.push({ x: a, y: LANE_Y }); }
-  else if (fy > 210 && from.x > 470) { pts.push({ x: 460, y: 280 }); pts.push({ x: 460, y: LANE_Y }); }
-  else pts.push({ x: from.x, y: LANE_Y });
-  if (ty < 160) {
-    const a = aisleX(to);
-    pts.push({ x: a, y: LANE_Y }); pts.push({ x: a, y: ty }); pts.push({ x: to.x, y: ty });
-  } else if (to.x > 480 && ty > 224) {
-    pts.push({ x: 460, y: LANE_Y }); pts.push({ x: 460, y: 280 }); pts.push({ x: to.x, y: 280 }); pts.push({ x: to.x, y: ty });
-  } else {
-    pts.push({ x: to.x, y: LANE_Y }); pts.push({ x: to.x, y: ty });
-  }
-  return pts.filter((p, i, a) => i === 0 || p.x !== a[i - 1].x || p.y !== a[i - 1].y);
+  const a = outPath(from);
+  const b = outPath(to);
+  const pts = [...a, ...b.slice().reverse(), { x: to.x, y: to.y }];
+  return pts.filter((p, i, arr) => i === 0 || p.x !== arr[i - 1].x || p.y !== arr[i - 1].y);
 }
 
 class Person {
@@ -718,10 +721,10 @@ class Employee extends Person {
     if (img) {
       const dir = seated ? 'down' : this.dir;
       let fi = 1;
-      if (this.action === 'walk') fi = [0, 1, 2, 1][Math.floor(this.walked / 7) % 4];
+      if (this.action === 'walk') fi = [0, 1, 2, 1][Math.floor(this.walked / 10) % 4];
       let bob = 0;
       if (this.mode === 'working' && seated && Math.floor((t + this.seed) / 420) % 2) bob = -1;  // タイピングの揺れ
-      drawSheet(g, img, dir, fi, x, y + bob, this.tall ? 34 : 30);
+      drawSheet(g, img, dir, fi, x, y + bob, 30);
       if (e === 'sweat') {
         g.fillStyle = '#5ab0e8';
         const dy2 = Math.floor(t / 220) % 3;
