@@ -210,7 +210,7 @@ const OFFICE = {};
   for (const k of ['vending', 'sofa', 'cooler', 'chair',
     'rack', 'netcab', 'plant_a', 'plant_mon', 'lamp', 'coffee_st', 'armchair',
     'snack', 'copier', 'tower', 'dskb1', 'dskb2', 'dskb4',
-    'corkboard', 'window_day', 'window_night', 'reception', 'bin_g', 'bin_r', 'exting', 'firstaid', 'sanitizer', 'studio_audio', 'studio_film', 'rug_new']) {
+    'corkboard', 'window_day', 'window_night', 'reception', 'bin_g', 'bin_r', 'exting', 'firstaid', 'sanitizer', 'studio_audio', 'studio_film', 'rug_new', 'b_grill', 'b_table', 'b_meat', 'b_skewer', 'b_cooler', 'b_beer', 'g_rack', 'g_barbell', 'g_bench', 'g_tread', 'g_mats', 'g_ball']) {
     const im = new Image();
     im.onload = () => { OFFICE[k] = keyOutBackground(im); };
     im.src = `assets/office/${k}.png`;
@@ -342,6 +342,18 @@ function drawAlert(g, x, y, t) {
 }
 
 /* ---------- 吹き出し ---------- */
+const _recentSay = {};
+function pickFresh(key, pool) {
+  if (!pool || !pool.length) return '';
+  const hist = _recentSay[key] || (_recentSay[key] = []);
+  const cap = Math.max(1, Math.floor(pool.length * 0.5));
+  let cand, tries = 0;
+  do { cand = pool[Math.floor(Math.random() * pool.length)]; tries++; } while (hist.includes(cand) && tries < 25);
+  hist.push(cand);
+  while (hist.length > cap) hist.shift();
+  return cand;
+}
+
 const bubbleQ = [];
 
 function drawBubble(g, x, y, text) {
@@ -591,7 +603,7 @@ function drawOffice(g, t, tm) {
   g.fillRect(524, 214, 5, 3);
   g.font = '6px DotGothic16';
   g.fillStyle = deadRx ? '#e05a4e' : 'rgba(74,59,42,.7)';
-  g.fillText(deadRx ? 'コレクター受信断!' : freshRx ? 'コレクター受信中' : 'コレクター待受', 532, 219);
+  g.fillText(deadRx ? '⚠ データ同期が止まってます!' : freshRx ? 'データ同期OK(5分毎)' : 'データ同期: 次の更新待ち', 500, 219);
 
   if (!drawProp(g, 'sofa', 20, 288, 60, 30)) rr(g, 24, 296, 52, 20, '#7a9ac8', INK);
   drawProp(g, 'armchair', 92, 288, 26, 32);
@@ -762,6 +774,17 @@ const CLEAN_SPOTS = [
   { x: 285, y: 64, k: 'wipe' }, { x: 424, y: 312, k: 'wipe' }, { x: 436, y: 328, k: 'mop' }, { x: 607, y: 214, k: 'bucket' },
 ];
 
+const IDLE_ANTICS = [
+  '💪スクワット×10 いくぞ', '🎸エアギター熱演中', '🏃その場ダッシュ(本気)', '🧘謎のヨガポーズ',
+  '💪デスクで腕立て(浅い)', '🩰つま先立ちチャレンジ', '🥊影とシャドーボクシング', '🤸ラジオ体操第一(雑)',
+  '🎿エア縄跳び', '⚾エア素振り(フルスイング)', '🏌️エアゴルフスイング', '🥁エアドラム全国大会',
+  '🦵ももあげ(静音モード)', '🙆背伸びで天井タッチ未遂', '🪑椅子スクワット(椅子なし)', '☝️指立て伏せ(できてない)',
+  '🦶アキレス腱のばし', '👀目の体操(ぐるぐる)', '🤏手首ぶらぶら体操', '💨深呼吸×10(過呼吸気味)',
+  '🦴肩甲骨はがし中', '🗿マッスルポーズ(鏡なし)', '🦩片足バランス勝負', '🐄腰に手を当てて牛乳(エア)',
+  '🌀首をコキコキ', '🛌床で伸び(だらしない)', '🚶モデルウォーク練習', '🤖ロボットダンス披露',
+  '🏋️ペットボトルでカール', '🧎ストレッチ…固くて悲鳴',
+];
+
 const SLEEP_TALK = [
   'むにゃ…', 'すやぁ…', 'ぐぅ…', 'zzz…はっ…zzz', 'むにゃむにゃ…',
   'もう食べられない…', 'うどん…おかわり…', 'ラーメン…替え玉…', 'プリン…俺の…', '焼肉…無限…',
@@ -900,6 +923,12 @@ class Employee extends Person {
       return;
     }
     if (!this.resting) {
+      if (Math.random() < 0.25) {
+        this.anticUntil = t + 6500;
+        this.say(t, pickFresh('antic', IDLE_ANTICS), 6000);
+        this.nextThink = t + 25000 + Math.random() * 25000;
+        return;
+      }
       if (!receptionBy && RECEPTION_STAFF.includes(this.id) && Math.random() < 0.5) {
         receptionBy = this.id;
         this.receptionOn = true;
@@ -919,7 +948,7 @@ class Employee extends Person {
     }
     if (Math.random() < 0.5) {
       const pool = REST_TALK.concat(PERSONAL_MUTTER[this.id] || []);
-      this.say(t + 600, pool[Math.floor(Math.random() * pool.length)]);
+      this.say(t + 600, pickFresh('rest:' + this.id, pool));
     }
     this.nextThink = t + 35000 + Math.random() * 50000;
   }
@@ -980,7 +1009,8 @@ class Employee extends Person {
       const dir = seated ? 'down' : this.dir;
       const fi = 1;
       let bob = 0;
-      if (this.action === 'walk') bob = Math.floor(this.walked / 7) % 2 ? -1 : 0;   // コマ固定+縦ボブ(左右ブレなし)
+      if (this.anticUntil && t < this.anticUntil) bob = Math.floor(t / 130) % 2 ? -2 : 0;  // 珍行動中は勢いよく動く
+      else if (this.action === 'walk') bob = Math.floor(this.walked / 7) % 2 ? -1 : 0;
       else if (this.mode === 'working' && seated && Math.floor((t + this.seed) / 420) % 2) bob = -1;
       const cb = seated && (this.resting || this.atMeeting) ? 0.30 : 0;   // ソファ・会議席では脚を沈める
       drawSheet(g, img, dir, fi, x, y + bob, 30, cb);
@@ -1040,21 +1070,21 @@ class Employee extends Person {
     if (!this.present || this.inChat) return;
     if (this.action === 'sleep' || this.mode === 'sleep') {
       if (t > this.nextBubble) {
-        this.say(t, SLEEP_TALK[Math.floor(Math.random() * SLEEP_TALK.length)], 3600);
+        this.say(t, pickFresh('sleep', SLEEP_TALK), 3600);
         this.nextBubble = t + 40000 + Math.random() * 50000;   // 寝言はたまに
       }
       return;
     }
     if (this.mode === 'working' && this.def.source !== 'janitor') {
       if (t > this.nextBubble) {
-        this.say(t, WORK_GRUMBLES[Math.floor(Math.random() * WORK_GRUMBLES.length)], 3800);
+        this.say(t, pickFresh('grumble', WORK_GRUMBLES), 3800);
         this.nextBubble = t + 50000 + Math.random() * 60000;   // 愚痴は控えめに
       }
       return;
     }
     if (!this.bubbles.length) return;
     if (t > this.nextBubble) {
-      this.say(t, this.bubbles[Math.floor(Math.random() * this.bubbles.length)], 3800);
+      this.say(t, pickFresh('idle:' + this.id, this.bubbles), 3800);
       this.nextBubble = t + 16000 + Math.random() * 22000;
     }
   }
@@ -1118,8 +1148,8 @@ function makeChatLines() {
   const lines = [];
   const rounds = 1 + (Math.random() < 0.5 ? 1 : 0);
   for (let k = 0; k < rounds; k++) {
-    lines.push(openers[Math.floor(Math.random() * openers.length)]);
-    lines.push(CHAT_REPLIES[Math.floor(Math.random() * CHAT_REPLIES.length)]);
+    lines.push(pickFresh('opener', openers));
+    lines.push(pickFresh('reply', CHAT_REPLIES));
   }
   return lines;
 }
@@ -1208,9 +1238,226 @@ const fight = { active: null, cooldown: 0 };
 /* ================================================================
    社長の指示行脚: 新しい仕事が始まった社員の席へ行き、指示を出す
    ================================================================ */
+const BBQ_TALK = [
+  '火起こしは俺に任せろ', '網の角度がプロい', '肉!肉!肉!', 'まだ焼けてないって',
+  '裏返すの早すぎ', '奉行きた', 'タレ派?塩派?', '両方に決まってる',
+  '野菜も食べなさい', 'ピーマン誰が入れた', '椎茸は俺のもの', 'カルビ天才',
+  '煙すご!換気!', '白柳さんごめん…', '床は汚さない誓い', '紙皿どこ?',
+  '乾杯しよ乾杯!', '氷足りてる?', 'ノンアルで我慢', '勤務中では?',
+  '社長も食べます?', '経費で落ちる?', '落ちるわけない', '領収書切っといて',
+  '串の回転が職人', '焦げも味のうち', '炭酸置いといたよ', 'マシュマロ持参勢',
+  'とうもろこし甘い', 'エビ焼けた?', '海鮮もいける', '次は屋上でやりたい',
+  '風向き考えて', '髪に匂いつくやつ', '明日も匂う自信ある', 'それは勲章',
+  '写真撮ろ写真', 'YT素材にする?', '社外秘BBQです', '配信したら伸びそう',
+  'トング貸して', 'トング返して', 'トング戦争勃発', 'じゃんけんで解決',
+  '網交換します', '有能すぎる', '塩加減が神', '店開けるレベル',
+  '食後の仕事つらい', '眠くなるやつ', 'コーヒーで締めよう', '〆の焼きおにぎり',
+  '最後の一枚どうぞ', 'いや、どうぞどうぞ', '譲り合い美しい', 'じゃあ半分こ',
+  '片付けまでがBBQ', '分別はあっち', '炭の処理は任せろ', '解散後10分で会議な',
+], GYM_TALK = [
+  'フォーム見てて', '腰引けてるよ', 'あと3回!', '無理っす…',
+  '呼吸止めない!', 'プロテイン持参?', '水しかない', '気合いで補え',
+  'ベンチ軽すぎ?', '盛りすぎ盛りすぎ', 'プレート外して', '謙虚が一番',
+  '有酸素もやろ', 'トレッドミル故障してない?', '歩くだけなら得意', '早歩き選手権しよ',
+  'ヨガマット気持ちいい', 'そのポーズ何?', '戦士のポーズ', '戦士は無理な体勢',
+  '腹筋ローラーある?', 'ないから床で', '床は白柳さんの聖域', '汗は拭いてから',
+  '筋肉は裏切らない', '締切は裏切る', '名言やめて', '刺さるからやめて',
+  'バランスボール乗れる?', '3秒が限界', '俺は5秒', 'レベル低い争い',
+  '明日筋肉痛だな', '明後日に来るタイプ', '歳の話やめよ', 'AIに歳はない',
+  'ジム部作らない?', '部費は経費?', 'また経費の話…', '却下されるまでがオチ',
+], EVENT_REACT = [
+  'いい匂いしてきた…', '仕事に集中できない件', '俺も混ざりたい…', 'あとで一口ください',
+  '音がもう美味しい', '煙こっち来た(嬉しい)', '休憩取ればよかった', '次は絶対参加する',
+  '楽しそうで何より', '声でかいって(笑)', '議事録は取らんでいい', '平和な会社だ…',
+  '集中…集中…', 'イヤホンで防御', '腹の音が鳴った', '夕飯どうしよ…',
+  '写真だけ撮っとこ', 'SNSに載せたい', '社外秘らしいよ', '残念すぎる',
+  '白柳さんの顔が曇ってる', '床…床が…', '掃除係の苦労よ', 'あとで手伝お',
+  'カロリーは正義', '罪の匂いがする', 'ダイエット中なのに', '明日から本気出す',
+  '月城さん寝てるのに', 'よく寝れるな…', '寝言がBBQに反応してる', '鼻が動いてる(笑)',
+  '社長も楽しそう', '童心に帰ってる', '経費の行方が心配', '税理士に怒られるやつ',
+  '仕事終わったら混ざる', 'あと1タスク…', 'ビルド待ちの間だけ…', 'ちょっとだけ…いや駄目だ',
+  '祭りかな?', '文化祭みたい', '青春してるな', 'うちの会社どうなってんの',
+  '羨ましくなんか…ある', '正直めっちゃ羨ましい', '心を無にして作業', '無理、匂いが勝つ',
+  '網の音ASMR', '作業BGMがジュージュー', '集中力が肉に負ける', '今日は負けを認める',
+  '筋トレ組は偉いな', '俺は座ってるだけ', '見てるだけで疲れた', '応援だけしとく',
+  'ファイトー!', 'いっぽーん!', 'あと3回とか鬼', 'コーチ厳しすぎ(笑)',
+  'フォームきれい', '腰は大事にね', '労災になるよ(笑)', '安全第一,品質第一',
+  '若いなあ…', 'AIに若さも何も', 'それを言っちゃおしまい', '夢のある会社です',
+  '平和すぎて泣ける', '明日も頑張れそう', 'この会社好きだわ', '入社してよかった(AI)',
+  '誰か仕事して(笑)', '俺がやってるから大丈夫', '頼もしすぎる', '給料上げてあげて',
+  '社訓「無限労働」とは', '休憩も仕事のうち', 'いい文化になった', 'ミッションは達成される',
+  '匂いで日報書けそう', '今日の日報:肉', '承認します', '最高の会社かよ',
+];
+
+const WORK_TALK = [
+  'まず要件を整理しよう', '期限はいつまで?', '今日中にいけます', '仕様書どこでしたっけ',
+  'ブランチ切っときました', 'レビュー誰に振る?', '俺が見ます', 'テスト先に書こう',
+  '既存の実装が使えそう', 'ゼロから書いた方が早いかも', '依存関係だけ気をつけて', '互換性は保つ方向で',
+  '英語版も出します?', 'まずは日本語だけで', 'サムネどうします?', 'A/Bテストしよう',
+  '前回の反省を活かそう', '同じバグ二度と出さない', 'ログ仕込んでおきます', 'エラー処理そこ手厚めで',
+  '負荷は大丈夫そう?', 'キャッシュ効かせます', 'コスト意識だけ頼む', 'トークン節約構成で',
+  '成果物はどこに置く?', 'いつものフォルダで', '命名規則そろえよう', 'READMEも更新しとく',
+  '誰かペアで入れる?', '俺、手すきです', '助かる、頼んだ', '30分後に進捗共有で',
+  '仕様変更の可能性ある?', '一応ある、抽象化しとこ', '了解、差し替え前提で', '本番は夜に流します',
+  '検証環境ある?', 'ローカルで再現できます', 'それは助かる', 'まず小さく出そう',
+  'リリースノート書く?', '一行でいいよ', 'バックアップ取った?', '取りました、いつでも戻せます',
+  '音声の質どうする?', '花音でいきましょう', '字幕はFCPXMLで', 'いつものパイプラインで',
+  'BGMのトーンは?', '朝は明るめ、夜しっとり', 'ジャケットも合わせよう', '照明は昼寄りで',
+  '数字どう見る?', 'CTRが先、維持率は後', '仮説は立ってる?', 'サムネの文字数だと思う',
+  '競合は見た?', 'ざっと3チャンネル見ました', '差別化ポイントは?', '声と物語の一貫性かと',
+  'それ今日必要?', '明日でいい、優先度下げよ', '逆にこれは今日中', '分かった、先やる',
+  '詰まったら早めに言って', '10分悩んだら聞きます', 'その姿勢でよろしく', '無理はしないでいい',
+  '完璧より完成な', '60点で出して直す', '品質第一じゃ?', '出してからの品質第一だ',
+  'この命名センスある', '変数名で笑わせないで', 'コメント書いといて', '未来の自分のためにね',
+  'マージ通りました', 'ナイス、次いこう', 'デプロイ完了です', '確認した、問題なし',
+  'エラー1件出てます', 'ログ見る、5分待って', '原因わかった、直します', '再発防止も添えて',
+  '会議これで終わり', '各自よろしく!', '了解です!', 'がんばりましょう',
+  '今日の山場はここだな', '越えたら休憩にしよう', 'BBQの材料買っとく?', 'それは勤務外でお願い',
+  '白柳さんに感謝だな', '床がピカピカです', '集中できる環境って大事', 'では、解散!',
+];
+
 const BOSS_ORDERS = ['ここ、頼んだぞ', '例の件、よろしく', 'クオリティ第一でな', '急ぎでお願い', '任せた!', '期待してるぞ'];
 const BOSS_REPLIES = ['了解です!', 'お任せください', 'ラジャです', 'がんばります!', '承知しました!'];
 const directive = { queue: [], active: null, next: 0 };
+
+/* 作戦会議: 同じスナップショットで2人以上が稼働開始→社長が招集して短い会議 */
+const standup = { pending: null, active: null, next: 0 };
+const STANDUP_POS = [
+  { x: 414, y: 200, a: 'faceD' },   // 社長
+  { x: 396, y: 222, a: 'faceR' },
+  { x: 432, y: 222, a: 'faceL' },
+  { x: 414, y: 234, a: 'faceU' },
+];
+
+/* 社内イベント: 暇な人が多いと自然発生(BBQ=5人以上 / 筋トレ=3人以上) */
+const officeEvent = { active: null, next: 90000, cooldown: 0 };
+const EVENT_PROPS = {
+  bbq: [
+    ['b_grill', 268, 156, 34, 40], ['b_table', 310, 166, 42, 30], ['b_meat', 316, 156, 20, 13],
+    ['b_skewer', 336, 158, 16, 12], ['b_cooler', 356, 182, 18, 15], ['b_beer', 296, 198, 15, 14],
+  ],
+  gym: [
+    ['g_rack', 252, 152, 34, 20], ['g_barbell', 296, 158, 38, 14], ['g_bench', 340, 158, 28, 20],
+    ['g_mats', 276, 186, 38, 13], ['g_ball', 352, 186, 15, 15],
+  ],
+};
+const EVENT_SPOTS = {
+  bbq: [ { x: 284, y: 206, a: 'faceU' }, { x: 258, y: 196, a: 'faceR' }, { x: 310, y: 210, a: 'faceU' },
+         { x: 336, y: 206, a: 'faceU' }, { x: 358, y: 200, a: 'faceL' }, { x: 246, y: 172, a: 'faceR' }, { x: 372, y: 172, a: 'faceL' } ],
+  gym:  [ { x: 264, y: 208, a: 'faceU' }, { x: 296, y: 210, a: 'faceU' }, { x: 328, y: 208, a: 'faceU' }, { x: 356, y: 212, a: 'faceU' } ],
+};
+
+function stepEvent(t) {
+  if (officeEvent.active) { runEvent(t); return; }
+  if (t < officeEvent.next || t < officeEvent.cooldown) return;
+  officeEvent.next = t + 30000;
+  if (standup.active || fight.active) return;
+  const idle = employees.filter(e => e.present && e.mode === 'idle' && !e.inChat && !e.atMeeting && !e.receptionOn && e.action !== 'walk');
+  if (idle.length >= 5) startEvent('bbq', idle.slice(0, 7), t);
+  else if (idle.length >= 3 && Math.random() < 0.5) startEvent('gym', idle.slice(0, 4), t);
+}
+
+function startEvent(kind, members, t) {
+  members.forEach((e, i) => {
+    e.releaseSpot(); e.releaseReception(); e.resting = false;
+    e.inChat = true; e.inEvent = true;
+    const p = EVENT_SPOTS[kind][i % EVENT_SPOTS[kind].length];
+    e.goto({ x: p.x, y: p.y }, p.a);
+  });
+  officeEvent.active = { kind, members, until: t + 160000 + Math.random() * 60000, nextLine: t + 6000, nextReact: t + 9000 };
+}
+
+function runEvent(t) {
+  const ev = officeEvent.active;
+  // 仕事が来た人は離脱
+  for (const e of ev.members.slice()) {
+    if (!e.present || e.mode !== 'idle') {
+      e.inChat = false; e.inEvent = false;
+      if (e.mode === 'working') { e.say(t, '仕事きた!離脱!', 2400); e.goto(e.seat, 'sit'); }
+      ev.members = ev.members.filter(x => x !== e);
+    }
+  }
+  if (ev.members.length < 2 || t > ev.until) { endEvent(t); return; }
+  if (t > ev.nextLine) {
+    const talker = ev.members[Math.floor(Math.random() * ev.members.length)];
+    if (talker.action !== 'walk') {
+      const pool = ev.kind === 'bbq' ? BBQ_TALK : GYM_TALK;
+      talker.say(t, pickFresh('ev:' + ev.kind, pool), 3400);
+      if (ev.kind === 'gym') { talker.anticUntil = t + 3500; }
+      ev.nextLine = t + 3600 + Math.random() * 2400;
+    }
+  }
+  if (t > ev.nextReact) {
+    const watchers = employees.filter(e => e.present && !e.inEvent && !e.inChat && e.def.source !== 'janitor');
+    if (watchers.length) {
+      watchers[Math.floor(Math.random() * watchers.length)].say(t, pickFresh('evreact', EVENT_REACT), 3200);
+    }
+    ev.nextReact = t + 8000 + Math.random() * 8000;
+  }
+}
+
+function endEvent(t) {
+  const ev = officeEvent.active;
+  if (ev) {
+    for (const e of ev.members) {
+      e.inChat = false; e.inEvent = false; e.nextThink = 0;
+      if (e.mode === 'working') e.goto(e.seat, 'sit');
+    }
+  }
+  officeEvent.active = null;
+  officeEvent.cooldown = t + 2400000 + Math.random() * 1800000;   // 40〜70分に1回まで
+}
+
+function stepStandup(t) {
+  const boss = employees.find(e => e.def.source === 'boss');
+  if (!boss || !boss.present) return;
+  if (standup.active) {
+    const st = standup.active;
+    const alive = st.members.filter(e => e.present);
+    if (alive.length < 2) { endStandup(t); return; }
+    if (st.phase === 'go') {
+      if (alive.every(e => e.action !== 'walk')) { st.phase = 'talk'; st.nextLine = t + 500; }
+      return;
+    }
+    if (t > st.nextLine) {
+      if (st.li >= st.lineCount) { endStandup(t); return; }
+      alive[st.li % alive.length].say(t, pickFresh('worktalk', WORK_TALK), 3200);
+      st.li++;
+      st.nextLine = t + 3500;
+    }
+    return;
+  }
+  if (!standup.pending || t < standup.next) return;
+  if (boss.inChat || boss.atMeeting || boss.action === 'walk' || directive.active) { standup.next = t + 5000; return; }
+  const ids = standup.pending;
+  standup.pending = null;
+  const members = [boss];
+  for (const id of ids) {
+    const e = employees.find(x => x.id === id);
+    if (e && e.present && e.mode === 'working' && !e.inChat && members.length < 4) members.push(e);
+  }
+  if (members.length < 3) { members.slice(1).forEach(e => directive.queue.push(e.id)); return; }
+  members.forEach((e, i) => {
+    e.releaseSpot && e.releaseSpot(); e.releaseReception && e.releaseReception();
+    e.resting = false; e.inChat = true;
+    const p = STANDUP_POS[i];
+    e.goto({ x: p.x, y: p.y }, p.a);
+  });
+  standup.active = { members, phase: 'go', li: 0, lineCount: 6 + Math.floor(Math.random() * 5), nextLine: 0 };
+}
+
+function endStandup(t) {
+  const st = standup.active;
+  if (st) {
+    for (const e of st.members) {
+      e.inChat = false;
+      e.nextThink = 0;
+      if (e.mode === 'working') e.goto(e.seat, 'sit');
+    }
+  }
+  standup.active = null;
+  standup.next = t + 60000;
+}
 
 function stepDirective(t) {
   const boss = employees.find(e => e.def.source === 'boss');
@@ -1222,12 +1469,12 @@ function stepDirective(t) {
     if (d.phase === 'go') {
       if (boss.action !== 'walk') {
         boss.dir = 'right';
-        boss.say(t, BOSS_ORDERS[Math.floor(Math.random() * BOSS_ORDERS.length)], 3200);
+        boss.say(t, pickFresh('order', BOSS_ORDERS), 3200);
         d.phase = 'talk'; d.until = t + 3400;
       }
     } else if (d.phase === 'talk') {
       if (t > d.until) {
-        tgt.say(t, BOSS_REPLIES[Math.floor(Math.random() * BOSS_REPLIES.length)], 2800);
+        tgt.say(t, pickFresh('orderreply', BOSS_REPLIES), 2800);
         d.phase = 'back'; d.until = t + 3000;
       }
     } else if (d.phase === 'back') {
@@ -1333,9 +1580,9 @@ function stepGroupChat(t) {
   if (rest.length < 3) { groupChat.next = t + 40000; return; }
   const members = rest.slice(0, 5);
   for (const e of members) e.inChat = true;
-  const lines = [GROUP_TOPICS[Math.floor(Math.random() * GROUP_TOPICS.length)]];
+  const lines = [pickFresh('gtopic', GROUP_TOPICS)];
   const rn = 2 + Math.floor(Math.random() * Math.min(3, members.length));
-  for (let k = 0; k < rn; k++) lines.push(GROUP_REACTS[Math.floor(Math.random() * GROUP_REACTS.length)]);
+  for (let k = 0; k < rn; k++) lines.push(pickFresh('greact', GROUP_REACTS));
   groupChat.active = { members, lines, li: 0, nextLine: t + 500 };
 }
 
@@ -1516,14 +1763,17 @@ function onSnapshot() {
     }
   }
 
-  // 新規稼働の検知→社長の指示キューへ
+  // 新規稼働の検知→1人なら指示行脚、2人以上なら作戦会議に招集
+  const newWorkers = [];
   for (const e of employees) {
     const nowWorking = e.mode === 'working';
     if (!firstSnap && nowWorking && !e._wasWorking && e.def.source !== 'boss' && e.def.source !== 'janitor') {
-      directive.queue.push(e.id);
+      newWorkers.push(e.id);
     }
     e._wasWorking = nowWorking;
   }
+  if (newWorkers.length >= 2) standup.pending = newWorkers.slice(0, 3);
+  else if (newWorkers.length === 1) directive.queue.push(newWorkers[0]);
 }
 
 /* ================================================================
@@ -1599,6 +1849,9 @@ function updateHud() {
     if (q && q.week) qrow('Claude 週間(全モデル)', q.week.pct, fmtReset(q.week.resetsAt));
     if (q && q.model) qrow(`Claude 週間(${esc(q.model.name)})`, q.model.pct, fmtReset(q.model.resetsAt));
     if (rlq) qrow('Codex 週間', rlq.usedPercent, rlq.resetsAt ? fmtReset(new Date(rlq.resetsAt).toISOString()) : '');
+    if (CFG.mureka && CFG.mureka.gold != null) {
+      rows.push(`<div class="row"><span class="lbl">Mureka Gold</span><span>残り <b>${CFG.mureka.gold}</b> G</span></div>`);
+    }
     qEl.innerHTML = rows.length ? rows.join('') : '<div style="opacity:.6;font-size:12px">残量データ待ち(次の収集で反映)</div>';
   }
 
@@ -1699,6 +1952,8 @@ function loop(t) {
   stepGroupChat(t);
   stepFight(t);
   stepDirective(t);
+  stepStandup(t);
+  stepEvent(t);
   stepDog(dt, t);
   // 簡易衝突回避(座っていない者同士を押し離す)
   const movers = employees.filter(e => e.present && e.action === 'walk');
@@ -1775,6 +2030,11 @@ function loop(t) {
   }
   // ソファ前面(座ったキャラの脚を隠す)
   for (const e of employees) if (e.present) items.push({ y: e.pos.y, draw: g => e.drawSprite(g, t) });
+  if (officeEvent.active) {
+    for (const [k, ox, oy, ow, oh] of EVENT_PROPS[officeEvent.active.kind]) {
+      items.push({ y: oy + oh - 6, draw: g => drawProp(g, k, ox, oy, ow, oh) });
+    }
+  }
   items.push({ y: dog.pos.y, draw: g => drawDog(g, t) });
   items.sort((a, b) => a.y - b.y);
   for (const it of items) it.draw(cx);

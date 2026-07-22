@@ -21,6 +21,8 @@ window.OFFICE_CONFIG = {
   ],
   // 売上(手入力)。月間売上JPY
   sales: { monthlyJPY: 0, note: 'これから' },
+  // Murekaの残ゴールド(アプリの数字を手で更新。自動取得は不可)
+  mureka: { gold: 200 },
 
   // 社員名簿(全員実データ連動)
   // source: boss=在席検知 / claude=Claude Codeセッション(match=プロジェクト正規表現、無しはfallback雑務)
