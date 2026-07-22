@@ -82,42 +82,49 @@ const SKIN = '#f8d8b8', INK = '#4a3b2a';
 function drawChar(g, px, py, emp, dir, frame, expr, t) {
   px = Math.round(px); py = Math.round(py);
   g.save();
-  g.translate(px - 6, py - 16);
+  const tl = (dir === 'sit' || !emp.tall) ? 0 : 2;  // 高身長は立ち姿+2px
+  g.translate(px - 6, py - 16 - tl);
   const hair = emp.hair, shirt = emp.shirt;
   const walk = (dir !== 'sit' && frame % 2 === 1);
   const bob = walk ? 1 : 0;
+  const bw = emp.fat ? 10 : emp.slim ? 6 : 8;      // 体型: デブ/細身/普通
+  const bx = 6 - bw / 2;
 
   // 脚
   g.fillStyle = '#5a4a6a';
   if (dir === 'sit') {
     g.fillRect(3, 14, 6, 2);
   } else if (walk) {
-    g.fillRect(3, 13, 2, 3); g.fillRect(7, 14, 2, 2);
+    g.fillRect(3, 13, 2, 3 + tl); g.fillRect(7, 14, 2, 2 + tl);
   } else {
-    g.fillRect(3, 13, 2, 3); g.fillRect(7, 13, 2, 3);
+    g.fillRect(3, 13, 2, 3 + tl); g.fillRect(7, 13, 2, 3 + tl);
   }
   // 体
   g.fillStyle = shirt;
-  g.fillRect(2, 9 + bob, 8, 5 - bob);
+  g.fillRect(bx, 9 + bob, bw, 5 - bob);
   // 腕
   const typing = expr === 'typing' && Math.floor(t / 160) % 2 === 0;
   g.fillStyle = shirt;
   if (dir === 'sit') {
-    g.fillRect(1, 10 + (typing ? 1 : 0), 2, 3);
-    g.fillRect(9, 10 + (typing ? 0 : 1), 2, 3);
+    g.fillRect(bx - 1, 10 + (typing ? 1 : 0), 2, 3);
+    g.fillRect(bx + bw - 1, 10 + (typing ? 0 : 1), 2, 3);
   } else {
-    g.fillRect(1, 9 + bob, 2, 4); g.fillRect(9, 9 + bob, 2, 4);
+    g.fillRect(bx - 1, 9 + bob, 2, 4); g.fillRect(bx + bw - 1, 9 + bob, 2, 4);
   }
   // 頭
   g.fillStyle = SKIN;
   g.fillRect(2, 2 + bob, 8, 7);
-  // 髪
-  g.fillStyle = hair;
-  g.fillRect(1, 0 + bob, 10, 3);
-  g.fillRect(1, 2 + bob, 2, 3); g.fillRect(9, 2 + bob, 2, 3);
-  if (emp.id === 'mon') { g.fillRect(1, 0 + bob, 10, 2); g.fillRect(0, 1 + bob, 2, 2); }
-  if (emp.id === 'watcher') { g.fillStyle = '#8a7ab0'; g.fillRect(0, 0 + bob, 3, 2); g.fillRect(9, 0 + bob, 3, 2); } // ヘッドホン
-  if (dir === 'up') { g.fillStyle = hair; g.fillRect(2, 2 + bob, 8, 6); g.restore(); return; }
+  // 髪(はげはツヤのみ)
+  if (emp.bald) {
+    g.fillStyle = '#ffe8cc'; g.fillRect(3, 1 + bob, 4, 1);
+  } else {
+    g.fillStyle = hair;
+    g.fillRect(1, 0 + bob, 10, 3);
+    g.fillRect(1, 2 + bob, 2, 3); g.fillRect(9, 2 + bob, 2, 3);
+  }
+  if (emp.id === 'fujimoto' && !emp.bald) { g.fillStyle = hair; g.fillRect(1, 0 + bob, 10, 2); g.fillRect(0, 1 + bob, 2, 2); }
+  if (emp.id === 'tsukishiro') { g.fillStyle = '#8a7ab0'; g.fillRect(0, 0 + bob, 3, 2); g.fillRect(9, 0 + bob, 3, 2); } // ヘッドホン
+  if (dir === 'up') { g.fillStyle = emp.bald ? SKIN : hair; g.fillRect(2, 2 + bob, 8, 6); g.restore(); return; }
 
   // 顔
   const ey = 5 + bob;
@@ -312,32 +319,58 @@ function drawOffice(g, t, tm) {
   const subs = snap && snap.youtube && snap.youtube.subs != null ? snap.youtube.subs.toLocaleString('ja-JP') + '人' : '---';
   g.fillText(`YT登録者 ${subs} / 目標${(CFG.youtubeGoal || 0).toLocaleString('ja-JP')}`, 424, 33);
 
-  // ラグ
-  rr(g, 16, 60, 144, 92, '#e0c8e8', '#c0a0c8');    // 社長室
-  rr(g, 184, 60, 140, 104, '#c8dce8', '#a0bcd0');  // 開発部(2列5席)
-  rr(g, 368, 60, 208, 92, '#d0e8c8', '#a8cca0');   // 制作部
+  // ラグ(部署)
+  rr(g, 16, 60, 104, 92, '#e0c8e8', '#c0a0c8');    // 社長室
+  rr(g, 140, 60, 180, 92, '#c8dce8', '#a0bcd0');   // プロジェクト-T
+  rr(g, 340, 60, 108, 92, '#d0e8c8', '#a8cca0');   // アプリ制作部
+  rr(g, 468, 60, 120, 92, '#f0e0c0', '#d0c098');   // yorutool制作部
   rr(g, 16, 208, 176, 136, '#ecd8c0', '#d0b898');  // 休憩室
-  rr(g, 240, 240, 128, 76, '#e0e0e8', '#b8b8c8');  // 機材室(システムはツールとして置く)
+  rr(g, 216, 232, 152, 104, '#e8e4c8', '#c8c4a0'); // 総務部(機材ラック同居)
   g.font = '9px DotGothic16'; g.fillStyle = 'rgba(74,59,42,.55)';
-  g.fillText('社長室', 26, 72); g.fillText('開発部', 194, 72); g.fillText('コンテンツ制作部', 378, 72);
-  g.fillText('休憩室', 26, 222); g.fillText('機材室', 248, 252);
+  g.fillText('社長室', 26, 72); g.fillText('プロジェクト-T', 150, 72); g.fillText('アプリ制作部', 350, 72); g.fillText('yorutool制作部', 474, 72);
+  g.fillText('休憩室', 26, 222); g.fillText('総務部', 224, 244);
 
-  // 収録スタジオ
+  // 音声スタジオ(TTS=watcher。人は住まない=機械の部屋)
   rr(g, 488, 224, 132, 112, '#e8e0f0', '#b0a8c0');
   g.strokeStyle = INK; g.lineWidth = 2;
   g.strokeRect(489, 225, 130, 110);
   g.fillStyle = '#e8e0f0'; g.fillRect(487, 258, 4, 44);
   g.lineWidth = 1;
-  g.fillStyle = 'rgba(74,59,42,.55)'; g.fillText('収録スタジオ', 496, 240);
+  g.fillStyle = 'rgba(74,59,42,.55)'; g.fillText('音声スタジオ', 496, 240);
   const onAir = snap && snap.launchd && snap.launchd['com.mon.tsuki.watcher'] && snap.launchd['com.mon.tsuki.watcher'].running;
   rr(g, 560, 228, 34, 12, onAir ? '#e05a4e' : '#706860', INK);
   g.fillStyle = '#fff'; g.font = '8px DotGothic16'; g.fillText('ON AIR', 563, 237);
-  // マイクスタンド
-  rr(g, 533, 252, 2, 14, '#6a6a74');
-  rr(g, 531, 248, 6, 6, '#3a3a44', INK);
-  // 防音壁模様
+  // マイク+TTS機(稼働中は波形が動く)
+  rr(g, 543, 252, 2, 14, '#6a6a74');
+  rr(g, 541, 248, 6, 6, '#3a3a44', INK);
+  rr(g, 500, 262, 28, 40, '#3a3a44', INK);
+  g.fillStyle = '#2a2a34'; g.fillRect(502, 264, 24, 36);
+  g.fillStyle = onAir ? (Math.floor(t / 500) % 2 ? '#5aff8e' : '#4caf6e') : '#e05a4e';
+  g.fillRect(505, 268, 4, 3);
+  g.fillStyle = onAir ? '#4a9a6a' : '#5a5a64';
+  for (let i = 0; i < 4; i++) {
+    const hgt = onAir ? 3 + Math.floor(Math.abs(Math.sin(t / 180 + i)) * 8) : 2;
+    g.fillRect(506 + i * 5, 294 - hgt, 3, hgt);
+  }
+  g.font = '8px DotGothic16'; g.fillStyle = 'rgba(74,59,42,.65)';
+  g.fillText('TTS機', 502, 312);
+  if (!onAir) { g.fillStyle = '#e05a4e'; g.fillText('停止中!', 540, 312); }
+  // 防音壁
   g.fillStyle = 'rgba(120,110,150,.25)';
-  for (let i = 0; i < 5; i++) g.fillRect(494 + i * 25, 300, 12, 24);
+  for (let i = 0; i < 3; i++) g.fillRect(546 + i * 24, 300, 12, 24);
+
+  // 撮影スタジオ(グリーンバック・カメラ・照明)
+  rr(g, 384, 232, 92, 104, '#e0e8e8', '#b0c0c0');
+  g.font = '9px DotGothic16'; g.fillStyle = 'rgba(74,59,42,.55)';
+  g.fillText('撮影スタジオ', 388, 244);
+  rr(g, 392, 250, 76, 28, '#4ac858', '#2a8a3a');
+  rr(g, 394, 278, 4, 8, '#6a6a74'); rr(g, 462, 278, 4, 8, '#6a6a74');
+  rr(g, 412, 298, 3, 14, '#5a5a64');
+  rr(g, 407, 310, 5, 2, '#5a5a64'); rr(g, 417, 310, 5, 2, '#5a5a64');
+  rr(g, 406, 290, 14, 9, '#3a3a44', INK);
+  rr(g, 420, 292, 4, 4, '#2a2a34');
+  rr(g, 450, 296, 2, 18, '#6a6a74');
+  rr(g, 446, 288, 10, 8, '#f0e8c0', INK);
 
   // 休憩室の什器
   rr(g, 24, 228, 16, 26, '#8a8a96', INK);
@@ -357,40 +390,38 @@ function drawOffice(g, t, tm) {
   g.fillStyle = '#4caf6e';
   g.fillRect(170, 202, 8, 12); g.fillRect(166, 206, 6, 6); g.fillRect(176, 205, 6, 7);
 
-  // ウォーターサーバー / プリンタ
-  rr(g, 404, 240, 10, 22, '#d8e8f0', INK);
-  rr(g, 406, 234, 6, 8, '#8ec8e8', INK);
-  rr(g, 400, 296, 26, 14, '#b8905c', INK);
-  rr(g, 404, 288, 18, 10, '#8a8a96', INK);
-  if (Math.floor(t / 700) % 4 === 0) { g.fillStyle = '#fff'; g.fillRect(407, 296, 12, 2); }
+  // ウォーターサーバー / プリンタ(廊下)
+  rr(g, 198, 240, 10, 22, '#d8e8f0', INK);
+  rr(g, 200, 234, 6, 8, '#8ec8e8', INK);
+  rr(g, 190, 284, 26, 14, '#b8905c', INK);
+  rr(g, 194, 276, 18, 10, '#8a8a96', INK);
+  if (Math.floor(t / 700) % 4 === 0) { g.fillStyle = '#fff'; g.fillRect(197, 284, 12, 2); }
 
-  // コレクター受信ラック(実machine: launchd com.mon.ai-office が5分毎にpush)
-  rr(g, 256, 248, 40, 56, '#3a3a44', INK);
-  g.fillStyle = '#2a2a34'; g.fillRect(258, 250, 36, 52);
-  for (let row = 0; row < 5; row++) {
-    for (let led = 0; led < 4; led++) {
+  // コレクター受信ラック+ルーチン基盤(総務部の機材)
+  rr(g, 232, 296, 30, 34, '#3a3a44', INK);
+  g.fillStyle = '#2a2a34'; g.fillRect(234, 298, 26, 30);
+  for (let row = 0; row < 3; row++) {
+    for (let led = 0; led < 3; led++) {
       const on = Math.floor(t / 400 + row * 1.7 + led * 2.3) % 5 !== 0;
       g.fillStyle = on ? (led % 2 ? '#4caf6e' : '#e8b93c') : '#3a3a44';
-      g.fillRect(262 + led * 8, 254 + row * 9, 3, 2);
+      g.fillRect(238 + led * 8, 302 + row * 7, 3, 2);
     }
   }
   const fresh = lastArrivalT >= 0 && (t - lastArrivalT) < 30000;
   const dead = snapAt > 0 && (Date.now() - snapAt) > (CFG.staleMin || 20) * 60000;
   g.fillStyle = dead ? '#e05a4e' : fresh ? (Math.floor(t / 300) % 2 ? '#5aff8e' : '#4caf6e') : '#4caf6e';
-  g.fillRect(262, 296, 6, 4);
+  g.fillRect(238, 324, 5, 3);
   g.font = '8px DotGothic16';
   g.fillStyle = dead ? '#e05a4e' : 'rgba(74,59,42,.75)';
-  g.fillText(dead ? '受信断!' : fresh ? '受信中' : '待受', 272, 302);
-  g.fillStyle = 'rgba(74,59,42,.55)';
-  g.fillText('コレクター', 254, 316);
-  // BGM/ラック横の予備サーバー
-  rr(g, 306, 262, 30, 42, '#4a4a54', INK);
-  g.fillStyle = '#3a3a44'; g.fillRect(308, 264, 26, 38);
+  g.fillText(dead ? '受信断!' : fresh ? '受信中' : '待受', 246, 329);
+  rr(g, 276, 296, 26, 34, '#4a4a54', INK);
+  g.fillStyle = '#3a3a44'; g.fillRect(278, 298, 22, 30);
   for (let row = 0; row < 3; row++) {
     g.fillStyle = Math.floor(t / 700 + row) % 4 ? '#5a8ac8' : '#3a3a44';
-    g.fillRect(311 + row * 8, 268, 3, 2);
+    g.fillRect(281 + row * 7, 302, 3, 2);
   }
-  g.fillStyle = 'rgba(74,59,42,.55)'; g.fillText('ルーチン基盤', 300, 316);
+  g.fillStyle = 'rgba(74,59,42,.55)';
+  g.fillText('コレクター', 228, 342); g.fillText('基盤', 280, 342);
 
   // 入口マット
   rr(g, 296, 344, 48, 12, '#c0a878', '#a08858');
@@ -495,8 +526,8 @@ class Person {
    AI社員
    ================================================================ */
 const WANDER = [
-  { x: 240, y: 190 }, { x: 380, y: 190 }, { x: 120, y: 190 }, { x: 420, y: 262 },
-  { x: 44, y: 250 }, { x: 76, y: 258 }, { x: 130, y: 300 }, { x: 460, y: 200 }, { x: 210, y: 330 },
+  { x: 240, y: 190 }, { x: 380, y: 190 }, { x: 120, y: 190 }, { x: 460, y: 200 },
+  { x: 44, y: 250 }, { x: 76, y: 258 }, { x: 130, y: 300 }, { x: 210, y: 330 }, { x: 202, y: 250 },
 ];
 
 class Employee extends Person {
@@ -616,6 +647,47 @@ function stepCat(dt, t) {
   if (dist < sp) { cat.pos = cat.target; cat.target = null; cat.next = t + 6000 + Math.random() * 10000; }
   else { cat.pos.x += dx / dist * sp; cat.pos.y += dy / dist * sp; cat.dir = dx > 0 ? 1 : -1; }
 }
+const dog = { pos: { x: 90, y: 150 }, target: null, next: 4000, napUntil: 0, dir: 1 };
+function stepDog(dt, t) {
+  if (t < dog.napUntil) return;
+  if (!dog.target) {
+    if (t > dog.next) {
+      if (Math.random() < 0.35) { dog.napUntil = t + 12000 + Math.random() * 18000; dog.next = dog.napUntil; return; }
+      const spots = [{ x: 96, y: 140 }, { x: 60, y: 190 }, { x: 200, y: 190 }, { x: 330, y: 200 }, { x: 100, y: 250 }, { x: 560, y: 190 }, { x: 90, y: 130 }];
+      dog.target = spots[Math.floor(Math.random() * spots.length)];
+    }
+    return;
+  }
+  const dx = dog.target.x - dog.pos.x, dy = dog.target.y - dog.pos.y;
+  const dist = Math.hypot(dx, dy), sp = 30 * dt / 1000;
+  if (dist < sp) { dog.pos = dog.target; dog.target = null; dog.next = t + 5000 + Math.random() * 9000; }
+  else { dog.pos.x += dx / dist * sp; dog.pos.y += dy / dist * sp; dog.dir = dx > 0 ? 1 : -1; }
+}
+function drawDog(g, t) {
+  const { x, y } = dog.pos;
+  const nap = t < dog.napUntil;
+  g.save(); g.translate(Math.round(x), Math.round(y));
+  if (dog.dir < 0) g.scale(-1, 1);
+  if (nap) {
+    g.fillStyle = '#f0e8dc'; g.fillRect(-6, -4, 11, 4);
+    g.fillStyle = '#a06a3c'; g.fillRect(-3, -4, 4, 2);
+    g.fillStyle = '#f0e8dc'; g.fillRect(-8, -6, 4, 3);
+    g.fillStyle = '#8a5230'; g.fillRect(-8, -7, 2, 2);
+  } else {
+    const hop = dog.target && Math.floor(t / 180) % 2 ? -1 : 0;
+    const wag = Math.floor(t / 200) % 2;
+    g.fillStyle = '#f0e8dc'; g.fillRect(-5, -6 + hop, 9, 5);
+    g.fillStyle = '#a06a3c'; g.fillRect(-3, -6 + hop, 4, 3);
+    g.fillStyle = '#f0e8dc'; g.fillRect(3, -10 + hop, 5, 5);
+    g.fillStyle = '#8a5230'; g.fillRect(3, -11 + hop, 2, 3);
+    g.fillStyle = INK; g.fillRect(7, -8 + hop, 1, 1);
+    g.fillStyle = '#f0e8dc'; g.fillRect(-7, -7 + hop - wag, 2, 3);
+    g.fillStyle = '#5a4a3a'; g.fillRect(-4, -1 + hop, 2, 1); g.fillRect(1, -1 + hop, 2, 1);
+  }
+  g.restore();
+  if (nap) drawZzz(g, x, y - 2, t + 1700);
+}
+
 function drawCat(g, t) {
   const { x, y } = cat.pos;
   const nap = t < cat.napUntil;
@@ -666,6 +738,18 @@ function onSnapshot() {
   const blk = s.claude.block;
   const blockHp = blk && blk.remainingMinutes != null ? Math.max(0, Math.min(100, Math.round(blk.remainingMinutes / 3))) : 100;
 
+  // Codexもプロジェクト(proj=作業ディレクトリ由来)で振り分け
+  const codexEmps = employees.filter(e => e.source === 'codex');
+  const codexFallback = codexEmps.find(e => !e.match);
+  const cbuckets = {};
+  for (const e of codexEmps) cbuckets[e.id] = [];
+  for (const a of (s.codex.active || [])) {
+    const owner = codexEmps.find(e => e.match && a.proj && new RegExp(e.match).test(a.proj)) || codexFallback;
+    if (owner) cbuckets[owner.id].push(a);
+  }
+  const rl = s.codex.rateLimit;
+  const codexHp = rl ? Math.max(0, Math.round(100 - rl.usedPercent)) : 100;
+
   for (const e of employees) {
     e.bubbles = [];
     e.happy = false; e.sweat = false; e.tired = false;
@@ -686,13 +770,12 @@ function onSnapshot() {
         e.bubbles = ['指示待ちです', 'いつでもどうぞ'];
       }
     } else if (e.source === 'codex') {
-      const act = s.codex.active || [];
-      const rl = s.codex.rateLimit;
-      e.hp = rl ? Math.max(0, Math.round(100 - rl.usedPercent)) : 100;
-      e.tired = e.hp < 22;
+      const act = cbuckets[e.id] || [];
+      e.hp = e.showHp ? codexHp : null;
+      e.tired = codexHp < 22;
       if (act.length) {
         e.setMode('working');
-        e.sweat = act.length >= 3;
+        e.sweat = act.length >= 2;
         e.jobText = act.map(a => a.thread).join(' / ');
         e.bubbles = act.map(a => `「${(a.thread || '').slice(0, 14)}」進行中`);
       } else {
@@ -700,14 +783,20 @@ function onSnapshot() {
         e.jobText = '待機中';
         e.bubbles = ['次のタスクどうぞ'];
       }
-      if (rl) e.bubbles.push(`週次残量 ${e.hp}%`);
+      if (e.showHp && rl) e.bubbles.push(`週次残量 ${codexHp}%`);
     } else if (e.source === 'schedule') {
-      const del = s.deliveries ? s.deliveries[e.deliveryKey] : null;
+      const del = s.deliveries ? (e.deliveryKeys || [e.deliveryKey]).reduce((acc, k) => acc + (s.deliveries[k] || 0), 0) : null;
       e.hp = null;
-      if (shiftActive(e.shift, tm)) {
+      const wj = e.watcherKey && s.launchd && s.launchd[e.watcherKey];
+      if (e.watcherKey && !(wj && wj.running)) {
+        e.setMode('panic');
+        e.jobText = '❌ TTS(watcher)停止中!';
+        e.bubbles = ['収録マシンが止まってる!'];
+        e.action = 'stand';
+      } else if (shiftActive(e.shift, tm)) {
         e.setMode('working');
-        e.jobText = '製造ライン稼働中';
-        e.bubbles = ['ただいま製造中…!'];
+        e.jobText = '日次ルーチン稼働中';
+        e.bubbles = ['ただいま製造中…!', '(講演/台本/ショート仕込み中)'];
       } else if (tm.h >= 21 || tm.h < 3) {
         e.setMode('sleep');
         e.jobText = `次の出社 ${e.shift[0]}:${String(e.shift[1]).padStart(2, '0')}`;
@@ -716,19 +805,6 @@ function onSnapshot() {
         e.happy = del > 0;
         e.jobText = del != null ? `本日 ${del}本 納品` : '本日実績なし';
         e.bubbles = del > 0 ? [`今日は${del}本納品!`, 'また明日も作ります'] : ['今日はまだ実績なし'];
-      }
-    } else if (e.source === 'watcher') {
-      const j = s.launchd && s.launchd[e.launchdKey];
-      e.hp = null;
-      if (j && j.running) {
-        e.setMode('working');
-        e.jobText = 'スタジオ待機・収録中';
-        e.bubbles = ['収録スタンバイOK', '台本きたら即収録します', '(マイクチェック…)'];
-      } else {
-        e.setMode('panic');
-        e.jobText = '❌ watcher停止中!';
-        e.bubbles = ['watcherが止まってます!'];
-        e.action = 'stand';
       }
     } else if (e.source === 'boss') {
       const busy = (s.claude.active || []).length + (s.codex.active || []).length;
@@ -833,7 +909,7 @@ function updateHud() {
     row.appendChild(job);
     roster.appendChild(row);
   }
-  $('staffNote').textContent = '設備: 受信ラック=コレクター(5分毎) / ON AIRランプ=watcher / ペット: モチ(猫)';
+  $('staffNote').textContent = 'HP共有: 伊藤=クロード5h枠 / 安藤=コデックス週次 | 設備: コレクター/基盤(総務部)・TTS機(音声スタジオ) | ペット: モチ(猫)・ララ(犬)';
 
   const yt = $('youtube');
   if (s.youtube && s.youtube.subs != null) {
@@ -878,14 +954,15 @@ function loop(t) {
 
   for (const e of employees) { e.think(t, tm); e.step(dt, t); e.tickBubble(t); }
   stepCat(dt, t);
+  stepDog(dt, t);
   stepParticles(dt);
 
   // 環境パーティクル
   if (t - lastAmbient > 600) {
     lastAmbient = t;
-    const tsuki = employees.find(e => e.id === 'watcher');
-    if (tsuki && tsuki.mode === 'working' && Math.random() < 0.35) {
-      spawnParticle('note', tsuki.desk.x - 14 + Math.random() * 10, tsuki.desk.y - 14);
+    const onAirNow = snap && snap.launchd && snap.launchd['com.mon.tsuki.watcher'] && snap.launchd['com.mon.tsuki.watcher'].running;
+    if (onAirNow && Math.random() < 0.35) {
+      spawnParticle('note', 512 + Math.random() * 14, 258);
     }
   }
 
@@ -898,6 +975,7 @@ function loop(t) {
   items.sort((a, b) => a.y - b.y);
   for (const it of items) it.draw(cx);
   drawCat(cx, t);
+  drawDog(cx, t);
   drawParticles(cx);
   for (const e of employees) e.drawOverlay(cx, t);
 
