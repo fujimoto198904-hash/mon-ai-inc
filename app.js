@@ -5,7 +5,7 @@ const CFG = window.OFFICE_CONFIG;
 const W = 640, H = 360;
 const cv = document.getElementById('office');
 const cx = cv.getContext('2d');
-cx.scale(2, 2);              // 内部解像度1280x720、論理座標は640x360のまま
+cx.scale(4, 4);              // 内部解像度2560x1440、論理座標は640x360のまま
 cx.imageSmoothingEnabled = false;
 
 /* ---------- 閲覧トークン ---------- */
@@ -103,51 +103,43 @@ function processSheet(img) {
     if (y > 0) stack.push(pIdx - w);
     if (y < h - 1) stack.push(pIdx + w);
   }
-  // コマごとの成分解析
+  // 成分解析はシート全体で行い、重心が属するコマに割り当てる
+  // (コマ境界をはみ出す頭や小物も切れずに含まれる)
   const cw = w / 3, ch = h / 4;
   const label = new Int32Array(w * h);
-  const boxes = [];
-  for (let row = 0; row < 4; row++) for (let col = 0; col < 3; col++) {
-    const x0 = Math.floor(col * cw), x1 = Math.floor((col + 1) * cw);
-    const y0 = Math.floor(row * ch), y1 = Math.floor((row + 1) * ch);
-    let bestPix = [], bestCount = 0;
-    let cur = row * 3 + col + 1;
-    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
-      const pi = y * w + x;
-      if (label[pi] || d[pi * 4 + 3] < 16) continue;
-      const comp = [];
-      const st = [pi];
-      label[pi] = cur;
-      while (st.length) {
-        const q = st.pop();
-        comp.push(q);
-        const qx = q % w, qy = (q / w) | 0;
-        const nb = [];
-        if (qx > x0) nb.push(q - 1);
-        if (qx < x1 - 1) nb.push(q + 1);
-        if (qy > y0) nb.push(q - w);
-        if (qy < y1 - 1) nb.push(q + w);
-        for (const n of nb) {
-          if (!label[n] && d[n * 4 + 3] >= 16) { label[n] = cur; st.push(n); }
-        }
-      }
-      if (comp.length > bestCount) {
-        for (const q of bestPix) d[q * 4 + 3] = 0;  // これまでの最大を消す
-        bestCount = comp.length;
-        bestPix = comp;
-      } else {
-        for (const q of comp) d[q * 4 + 3] = 0;     // 小さい成分=ノイズを消す
-      }
-    }
-    if (bestCount < 30) { boxes.push(null); continue; }
-    let bx0 = w, bx1 = 0, by0 = h, by1 = 0;
-    for (const q of bestPix) {
+  const comps = [];
+  for (let pi = 0; pi < w * h; pi++) {
+    if (label[pi] || d[pi * 4 + 3] < 16) continue;
+    const st = [pi];
+    label[pi] = comps.length + 1;
+    let count = 0, sx = 0, sy = 0, bx0 = w, bx1 = 0, by0 = h, by1 = 0;
+    const px = [];
+    while (st.length) {
+      const q = st.pop();
+      count++; px.push(q);
       const qx = q % w, qy = (q / w) | 0;
+      sx += qx; sy += qy;
       if (qx < bx0) bx0 = qx; if (qx > bx1) bx1 = qx;
       if (qy < by0) by0 = qy; if (qy > by1) by1 = qy;
+      if (qx > 0 && !label[q - 1] && d[(q - 1) * 4 + 3] >= 16) { label[q - 1] = label[pi]; st.push(q - 1); }
+      if (qx < w - 1 && !label[q + 1] && d[(q + 1) * 4 + 3] >= 16) { label[q + 1] = label[pi]; st.push(q + 1); }
+      if (qy > 0 && !label[q - w] && d[(q - w) * 4 + 3] >= 16) { label[q - w] = label[pi]; st.push(q - w); }
+      if (qy < h - 1 && !label[q + w] && d[(q + w) * 4 + 3] >= 16) { label[q + w] = label[pi]; st.push(q + w); }
     }
-    boxes.push({ x: bx0, y: by0, w: bx1 - bx0 + 1, h: by1 - by0 + 1 });
+    const cell = Math.min(3, Math.floor((sy / count) / ch)) * 3 + Math.min(2, Math.floor((sx / count) / cw));
+    comps.push({ cell, count, px, box: { x: bx0, y: by0, w: bx1 - bx0 + 1, h: by1 - by0 + 1 } });
   }
+  const boxes = new Array(12).fill(null);
+  const bestOf = new Array(12).fill(null);
+  for (const cp of comps) {
+    if (!bestOf[cp.cell] || cp.count > bestOf[cp.cell].count) bestOf[cp.cell] = cp;
+  }
+  for (const cp of comps) {
+    if (bestOf[cp.cell] !== cp && cp.count < 400) {
+      for (const q of cp.px) d[q * 4 + 3] = 0;   // ノイズ・ゴミ成分を消す
+    }
+  }
+  for (let k = 0; k < 12; k++) if (bestOf[k]) boxes[k] = bestOf[k].box;
   g.putImageData(im, 0, 0);
   return { cv: c, boxes };
 }
@@ -327,21 +319,21 @@ function drawAlert(g, x, y, t) {
 
 /* ---------- 吹き出し ---------- */
 function drawBubble(g, x, y, text) {
-  g.font = '10px DotGothic16';
+  g.font = '6px DotGothic16';
   const lines = [];
   let s = String(text);
-  while (s.length && lines.length < 2) { lines.push(s.slice(0, 11)); s = s.slice(11); }
-  if (s.length) lines[1] = lines[1].slice(0, 10) + '…';
-  const w = Math.max(...lines.map(l => g.measureText(l).width)) + 10;
-  const h = lines.length * 12 + 7;
+  while (s.length && lines.length < 2) { lines.push(s.slice(0, 14)); s = s.slice(14); }
+  if (s.length) lines[1] = lines[1].slice(0, 13) + '…';
+  const w = Math.max(...lines.map(l => g.measureText(l).width)) + 8;
+  const h = lines.length * 8 + 5;
   let bx = Math.min(Math.max(4, x - w / 2), W - w - 4);
-  const by = Math.max(4, y - 24 - h);
+  const by = Math.max(4, y - 20 - h);
   g.fillStyle = 'rgba(255,255,255,.95)';
   g.strokeStyle = INK; g.lineWidth = 1;
   g.beginPath(); g.roundRect(bx + .5, by + .5, w, h, 3); g.fill(); g.stroke();
   g.beginPath(); g.moveTo(x - 2, by + h); g.lineTo(x + 2, by + h); g.lineTo(x, by + h + 4); g.closePath(); g.fill(); g.stroke();
   g.fillStyle = INK;
-  lines.forEach((l, i) => g.fillText(l, bx + 5, by + 11 + i * 12));
+  lines.forEach((l, i) => g.fillText(l, bx + 4, by + 7.5 + i * 8));
 }
 
 function drawHp(g, x, y, pct) {
@@ -430,15 +422,16 @@ function drawOffice(g, t, tm) {
     g.restore();
     rr(g, 288, 322, 74, 22, '#f2e4c2');  // bg側の入口表記を床色でならす(入口マットは下で描く)
     // ホワイトボードに社訓
-    g.font = '8px DotGothic16';
+    g.font = '7px DotGothic16';
     const bcx = 284;
     const btitle = '《社訓》';
     g.fillStyle = '#b04a3c';
-    g.fillText(btitle, bcx - g.measureText(btitle).width / 2, 15);
+    g.fillText(btitle, bcx - g.measureText(btitle).width / 2, 16);
+    g.font = '6px DotGothic16';
     g.fillStyle = 'rgba(74,59,42,.92)';
     (CFG.mottos || []).slice(0, 3).forEach((m, k) => {
-      const line = String(m).slice(0, 7);
-      g.fillText(line, bcx - g.measureText(line).width / 2, 25 + k * 9);
+      const line = String(m).slice(0, 8);
+      g.fillText(line, bcx - g.measureText(line).width / 2, 25 + k * 8);
     });
     // 時計: 下絵を完全に覆う文字盤+リアル時刻
     const ccx = 353, ccy = 30;
@@ -466,16 +459,21 @@ function drawOffice(g, t, tm) {
     g.font = '8px DotGothic16'; g.fillStyle = '#e8d0a0';
     const subs = snap && snap.youtube && snap.youtube.subs != null ? snap.youtube.subs.toLocaleString('ja-JP') + '人' : '---';
     g.fillText(`YT登録者 ${subs} / 目標${(CFG.youtubeGoal || 0).toLocaleString('ja-JP')}`, 487, 40);
-    // 保留タスク台帳の件数バッジ
+    // 掲示板=ミッションボード(大きな文字)+保留タグ
+    rr(g, 66, 12, 196, 30, '#3a3026');
+    g.font = '13px DotGothic16';
+    g.fillStyle = '#f0d890';
+    const mtxt = CFG.mission || '物語を、毎日届ける。';
+    g.fillText(mtxt, 164 - g.measureText(mtxt).width / 2, 32);
     const n = snap && snap.tasks && snap.tasks.count != null ? snap.tasks.count : 0;
-    g.font = '9px DotGothic16';
-    const bt = `保留 ${n}件`;
-    const bw = g.measureText(bt).width + 16;
+    g.font = '6px DotGothic16';
+    const bt = `保留タスク ${n}件`;
+    const bw = g.measureText(bt).width + 12;
     g.fillStyle = 'rgba(255,253,246,.94)';
-    g.beginPath(); g.roundRect(100.5, 46.5, bw, 13, 3); g.fill();
+    g.beginPath(); g.roundRect(100.5, 46.5, bw, 10, 2); g.fill();
     g.strokeStyle = 'rgba(74,59,42,.35)'; g.stroke();
-    g.fillStyle = '#e05a4e'; g.beginPath(); g.arc(107, 53, 2.5, 0, 7); g.fill();
-    g.fillStyle = '#4a3b2a'; g.fillText(bt, 113, 56);
+    g.fillStyle = '#e05a4e'; g.beginPath(); g.arc(105.5, 51.5, 2, 0, 7); g.fill();
+    g.fillStyle = '#4a3b2a'; g.fillText(bt, 110, 54);
   } else {
     // 床
     g.fillStyle = '#e8d5ae';
@@ -538,7 +536,7 @@ function drawOffice(g, t, tm) {
     rr(g, 412, 8, 204, 30, '#4a3b2a');
     g.font = '13px DotGothic16'; g.fillStyle = '#f0d890';
     g.fillText('MON-AI Inc.', 424, 22);
-    g.font = '9px DotGothic16'; g.fillStyle = '#e8d0a0';
+    g.font = '6px DotGothic16'; g.fillStyle = '#e8d0a0';
     const subs = snap && snap.youtube && snap.youtube.subs != null ? snap.youtube.subs.toLocaleString('ja-JP') + '人' : '---';
     g.fillText(`YT登録者 ${subs} / 目標${(CFG.youtubeGoal || 0).toLocaleString('ja-JP')}`, 424, 33);
 
@@ -552,20 +550,20 @@ function drawOffice(g, t, tm) {
   if (!drawProp(g, 'room_break', 16, 208, 176, 136)) rr(g, 16, 208, 176, 136, '#ecd8c0', '#d0b898');
   if (!drawProp(g, 'rug_soumu', 216, 232, 152, 104)) rr(g, 216, 232, 152, 104, '#e8e4c8', '#c8c4a0');
   function deptSign(text, x, y, color) {
-    g.font = '9px DotGothic16';
-    const w = g.measureText(text).width + 14;
+    g.font = '6px DotGothic16';
+    const w = g.measureText(text).width + 10;
     g.fillStyle = 'rgba(0,0,0,.15)';
-    g.beginPath(); g.roundRect(x + 1.5, y + 1.5, w, 14, 3); g.fill();
+    g.beginPath(); g.roundRect(x + 1, y + 1, w, 10, 2); g.fill();
     g.fillStyle = 'rgba(40,42,54,.92)';
-    g.beginPath(); g.roundRect(x + .5, y + .5, w, 14, 3); g.fill();
-    g.fillStyle = color; g.fillRect(x + 4, y + 4, 3, 7);
-    g.fillStyle = '#f2f0e8'; g.fillText(text, x + 10, y + 11);
+    g.beginPath(); g.roundRect(x + .5, y + .5, w, 10, 2); g.fill();
+    g.fillStyle = color; g.fillRect(x + 3, y + 2.5, 2, 5);
+    g.fillStyle = '#f2f0e8'; g.fillText(text, x + 7, y + 7.5);
   }
-  deptSign('社長室', 20, 75, '#b06ac0');
-  deptSign('プロジェクト-T', 142, 75, '#4a7ac8');
-  deptSign('アプリ制作部', 340, 75, '#4aa86a');
-  deptSign('yorutool制作部', 472, 75, '#c8a04a');
-  deptSign('総務部', 220, 236, '#d08a5a');
+  deptSign('社長室', 20, 160, '#b06ac0');
+  deptSign('プロジェクト-T', 142, 160, '#4a7ac8');
+  deptSign('アプリ制作部', 340, 160, '#4aa86a');
+  deptSign('yorutool制作部', 472, 160, '#c8a04a');
+  deptSign('総務部', 220, 322, '#d08a5a');
 
   // 音声スタジオ(TTS=watcher。人は住まない=機械の部屋)
   if (!drawProp(g, 'room_studio', 488, 224, 132, 112)) {
@@ -575,7 +573,7 @@ function drawOffice(g, t, tm) {
     g.fillStyle = '#e8e0f0'; g.fillRect(487, 258, 4, 44);
     g.lineWidth = 1;
   }
-  deptSign('音声スタジオ', 494, 230, '#8a6ac8');
+  deptSign('音声スタジオ', 494, 322, '#8a6ac8');
   const onAir = snap && snap.launchd && snap.launchd['com.mon.tsuki.watcher'] && snap.launchd['com.mon.tsuki.watcher'].running;
   rr(g, 560, 228, 34, 12, onAir ? '#e05a4e' : '#706860', INK);
   g.fillStyle = '#fff'; g.font = '8px DotGothic16'; g.fillText('ON AIR', 563, 237);
@@ -597,27 +595,26 @@ function drawOffice(g, t, tm) {
 
   // 撮影スタジオ(グリーンバック・カメラ・照明)
   if (!drawProp(g, 'room_film', 384, 232, 92, 104)) rr(g, 384, 232, 92, 104, '#e0e8e8', '#b0c0c0');
-  deptSign('撮影スタジオ', 388, 236, '#5a8a9a');
+  deptSign('撮影スタジオ', 388, 322, '#5a8a9a');
   rr(g, 392, 250, 76, 28, '#4ac858', '#2a8a3a');
   rr(g, 394, 278, 4, 8, '#6a6a74'); rr(g, 462, 278, 4, 8, '#6a6a74');
   drawProp(g, 'tvstand', 396, 292, 26, 34);
   drawProp(g, 'projcart', 438, 294, 24, 32);
 
-  // 休憩室(上=キッチン家電 / 下=ソファセット / 中央band y250-280は室内通路)
+  // 休憩室(上=キッチン家電 / 中央=通路 / 下=ソファ+チェア×2で8席)
   drawProp(g, 'coffee_st', 20, 208, 30, 36);
   drawProp(g, 'fridge', 54, 208, 21, 36);
   if (!drawProp(g, 'vending', 80, 206, 24, 40)) rr(g, 80, 210, 24, 36, '#d05a5a', INK);
   drawProp(g, 'snack', 108, 210, 28, 36);
-  drawProp(g, 'plant_a', 164, 210, 22, 34);
+  drawProp(g, 'cooler', 140, 208, 20, 36);
+  drawProp(g, 'plant_a', 166, 210, 22, 34);
   if (!drawProp(g, 'sofa', 20, 286, 60, 30)) {
     rr(g, 24, 296, 52, 20, '#7a9ac8', INK);
   }
-  drawProp(g, 'armchair', 96, 286, 26, 32);
-  drawProp(g, 'ctable', 24, 322, 48, 18);
-  deptSign('休憩室', 140, 254, '#8a9a5a');
-
-  // ウォーターサーバーは休憩室内、コピー機は機材コーナーへ
-  drawProp(g, 'cooler', 166, 248, 20, 36);
+  drawProp(g, 'armchair', 92, 286, 26, 32);
+  drawProp(g, 'armchair', 126, 286, 26, 32);
+  drawProp(g, 'ctable', 26, 322, 44, 16);
+  deptSign('休憩室', 116, 326, '#8a9a5a');
 
   // 機材コーナー(右壁): コレクター=サーバーラック / ルーチン基盤=ネットワークキャビネット
   const fresh = lastArrivalT >= 0 && (t - lastArrivalT) < 30000;
@@ -631,7 +628,7 @@ function drawOffice(g, t, tm) {
   }
   g.fillStyle = dead ? '#e05a4e' : fresh ? (Math.floor(t / 300) % 2 ? '#5aff8e' : '#4caf6e') : '#4caf6e';
   g.fillRect(568, 150, 5, 3);
-  g.font = '8px DotGothic16';
+  g.font = '6px DotGothic16';
   g.fillStyle = dead ? '#e05a4e' : 'rgba(74,59,42,.75)';
   g.fillText(dead ? '受信断!' : fresh ? '受信中' : '待受', 566, 206);
   g.fillStyle = 'rgba(74,59,42,.55)';
@@ -755,11 +752,12 @@ class Person {
 const REST_SPOTS = [
   { x: 34, y: 312, sy: 312, a: 'sit', via: 278 },   // ソファ左
   { x: 60, y: 312, sy: 312, a: 'sit', via: 278 },   // ソファ右
-  { x: 108, y: 314, sy: 314, a: 'sit', via: 278 },  // アームチェア
+  { x: 104, y: 314, sy: 314, a: 'sit', via: 278 },  // アームチェア1
+  { x: 138, y: 314, sy: 314, a: 'sit', via: 278 },  // アームチェア2
   { x: 34, y: 272, a: 'faceU' },                    // コーヒー前
-  { x: 92, y: 274, a: 'faceU' },                    // 自販機前
-  { x: 121, y: 274, a: 'faceU' },                   // スナック棚前
-  { x: 176, y: 292, a: 'faceU' },                   // 給水機前
+  { x: 92, y: 272, a: 'faceU' },                    // 自販機前
+  { x: 121, y: 272, a: 'faceU' },                   // スナック棚前
+  { x: 150, y: 272, a: 'faceU' },                   // 給水機前
 ];
 function pickRestSpot() {
   const free = REST_SPOTS.filter(sp => !sp.busy);
@@ -812,6 +810,7 @@ class Employee extends Person {
     if (!this.resting) {
       const sp = pickRestSpot();                 // 指示待ちは休憩室へ
       if (sp) { this.resting = true; this.takeSpot(sp); }
+      else if (this.action === 'sit') this.action = 'sleep';   // 満席なら自席でうたた寝
       this.nextThink = t + 20000 + Math.random() * 20000;
       return;
     }
@@ -854,7 +853,7 @@ class Employee extends Person {
       let bob = 0;
       if (this.action === 'walk') bob = Math.floor(this.walked / 7) % 2 ? -1 : 0;   // コマ固定+縦ボブ(左右ブレなし)
       else if (this.mode === 'working' && seated && Math.floor((t + this.seed) / 420) % 2) bob = -1;
-      const cb = seated && this.resting ? 0.30 : 0;   // ソファ等では脚をクッションに沈める
+      const cb = seated && (this.resting || this.atMeeting) ? 0.30 : 0;   // ソファ・会議席では脚を沈める
       drawSheet(g, img, dir, fi, x, y + bob, 30, cb);
       if (e === 'sweat') {
         g.fillStyle = '#5ab0e8';
@@ -884,23 +883,24 @@ class Employee extends Person {
     if (e === 'sleep') drawZzz(g, x, y - 12, t + this.seed);
     if (this.mode === 'panic') drawAlert(g, x, y - 10, t);
     if (this.hp != null) drawHp(g, x, y - 12, this.hp);
-    g.font = '9px DotGothic16';
+    g.font = '5px DotGothic16';
     const nw = g.measureText(this.name).width;
-    const ny = seated ? y + 36 : y + 3;
+    const restSeat = seated && (this.resting || this.atMeeting);
+    const ny = restSeat ? y - 3 : seated ? y + 35 : y + 3;
     g.fillStyle = 'rgba(255,250,240,.9)';
-    g.fillRect(x - nw / 2 - 3, ny, nw + 6, 11);
+    g.fillRect(x - nw / 2 - 2, ny, nw + 4, 7);
     g.fillStyle = INK;
-    g.fillText(this.name, x - nw / 2, ny + 9);
+    g.fillText(this.name, x - nw / 2, ny + 5.5);
     if (this.action === 'coffee') { g.font = '9px DotGothic16'; g.fillText('☕', x + 8, y - 8); }
     // 作業タグ: いま何をしているかを常時表示
     if (this.mode === 'working' && seated && this.jobText) {
-      g.font = '8px DotGothic16';
-      const jt = this.jobText.length > 10 ? this.jobText.slice(0, 9) + '…' : this.jobText;
-      const jw = g.measureText(jt).width + 8;
+      g.font = '5px DotGothic16';
+      const jt = this.jobText.length > 14 ? this.jobText.slice(0, 13) + '…' : this.jobText;
+      const jw = g.measureText(jt).width + 7;
       g.fillStyle = 'rgba(40,42,54,.88)';
-      g.beginPath(); g.roundRect(x - jw / 2 + .5, y - 42.5, jw, 12, 3); g.fill();
-      g.fillStyle = '#5aff9e'; g.fillRect(x - jw / 2 + 3, y - 39, 2, 5);
-      g.fillStyle = '#f0f0e8'; g.fillText(jt, x - jw / 2 + 7, y - 33);
+      g.beginPath(); g.roundRect(x - jw / 2 + .5, y - 38.5, jw, 9, 2); g.fill();
+      g.fillStyle = '#5aff9e'; g.fillRect(x - jw / 2 + 2.5, y - 36, 1.5, 4);
+      g.fillStyle = '#f0f0e8'; g.fillText(jt, x - jw / 2 + 5.5, y - 32);
     }
     if (this.bubble && t < this.bubbleUntil) drawBubble(g, x, y - 16 - (this.seed % 3) * 7, this.bubble);
   }
@@ -921,56 +921,60 @@ const employees = CFG.employees.map((d, i) => new Employee(d, i));
    ================================================================ */
 const chat = { next: 25000, active: null };
 
+const MEET_SEATS = [ { x: 405, y: 224 }, { x: 445, y: 224 } ];
+let meetBusy = false;
+
+const CHAT_OPENERS = [
+  'ランチどこ行きます?', '最近調子どう?', '社訓見ました?「無限労働」て…', 'コーヒー切れてますよ',
+  '今日も1日がんばりましょ', 'キーボード新調したいな', 'この椅子、腰にいいらしい', '夜勤つらくないですか',
+  '締切って明日でしたっけ', 'サムネのCTR上がったって', 'ショート動画バズらないかな', 'BGMのミックス聴きました?',
+  '台本のテンポ良くなったね', '収録ブースの音、良くなった', '自販機に新作入ってた', 'ララがまた廊下で寝てた',
+  '観葉植物、育ちすぎでは', '会議室のテーブルいいよね', '経費で椅子買えないかな', 'ボーナスって出ます?',
+  '目標1万人、いけますかね', 'コメント欄あったかいよね', '再生数じわじわ来てる', '寝不足で目がしぱしぱする',
+  'コンビニ行くけど何かいる?', '掃除当番って誰でしたっけ', '今日の空、きれいでしたよ', '最近ゲームしてます?',
+  '映画観に行きたいな', '筋トレ始めたんですよ', 'AI業界、動き速すぎでは', '社長また徹夜らしいよ',
+  'モニターもう1枚欲しい', 'デスクの配線きれいにした', '休憩室のソファ最高', 'たまには外で会議したいね',
+];
+const CHAT_REPLIES = [
+  'ラーメン一択でしょ', 'ぼちぼちですね〜', 'それな', 'わかる〜', 'えー!マジすか', 'なるほど…',
+  '渋いですね', 'さすがです', '今度教えて', '知らなかった', 'うそでしょ!?', 'がんばろ',
+];
+
 function makeChatLines() {
-  const pool = [
-    ['ランチどこ行きます?', 'ラーメン一択でしょ'],
-    ['最近調子どうですか', 'ぼちぼちですね〜'],
-    ['社訓見ました?', '「無限労働」て…'],
-    ['コーヒー切れてますよ', 'えっ、それは事件'],
-    ['今日も1日がんばりましょ', 'おー!'],
-  ];
+  const pool = [];
   if (snap) {
     const rate = (snap.billing && snap.billing.jpyPerUsd) || 155;
     const cost = snap.totals.todayCost || 0;
-    pool.push([`今日もう${fmtYen(cost * rate)}分働いたって`, 'AIはタフだね〜']);
-    if (snap.youtube && snap.youtube.subs != null) {
-      pool.push([`登録者${snap.youtube.subs}人になったね`, `目標は${(CFG.youtubeGoal || 0).toLocaleString('ja-JP')}人!`]);
-    }
-    if (snap.tasks && snap.tasks.count) {
-      pool.push([`保留タスク${snap.tasks.count}件だって`, '社長ファイトです…']);
-    }
-    if (snap.claude.block && snap.claude.block.remainingMinutes != null && snap.claude.block.remainingMinutes < 90) {
-      pool.push(['伊藤さん5h枠もうすぐらしい', 'ちょっと休ませよう']);
-    }
-    if (snap.deliveries && snap.deliveries.daihon) {
-      pool.push([`台本もう${snap.deliveries.daihon}本納品って`, '月城さんさすが']);
-    }
-    if (snap.codex.rateLimit) {
-      pool.push([`コデックス週次残り${Math.max(0, Math.round(100 - snap.codex.rateLimit.usedPercent))}%`, 'ペース配分だいじ']);
-    }
+    pool.push(`今日もう${fmtYen(cost * rate)}分働いたって`);
+    if (snap.youtube && snap.youtube.subs != null) pool.push(`登録者${snap.youtube.subs}人になったね`);
+    if (snap.tasks && snap.tasks.count) pool.push(`保留タスク${snap.tasks.count}件だって`);
+    if (snap.claude.block && snap.claude.block.remainingMinutes != null && snap.claude.block.remainingMinutes < 90) pool.push('伊藤さん5h枠もうすぐらしい');
+    if (snap.deliveries && snap.deliveries.daihon) pool.push(`台本もう${snap.deliveries.daihon}本納品って`);
+    if (snap.codex.rateLimit) pool.push(`コデックス週次残り${Math.max(0, Math.round(100 - snap.codex.rateLimit.usedPercent))}%だって`);
+    if (snap.claude.block && snap.claude.block.costPerHour) pool.push(`いま燃焼率${fmtYen(snap.claude.block.costPerHour * rate)}/hらしい`);
   }
-  const l1 = pool[Math.floor(Math.random() * pool.length)];
-  const l2 = pool[Math.floor(Math.random() * pool.length)];
-  return l1 === l2 ? l1 : [...l1, ...l2];
+  const openers = pool.concat(CHAT_OPENERS);
+  const lines = [];
+  const rounds = 1 + (Math.random() < 0.5 ? 1 : 0);
+  for (let k = 0; k < rounds; k++) {
+    lines.push(openers[Math.floor(Math.random() * openers.length)]);
+    lines.push(CHAT_REPLIES[Math.floor(Math.random() * CHAT_REPLIES.length)]);
+  }
+  return lines;
 }
 
 function stepChat(t) {
   if (chat.active) {
     const c = chat.active;
-    if (c.a.mode !== 'idle' || c.b.mode !== 'idle' || !c.a.present || !c.b.present) {
-      c.a.inChat = c.b.inChat = false;
-      chat.active = null;
-      chat.next = t + 45000;
+    const abort = c.a.mode !== 'idle' || c.b.mode !== 'idle' || !c.a.present || !c.b.present;
+    if (abort) { endChat(t, 45000); return; }
+    if (c.meeting && c.phase === 'go') {
+      if (c.a.action === 'sit' && c.b.action === 'sit') { c.phase = 'talk'; c.nextLine = t + 600; }
       return;
     }
     if (t > c.nextLine) {
       const line = c.lines[c.li];
-      if (line == null) {
-        c.a.inChat = c.b.inChat = false;
-        chat.active = null;
-        chat.next = t + 60000 + Math.random() * 90000;
-        return;
-      }
+      if (line == null) { endChat(t, 60000 + Math.random() * 90000); return; }
       (c.li % 2 === 0 ? c.a : c.b).say(t, line, 3600);
       c.li++;
       c.nextLine = t + 4000;
@@ -980,18 +984,41 @@ function stepChat(t) {
   if (t < chat.next) return;
   const idlers = employees.filter(e => e.present && e.mode === 'idle' && e.action !== 'walk');
   if (idlers.length < 2) { chat.next = t + 30000; return; }
-  // 近い者同士で雑談(隣の席・同じ休憩室など)
   let best = null, bestD = 1e9;
   for (let i = 0; i < idlers.length; i++) for (let j = i + 1; j < idlers.length; j++) {
     const d = Math.hypot(idlers[i].pos.x - idlers[j].pos.x, idlers[i].pos.y - idlers[j].pos.y);
     if (d < bestD) { bestD = d; best = [idlers[i], idlers[j]]; }
   }
-  if (!best || bestD > 220) { chat.next = t + 30000; return; }
+  if (!best || bestD > 260) { chat.next = t + 30000; return; }
   const [a, b] = best;
   a.inChat = b.inChat = true;
-  chat.active = { a, b, lines: makeChatLines(), li: 0, nextLine: t + 500 };
+  const useMeeting = !meetBusy && Math.random() < 0.5;
+  if (useMeeting) {
+    meetBusy = true;
+    const pair = [[a, MEET_SEATS[0]], [b, MEET_SEATS[1]]];
+    for (const [e, seat] of pair) {
+      e.releaseSpot(); e.resting = false; e.atMeeting = true;
+      e.arrivalSitY = seat.y;
+      e.goto({ x: seat.x, y: seat.y - 28 }, 'sit');
+    }
+    chat.active = { a, b, lines: makeChatLines().concat(makeChatLines()), li: 0, meeting: true, phase: 'go', nextLine: 0 };
+  } else {
+    chat.active = { a, b, lines: makeChatLines(), li: 0, nextLine: t + 500 };
+  }
 }
 
+function endChat(t, wait) {
+  const c = chat.active;
+  if (c) {
+    for (const e of [c.a, c.b]) {
+      e.inChat = false;
+      if (e.atMeeting) { e.atMeeting = false; e.nextThink = 0; }
+    }
+    if (c.meeting) meetBusy = false;
+  }
+  chat.active = null;
+  chat.next = t + wait;
+}
 
 const dog = { pos: { x: 90, y: 150 }, target: null, next: 4000, napUntil: 0, dir: 1 };
 function stepDog(dt, t) {
