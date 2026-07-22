@@ -431,9 +431,9 @@ function drawDesk(g, seat, working, t, emp) {
     g.font = '5px DotGothic16';
     const tw = g.measureText(emp.tag).width + 6;
     g.fillStyle = 'rgba(40,42,54,.85)';
-    g.beginPath(); g.roundRect(x - tw / 2 + .5, y + 21.5, tw, 8, 2); g.fill();
+    g.beginPath(); g.roundRect(x - tw / 2 + .5, y + 14.5, tw, 8, 2); g.fill();
     g.fillStyle = '#e8e6da';
-    g.fillText(emp.tag, x - tw / 2 + 3, y + 27.5);
+    g.fillText(emp.tag, x - tw / 2 + 3, y + 20.5);
   }
 }
 
@@ -644,17 +644,17 @@ function drawOffice(g, t, tm) {
   // 社長室の調度・入口まわり
   drawProp(g, 'lamp', 100, 66, 17, 38);
   drawProp(g, 'plant_mon', 20, 64, 18, 40);
-  drawProp(g, 'plant_snake', 594, 64, 15, 40);
 
-  // 壁際の機材列(デスクの後ろ)
+  // 壁際: サーバーはIT列(プロジェクト-T裏)に集約、各開発ゾーンにPCタワー
   drawProp(g, 'rack', 146, 46, 26, 46);
   drawProp(g, 'netcab', 176, 56, 22, 36);
   drawProp(g, 'tower', 204, 54, 20, 38);
-  drawProp(g, 'ccart', 342, 62, 26, 28);
-  drawProp(g, 'ladder', 372, 70, 17, 22);
-  drawProp(g, 'tower', 480, 54, 20, 38);
-  drawProp(g, 'bin_g', 506, 74, 11, 17);
-  drawProp(g, 'bin_r', 520, 74, 11, 17);
+  drawProp(g, 'tower', 352, 56, 20, 38);
+  drawProp(g, 'bin_r', 378, 74, 11, 17);
+  drawProp(g, 'tower', 488, 56, 20, 38);
+  drawProp(g, 'plant_snake', 514, 58, 15, 38);
+
+  drawProp(g, 'firstaid', 319, 14, 13, 13);
 
   // ミーティングスペース(丸テーブル)
 
@@ -673,9 +673,11 @@ function aisleX(seat) { return seat.x - 32; }
 function outPath(pt, lane) {
   const L = lane || LANE_Y;
   const { x, y } = pt;
+  if (y < 160 && x < 132) return [{ x, y: 168 }, { x: 240, y: 168 }, { x: 240, y: L }];      // 社長室: 休憩室の上の帯を東へ
   if (y < 160) { const a = x - 31; return [{ x: a, y }, { x: a, y: L }]; }                   // 上段: 机の間の隙間から
-  if (y > 210 && y < 290 && x >= 191 && x <= 355) { const a = x < 266 ? 187 : 345; return [{ x: a, y }, { x: a, y: L }]; } // 総務部: ブロックの脇から
-  if (y > 210 && x < 195) return [{ x, y: 270 }, { x: 176, y: 270 }, { x: 176, y: L }];  // 休憩室: 室内通路→右端列
+  if (y > 282 && x >= 240 && x <= 380) return [{ x, y: 288 }, { x: 374, y: 288 }, { x: 374, y: L }]; // 受付まわり: 右の通路から
+  if (y > 198 && y < 285 && x >= 228 && x <= 368) return [{ x, y: 254 }, { x: 370, y: 254 }, { x: 370, y: L }]; // 総務部: 机の下→右通路
+  if (y > 195 && x < 226) return [{ x, y: 256 }, { x: 206, y: 256 }, { x: 206, y: L }];      // 休憩室: 中央通路→右端列
   return [{ x, y: L }];
 }
 
@@ -692,7 +694,7 @@ class Person {
     Object.assign(this, def);
     this.seed = (i + 1) * 977;
     this.lane = LANE_Y + (i % 3) * 8;   // 個人レーンで衝突減
-    this.pos = def.desk ? { x: def.desk.x, y: def.desk.y } : { x: 344, y: 340 };
+    this.pos = def.desk ? { x: def.desk.x, y: def.desk.y } : { x: 374, y: 340 };
     this.action = 'stand';
     this.dir = 'down';
     this.path = [];
@@ -706,7 +708,7 @@ class Person {
 
   goto(target, arrival) {
     this.arrival = arrival;
-    if (!this.present) { this.pos = { x: 344, y: 346 }; this.present = true; }
+    if (!this.present) { this.pos = { x: 374, y: 346 }; this.present = true; }
     if (Math.hypot(target.x - this.pos.x, target.y - this.pos.y) < 3) {
       this.pos = { x: target.x, y: target.y };
       this.path = [];
@@ -734,6 +736,7 @@ class Person {
     else if (a === 'faceL') { this.action = 'stand'; this.dir = 'left'; }
     else if (a === 'faceR') { this.action = 'stand'; this.dir = 'right'; }
     else if (a === 'faceU') { this.action = 'stand'; this.dir = 'up'; }
+    else if (a === 'faceD') { this.action = 'stand'; this.dir = 'down'; }
     else { this.action = 'stand'; this.dir = 'down'; }
   }
 
@@ -778,15 +781,20 @@ class Person {
    AI社員
    ================================================================ */
 const REST_SPOTS = [
-  { x: 34, y: 310, sy: 310, a: 'sit', via: 270 },   // ソファ左
-  { x: 60, y: 310, sy: 310, a: 'sit', via: 270 },   // ソファ右
-  { x: 104, y: 312, sy: 312, a: 'sit', via: 270 },  // アームチェア1
-  { x: 138, y: 312, sy: 312, a: 'sit', via: 270 },  // アームチェア2
-  { x: 30, y: 254, a: 'faceU' },                    // コーヒー前
-  { x: 92, y: 254, a: 'faceU' },                    // 自販機前
-  { x: 122, y: 254, a: 'faceU' },                   // スナック棚前
-  { x: 150, y: 254, a: 'faceU' },                   // 給水機前
+  { x: 34, y: 314, sy: 314, a: 'sit', via: 258 },   // ソファ左
+  { x: 60, y: 314, sy: 314, a: 'sit', via: 258 },   // ソファ右
+  { x: 104, y: 316, sy: 316, a: 'sit', via: 258 },  // アームチェア1
+  { x: 138, y: 316, sy: 316, a: 'sit', via: 258 },  // アームチェア2
+  { x: 170, y: 316, sy: 316, a: 'sit', via: 258 },  // アームチェア3
+  { x: 30, y: 228, a: 'faceU' },                    // コーヒー前
+  { x: 92, y: 226, a: 'faceU' },                    // 自販機前
+  { x: 122, y: 230, a: 'faceU' },                   // スナック棚前
+  { x: 150, y: 228, a: 'faceU' },                   // 給水機前
 ];
+const RECEPTION_STAFF = ['tsukishiro', 'kato', 'zama'];
+const RECEPTION_POST = { x: 300, y: 296 };
+let receptionBy = null;
+
 function pickRestSpot() {
   const free = REST_SPOTS.filter(sp => !sp.busy);
   if (!free.length) return null;
@@ -803,7 +811,7 @@ const CLEAN_SPOTS = [
   { x: 420, y: 205, k: 'sweep' }, { x: 550, y: 205, k: 'sweep' }, { x: 366, y: 330, k: 'sweep' },
   { x: 130, y: 262, k: 'mop' }, { x: 310, y: 330, k: 'mop' }, { x: 500, y: 205, k: 'mop' }, { x: 200, y: 320, k: 'mop' },
   { x: 285, y: 64, k: 'wipe' }, { x: 428, y: 268, k: 'wipe' },
-  { x: 540, y: 206, k: 'bucket' }, { x: 300, y: 318, k: 'sweep' },
+  { x: 595, y: 232, k: 'bucket' }, { x: 300, y: 318, k: 'sweep' },
 ];
 
 const IDLE_MUTTER = ['のび〜', '肩回すか', '水飲みに行こうかな', '今日の晩ごはん何にしよ', 'ちょっと眠い',
@@ -845,10 +853,10 @@ class Employee extends Person {
   setMode(m) {
     if (this.mode === m) return;
     this.mode = m;
-    if (m !== 'idle') { this.resting = false; this.releaseSpot(); }
+    if (m !== 'idle') { this.resting = false; this.releaseSpot(); this.releaseReception(); }
     if (m === 'working') this.goto(this.seat, 'sit');
     else if (m === 'sleep') this.goto(this.seat, 'sleep');
-    else if (m === 'off' || m === 'out' || m === 'sleephome') this.goto({ x: 344, y: 346 }, 'leave');
+    else if (m === 'off' || m === 'out' || m === 'sleephome') this.goto({ x: 374, y: 346 }, 'leave');
     else this.nextThink = 0;
   }
 
@@ -898,6 +906,10 @@ class Employee extends Person {
     if (this.restSpot) { this.restSpot.busy = false; this.restSpot = null; }
   }
 
+  releaseReception() {
+    if (this.receptionOn) { this.receptionOn = false; if (receptionBy === this.id) receptionBy = null; }
+  }
+
   takeSpot(sp) {
     this.releaseSpot();
     sp.busy = true;
@@ -910,7 +922,20 @@ class Employee extends Person {
     if (this.action === 'walk' || this.inChat || this.atMeeting) return;
     if (this.def.source === 'janitor') { this.thinkJanitor(t); return; }
     if (this.mode !== 'idle' || t < this.nextThink) return;
+    if (this.receptionOn) {
+      if (Math.random() < 0.15) { this.releaseReception(); this.goto(this.seat, 'sit'); }
+      else if (Math.random() < 0.5) this.say(t + 400, ['いらっしゃいませ〜', 'ご用の方は呼び鈴をどうぞ', '受付、承ります', '(姿勢よく…)'][Math.floor(Math.random() * 4)]);
+      this.nextThink = t + 30000 + Math.random() * 40000;
+      return;
+    }
     if (!this.resting) {
+      if (!receptionBy && RECEPTION_STAFF.includes(this.id) && Math.random() < 0.5) {
+        receptionBy = this.id;
+        this.receptionOn = true;
+        this.goto({ x: RECEPTION_POST.x, y: RECEPTION_POST.y }, 'faceD');
+        this.nextThink = t + 25000;
+        return;
+      }
       const sp = pickRestSpot();                 // 指示待ちは休憩室へ
       if (sp) { this.resting = true; this.takeSpot(sp); }
       else if (this.action === 'sit') this.action = 'sleep';   // 満席なら自席でうたた寝
@@ -1019,7 +1044,7 @@ class Employee extends Person {
     const nw = g.measureText(this.name).width;
     const cbL = seated && (this.resting || this.atMeeting) ? 0.30 : 0;
     const stag = (!seated && (this.resting || this.atMeeting)) ? (this.seed % 3) * 4 : 0;
-    const ny = (seated && !this.resting && !this.atMeeting) ? y + 14 : y + 3 - 30 * cbL + stag;
+    const ny = (seated && !this.resting && !this.atMeeting) ? y + 11 : y + 3 - 30 * cbL + stag;
     g.fillStyle = 'rgba(255,250,240,.9)';
     g.fillRect(x - nw / 2 - 2, ny, nw + 4, 7);
     g.fillStyle = INK;
@@ -1522,7 +1547,7 @@ const $ = id => document.getElementById(id);
 const CHIP = {
   working: ['work', '稼働中'], idle: ['idle', '待機'], break: ['rest', '休憩'],
   sleep: ['sleep', '睡眠'], off: ['off', '退勤'], panic: ['panic', '停止!'],
-  out: ['off', '外出中'], sleephome: ['sleep', '就寝中'], clean: ['work', '清掃中'],
+  out: ['off', '外出中'], sleephome: ['sleep', '就寝中'], clean: ['work', '清掃中'], reception: ['work', '受付'],
 };
 
 function updateHud() {
@@ -1566,6 +1591,7 @@ function updateHud() {
   for (const e of employees) {
     let [cls, label] = CHIP[e.mode] || CHIP.idle;
     if (e.mode === 'idle' && e.resting) [cls, label] = CHIP.break;
+    if (e.mode === 'idle' && e.receptionOn) [cls, label] = CHIP.reception;
     const row = document.createElement('div');
     row.className = 'emp';
     const sheet = SHEETS[e.spriteId || e.id];
@@ -1693,14 +1719,16 @@ function loop(t) {
   const items = [];
   // 大型什器(前にいる人を隠す): キッチン家電・棚・スタジオ機材
   const OCCLUDERS = [
-    ['coffee_st', 20, 190, 30, 36], ['vending', 80, 188, 24, 38], ['snack', 108, 192, 28, 36],
-    ['cooler', 140, 190, 20, 36], ['plant_a', 164, 300, 20, 32],
-    ['sofa', 20, 288, 60, 30], ['armchair', 92, 288, 26, 32], ['armchair', 126, 288, 26, 32],
-    ['rack', 566, 148, 26, 46], ['netcab', 594, 158, 22, 36], ['copier', 532, 160, 26, 32],
-    ['exting', 556, 178, 8, 17], ['bin_g', 534, 196, 10, 15], ['bin_r', 547, 196, 10, 15],
-    ['reception', 228, 292, 80, 30], ['sanitizer', 312, 296, 10, 25], ['firstaid', 386, 246, 12, 12],
+    ['coffee_st', 20, 182, 30, 36], ['vending', 80, 180, 24, 38], ['snack', 108, 184, 28, 36],
+    ['cooler', 140, 182, 20, 36], ['plant_a', 192, 296, 20, 32], ['bin_g', 196, 184, 11, 16],
+    ['sofa', 20, 288, 60, 30], ['armchair', 92, 288, 26, 32], ['armchair', 126, 288, 26, 32], ['armchair', 158, 288, 26, 32],
+    ['copier', 530, 150, 26, 32], ['rack', 562, 146, 26, 46], ['netcab', 590, 156, 22, 36],
+    ['ccart', 534, 200, 26, 28], ['ladder', 564, 204, 17, 22],
+    ['bin_g', 588, 206, 10, 15], ['bin_r', 601, 206, 10, 15], ['exting', 618, 150, 8, 17],
+    ['reception', 258, 296, 100, 38], ['sanitizer', 366, 302, 10, 25],
     ['tvstand', 396, 292, 26, 34], ['projcart', 438, 294, 24, 32], ['tower', 500, 258, 22, 44],
   ];
+
 
   for (const [k, ox, oy, ow, oh] of OCCLUDERS) {
     items.push({ y: oy + oh - 6, draw: g => drawProp(g, k, ox, oy, ow, oh) });

@@ -53,15 +53,15 @@ window.OFFICE_CONFIG = {
       source: 'claude', match: '^yorutool' },
 
     { id: 'arimoto', name: '有本', dept: '総務部', role: 'クロード作業(基盤・ツール)',
-      hair: '#2a2220', shirt: '#3a3a4a', desk: { x: 216, y: 236 }, tag: '基盤・ツール',
+      hair: '#2a2220', shirt: '#3a3a4a', desk: { x: 240, y: 216 }, tag: '基盤・ツール',
       source: 'claude', match: '^(Irodori)' },
     { id: 'kato', name: '加藤', dept: '総務部', role: 'クロード作業(雑務)',
-      hair: '#8a5a2e', shirt: '#c8a04a', desk: { x: 266, y: 236 }, tag: '雑務全般',
+      hair: '#8a5a2e', shirt: '#c8a04a', desk: { x: 290, y: 216 }, tag: '雑務全般',
       source: 'claude', pc: 'laptop' },
     { id: 'shirayanagi', name: '白柳', dept: '清掃', role: 'クリーンスタッフ',
       hair: '#2a2a2a', shirt: '#b8d8cc', desk: { x: 462, y: 322 }, source: 'janitor' },
     { id: 'zama', name: '座間', dept: '総務部', role: 'コーデックス作業(その他)',
-      hair: '#8a5a2e', slim: true, shirt: '#48a08a', desk: { x: 316, y: 236 }, tag: 'その他案件',
+      hair: '#8a5a2e', slim: true, shirt: '#48a08a', desk: { x: 340, y: 216 }, tag: 'その他案件',
       source: 'codex', pc: 'laptop' },
   ],
 };
