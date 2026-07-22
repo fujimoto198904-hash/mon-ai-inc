@@ -622,9 +622,10 @@ function drawOffice(g, t, tm) {
 
   // データ同期ステータスはHUD(経営ボード)側に表示(マップ上には出さない)
 
-  if (!drawProp(g, 'sofa', 20, 288, 60, 30)) rr(g, 24, 296, 52, 20, '#7a9ac8', INK);
-  drawProp(g, 'armchair', 92, 288, 26, 32);
-  drawProp(g, 'armchair', 126, 288, 26, 32);
+  // 応接セット: 絨毯(38,242,132,78)の上にバランスよく配置(ソファ左・アームチェア右、底辺を揃える)
+  if (!drawProp(g, 'sofa', 44, 284, 60, 30)) rr(g, 48, 292, 52, 20, '#7a9ac8', INK);
+  drawProp(g, 'armchair', 112, 282, 26, 32);
+  drawProp(g, 'armchair', 142, 282, 26, 32);
 
   // ミーティングスペース(丸テーブル)
 
@@ -647,7 +648,7 @@ function outPath(pt, lane) {
   if (y < 160) { const a = x - 31; return [{ x: a, y }, { x: a, y: L }]; }                   // 上段: 机の間の隙間から
   if (y > 306 && x > 380 && x < 480) return [{ x, y: 342 }, { x: 374, y: 342 }, { x: 374, y: L }]; // 撮影スタジオ南: 入口通路経由
   if (y > 326 && x >= 236 && x <= 380) return [{ x, y: 342 }, { x: 374, y: 342 }, { x: 374, y: L }]; // 受付の下(ロビー南): 入口通路経由
-  if (y > 276 && x >= 236 && x <= 380) return [{ x, y: 278 }, { x: 374, y: 278 }, { x: 374, y: L }]; // 受付まわり: 右の通路から
+  if (y > 262 && x >= 236 && x <= 380) return [{ x, y: 266 }, { x: 374, y: 266 }, { x: 374, y: L }]; // 受付まわり(カウンター上端272の上の帯): 右の通路から
   if (y > 198 && y < 285 && x >= 228 && x <= 368) return [{ x, y: 254 }, { x: 370, y: 254 }, { x: 370, y: L }]; // 総務部: 机の下→右通路
   if (y > 195 && x < 226) return [{ x, y: 256 }, { x: 206, y: 256 }, { x: 206, y: L }];      // 休憩室: 中央通路→右端列
   if (y > 250 && y < 320 && x > 490 && x <= 622) return [{ x, y: 324 }, { x: 480, y: 324 }, { x: 480, y: L }]; // 音声スタジオ: スタジオ間の隙間から出入り
@@ -769,17 +770,17 @@ class Person {
    AI社員
    ================================================================ */
 const REST_SPOTS = [
-  { x: 34, y: 314, sy: 314, a: 'sit', via: 256 },   // ソファ左
-  { x: 60, y: 314, sy: 314, a: 'sit', via: 256 },   // ソファ右
-  { x: 104, y: 316, sy: 316, a: 'sit', via: 256 },  // アームチェア1
-  { x: 138, y: 316, sy: 316, a: 'sit', via: 256 },  // アームチェア2
+  { x: 58, y: 310, sy: 310, a: 'sit', via: 256 },   // ソファ左
+  { x: 84, y: 310, sy: 310, a: 'sit', via: 256 },   // ソファ右
+  { x: 124, y: 310, sy: 310, a: 'sit', via: 256 },  // アームチェア1
+  { x: 154, y: 310, sy: 310, a: 'sit', via: 256 },  // アームチェア2
   { x: 34, y: 236, a: 'faceU' },                    // コーヒー前
   { x: 68, y: 236, a: 'faceU' },                    // 自販機前
   { x: 102, y: 236, a: 'faceU' },                   // スナック棚前
   { x: 134, y: 236, a: 'faceU' },                   // 給水機前
 ];
 const RECEPTION_STAFF = ['tsukishiro', 'kato', 'zama'];
-const RECEPTION_POST = { x: 306, y: 302 };
+const RECEPTION_POST = { x: 306, y: 290 };
 let receptionBy = null;
 
 function pickRestSpot() {
@@ -1147,17 +1148,7 @@ class Employee extends Person {
     }
     if (e === 'sleep') drawZzz(g, x, y - 26, t + this.seed);
     if (this.mode === 'panic') drawAlert(g, x, y - 10, t);
-    if (!(seated && !this.resting && !this.atMeeting)) {
-      g.font = '5px DotGothic16';
-      const nw = g.measureText(this.name).width;
-      const cbL = seated && (this.resting || this.atMeeting) ? 0.30 : 0;
-      const stag = (!seated && (this.resting || this.atMeeting)) ? (this.seed % 3) * 4 : 0;
-      const ny = y + 3 - 30 * cbL + stag;
-      g.fillStyle = 'rgba(255,250,240,.9)';
-      g.fillRect(x - nw / 2 - 2, ny, nw + 4, 7);
-      g.fillStyle = INK;
-      g.fillText(this.name, x - nw / 2, ny + 5.5);
-    }
+    // 名札はy-sortレイヤーで描く(drawNameLabel) — 通行人が名札の上を通過できるように
     if (this.action === 'coffee') { g.font = '9px DotGothic16'; g.fillText('☕', x + 8, y - 8); }
     // 作業タグ: いま何をしているかを常時表示
     if (this.mode === 'working' && (seated || this.action === 'studio') && !this.resting && this.jobText) {
@@ -1690,6 +1681,265 @@ function endDirective(boss, t) {
   if (boss.mode === 'working') boss.goto(boss.seat, 'sit');
 }
 
+/* ================================================================
+   社内恋愛: きょうこ(廣瀬)×伊藤
+   仕事中の伊藤を応援しに行く / 2人とも暇ならデートに誘う
+   ================================================================ */
+const romance = { active: null, nextCheer: 90000, nextDate: 600000 };
+const KYOKO_CHEER = [
+  'がんばって、伊藤くん!', '応援しに来ちゃった', 'コーヒー置いとくね(気持ち)', '今日もかっこいいよ、その背中',
+  '無理しないでね?', '肩もみしてあげよっか', 'きょうこが見守ってるからね', '進捗どう?…って顔が疲れてる!',
+  '夜食、何がいい?', 'タイピング音、好きなんだよね', 'その調子その調子!', '終わったらお茶しよ?',
+  '差し入れはわたしの笑顔です', '深呼吸して?はい、すーはー', '伊藤くんのコード、きれいだよね',
+  '目、しょぼしょぼしてない?', 'ファイト!超ファイト!', '休憩も仕事のうちだよ?', '世界一がんばってる',
+  '今日の伊藤くんも優勝', 'あとちょっとだね、ラストスパート!', 'エラー出ても、わたしは味方',
+  'ドキドキしてる?落ち着いて〜', '首、回して回して', 'がんばりすぎ注意報、発令中', '推しの現場に来ました',
+  'yorutoolより伊藤くん優先で来た', '手、冷えてない?', 'デバッグの神が降りますように',
+  '伊藤くんの集中顔、いいね', '水分とった?', '姿勢!猫背になってる!', '疲れたら呼んでね、飛んでくる',
+  '今夜は早く寝てね?', 'わたしの分までがんばらなくていいよ', '応援団長きょうこ、参上',
+  'できるできる絶対できる', '天才って言っていい?', '終電…あ、家この会社だった', 'しゅきしゅき(小声)',
+];
+const ITO_CHEER_REPLY = [
+  'お、おう…仕事中だぞ(嬉しい)', 'きょうこか…力出るわ', '見られてると緊張するな…', 'あとでな、いま良いとこ',
+  'サンキュ…がんばれる', '肩もみは…あとで頼む', '(タイピングが速くなる)', '照れるからやめれ(照れ)',
+  'お茶、行く行く', '深呼吸…すー、はー…効くな', 'これ終わったらデートな', '愛の力で進捗2倍だ',
+  '見守られてる…尊い…', 'よし、燃えてきた', '(ニヤけを抑えている)',
+];
+const KYOKO_DATE_INVITE = [
+  'ねえ、いまヒマ?デートしよ!', '5分だけソファデートしない?', '伊藤くん、お茶しよ?',
+  'ソファ空いてるよ、行こ?', '息抜きデートのお時間で〜す', '手が空いたなら…わたしと過ごそ?',
+  'デートの誘いは早い者勝ちだよ', '今日まだ話してない!デート!', 'ソファで5分、恋人タイム!',
+  '休憩=デートって社訓にあるよ(ない)', 'ねぇねぇ、いちゃいちゃしにいこ', 'はい、デート券発行されました〜',
+];
+const ITO_DATE_OK = [
+  'お、いいね。行くか', '5分だけな(にっこり)', '待ってました', 'ソファ確保しといて',
+  'ちょうど休憩しようと思ってた', 'デート券、使います', '了解、恋人タイム', 'よし、休憩!デート!',
+  '(スキップで向かう)', '社訓に追加しとこう、それ',
+];
+const DATE_TALK = [
+  '今日の晩ごはん、何にする?', '週末どこ行く?', 'ねえ、手つないでいい?', '伊藤くんの好きなとこ発表します',
+  '将来の話…しちゃう?', 'この会社、猫飼わない?', '肩、貸して', '5分が一瞬すぎる…',
+  'また夜食作るね', 'きょうこの膝枕、予約制です', '二人の記念日、覚えてる?', '今度こそ映画行こうね',
+  '伊藤くんは働きすぎ!', 'たまには寝てよ?', 'わたしのyorutool、褒めて?', '給料日、何買う?',
+  'こうしてると落ち着くね', 'ずっとこの5分でいい…', '写真撮ろ、ドット絵だけど', '次のBBQ、隣で食べよ',
+  '社長にバレたら…まあいっか', 'ララも連れて散歩行きたいね', '伊藤くんの寝言、聞いたことある',
+  '来週もこの時間、空けといてね',
+];
+
+function stepRomance(t) {
+  const kyoko = employees.find(e => e.id === 'hirose');
+  const ito = employees.find(e => e.id === 'ito');
+  if (!kyoko || !ito) return;
+  if (romance.active) {
+    const r = romance.active;
+    if (!kyoko.present || !ito.present) { endRomance(t); return; }
+    if (r.kind === 'cheer') {
+      if (r.phase === 'go') {
+        if (kyoko.action !== 'walk') {
+          r.phase = 'talk'; r.until = t + 3600;
+          kyoko.dir = 'left';
+          kyoko.say(t, pickFresh('kyokocheer', KYOKO_CHEER), 3400);
+          spawnParticle('heart', ito.pos.x + 6, ito.pos.y - 26);
+          spawnParticle('heart', kyoko.pos.x - 4, kyoko.pos.y - 28);
+        }
+      } else if (r.phase === 'talk') {
+        if (t > r.until) {
+          ito.say(t, pickFresh('itocheer', ITO_CHEER_REPLY), 3000);
+          spawnParticle('heart', ito.pos.x, ito.pos.y - 30);
+          r.phase = 'back'; r.until = t + 3200;
+        }
+      } else if (t > r.until) endRomance(t);
+      return;
+    }
+    // date
+    if (r.phase === 'invite') {
+      if (t > r.until) {
+        ito.say(t, pickFresh('itodateok', ITO_DATE_OK), 2800);
+        r.phase = 'go'; r.until = t + 2000;
+        kyoko.takeSpot(r.spotA); ito.takeSpot(r.spotB);
+        kyoko.inChat = true; ito.inChat = true;   // takeSpotの後に立て直す
+      }
+      return;
+    }
+    if (r.phase === 'go') {
+      if (kyoko.action !== 'walk' && ito.action !== 'walk') { r.phase = 'talk'; r.nextLine = t + 1500; r.until = t + 60000 + Math.random() * 40000; }
+      return;
+    }
+    if (r.phase === 'talk') {
+      if (ito.mode === 'working' || t > r.until) {   // 仕事が来たらデート終了
+        if (ito.mode === 'working') ito.say(t, '仕事きた…ごめん、また今度!', 2600);
+        endRomance(t);
+        return;
+      }
+      if (t > r.nextLine) {
+        const who = Math.random() < 0.55 ? kyoko : ito;
+        who.say(t, pickFresh('datetalk', DATE_TALK), 3400);
+        if (Math.random() < 0.5) spawnParticle('heart', (kyoko.pos.x + ito.pos.x) / 2, kyoko.pos.y - 30);
+        r.nextLine = t + 5500 + Math.random() * 3500;
+      }
+    }
+    return;
+  }
+  // 発動判定
+  if (fight.active || standup.active || (officeEvent.active && officeEvent.active.alarmed)) return;
+  if (kyoko.inChat || kyoko.atMeeting || kyoko.inEvent || kyoko.onChimeBreak || kyoko.receptionOn) return;
+  if (!kyoko.present || kyoko.mode !== 'idle') return;
+  // デート: 2人とも暇+ソファが2席空いている
+  if (t > romance.nextDate && ito.present && ito.mode === 'idle' && !ito.inChat && !ito.atMeeting && !ito.inEvent
+      && !REST_SPOTS[0].busy && !REST_SPOTS[1].busy) {
+    romance.active = { kind: 'date', phase: 'invite', until: t + 3000, spotA: REST_SPOTS[0], spotB: REST_SPOTS[1] };
+    kyoko.releaseSpot(); kyoko.resting = false; ito.releaseSpot(); ito.resting = false;
+    kyoko.inChat = true; ito.inChat = true;
+    kyoko.say(t, pickFresh('kyokoinvite', KYOKO_DATE_INVITE), 3000);
+    return;
+  }
+  // 応援: 伊藤が仕事中(自席)なら会いに行く
+  if (t > romance.nextCheer && ito.present && ito.mode === 'working' && ito.action === 'sit' && !ito.resting && !ito.inChat) {
+    romance.active = { kind: 'cheer', phase: 'go' };
+    kyoko.releaseSpot(); kyoko.resting = false;
+    kyoko.inChat = true; ito.inChat = true;
+    kyoko.goto({ x: ito.desk.x + 28, y: ito.desk.y + 18 }, 'faceL');
+  }
+}
+
+function endRomance(t) {
+  const kyoko = employees.find(e => e.id === 'hirose');
+  const ito = employees.find(e => e.id === 'ito');
+  for (const e of [kyoko, ito]) {
+    if (!e) continue;
+    e.inChat = false; e.releaseSpot(); e.resting = false; e.nextThink = t + 4000;
+    if (e.present && e.mode === 'working') e.gotoWork();
+  }
+  romance.active = null;
+  romance.nextCheer = t + 240000 + Math.random() * 240000;    // 応援は4〜8分に1回
+  romance.nextDate = t + 1200000 + Math.random() * 1200000;   // デートは20〜40分に1回
+}
+
+/* ================================================================
+   社長の見回り: 作業中でも定期的に全員の様子を見に行き、
+   励まし・指示・雑談を繰り広げる(200パターン)
+   ================================================================ */
+const patrol = { active: null, next: 120000 };
+const BOSS_PATROL_WORK = [
+  'その調子だ', '頼りにしてるぞ', '進捗どうだ?', '無理はするなよ', '品質第一で頼む', 'いいぞいいぞ',
+  '困ったらすぐ言え', 'お前が頼みの綱だ', '休憩も取れよ', 'さすがだな', '背中が頼もしい', '仕上がり楽しみにしてる',
+  '納期は大丈夫か?', '細部までこだわれよ', 'いい顔してるな', 'エラーは恐れるな', '妥協だけはするな', '手が早いな!',
+  'その集中力、買うぞ', '会社はお前で持ってる', '一息入れたらどうだ', '夜は寝ろよ?', '肩に力入りすぎだぞ',
+  'コードは読みやすくな', 'テスト書いてるか?', 'コミットこまめにな', '弱音は俺にだけ吐け', '給料上げたいんだがな…',
+  '今日のMVP候補だな', '社会保険は大事だぞ', '若いのに大したもんだ', '俺も昔はコード書いてな…',
+  'この会社に来てくれてありがとうな', '成長したなあ', '次のボーナス、期待しとけ(ゼロ円)', '愚痴なら聞くぞ',
+  '仕様変更してもいいか?…冗談だ', 'バグと友達になるなよ', '画面から炎出てないか?', '指がしなってるな',
+  'その機能、俺も楽しみだ', 'ユーザーは待ってるぞ', '世界を獲るぞ', '10年後の会社を頼む', '休日は休めよ?',
+  '報連相、助かってる', 'エナドリは1日1本までだ', '姿勢良くな', '目を大事にしろよ', 'たまに立てよ?',
+  'デスク周り、きれいだな', '仕事が丁寧だな', 'スピードより正確さだ', 'いや、今日は速さだ', '决断が早いな',
+  '筋がいい', 'センスあるぞ', '執念を感じる', '職人だな', '匠の技だ', 'プロの仕事だ', '震えるほどいい',
+  '泣けるほどいい', '感動した!', '俺の目に狂いはなかった', 'スカウトした甲斐があった', '愛してるぞ(社員として)',
+  '守りたい、この進捗', '額に入れて飾りたいコードだ', '教科書に載せたい仕事だ', '子供に見せたい働きっぷりだ',
+  '今日も頼んだぞ', '昼メシ食ったか?', '水分補給しろよ', 'トイレ我慢するなよ', 'まばたきしろよ',
+  '深呼吸も仕事のうちだ', 'BGM何聴いてる?', '集中の邪魔したな、続けてくれ', '見てるだけで満足だ',
+  '俺にできることはあるか?', 'コーヒー淹れてこようか?', '社長にできるのは応援だけだ', '応援してるぞ、心から',
+  '数字は俺が何とかする', '責任は俺が取る、思い切ってやれ', '失敗していい、前に進め', '挑戦を評価するぞ',
+  '安定稼働、地味にすごいぞ', '誰も見てなくても俺は見てる', '影の努力、知ってるぞ', '積み重ねが会社を作る',
+  '半年前より確実に速いな', '成長曲線が美しい', 'その改善、気づいてたぞ', 'ログがきれいになったな',
+  '深夜対応、助かった', 'この前のリカバリー、見事だった', '障害対応の判断、正しかったぞ', 'あの一手は俺には打てん',
+  '技術は裏切らないな', '学び続ける姿勢、尊敬する', '謙虚さがいいな', '報告が簡潔で助かる', '議事録も助かってる',
+  '次の一手、任せた', '大きい仕事、振っていいか?', '昇進の話…はまだ早いか', '肩書き、何がいい?',
+  '来期はもっと面白くなるぞ', '新プロジェクトの相談、今度させてくれ', 'お前の意見が聞きたい', 'アイデアあったら教えてくれ',
+  '会議は俺が減らしておく', '雑務は俺が巻き取る', '集中環境は俺が守る', '外野の声は気にするな',
+  '批判は俺が受ける', '成果は全部お前のものだ', '称賛は独り占めしていいぞ', '今日という日に感謝だな',
+  '働く姿が絵になるな', 'ドット絵でも分かる気迫だ', '画面越しでも伝わる熱量だ', 'モニターが輝いて見えるよ',
+  '今日のログイン、誰より早かったな', '最後まで残ってるの、いつもお前だな', '無理するな、と言っても無理するんだろうな',
+  '倒れる前に言えよ', '体が資本だぞ', '健康診断行けよ', 'ストレッチしろよ', '整体代は経費でいいぞ',
+  '温かいもの飲めよ', '目薬支給しような', 'いい椅子買おうな', 'モニターもう1枚要るか?', 'キーボード新調するか?',
+  '要望は全部俺に言え', '福利厚生、考えとく', '社員旅行、行きたいか?', '打ち上げは焼肉でいいか?',
+];
+const BOSS_PATROL_IDLE = [
+  '休憩か、いいことだ', 'しっかり休めよ', '次の仕事、頼むかもな', '充電中か', 'コーヒーうまいか?',
+  '休むのも仕事のうちだ', 'その調子で英気を養え', 'ソファの座り心地どうだ?', '自販機の新作、試したか?',
+  'たまには外の空気も…窓ないけどな', '暇なら俺の話し相手になるか?', '次のプロジェクトの構想、聞くか?',
+  '休憩中にすまんな、顔見に来ただけだ', '元気そうだな', '顔色いいな', 'よく休むやつはよく働く',
+  '罪悪感なく休め、それが指示だ', '休憩の達人だな', 'その堂々とした休みっぷり、嫌いじゃない',
+  '月城の収録、聴いたか?', 'ララを見なかったか?', '白柳さんの掃除、丁寧だよなあ', '掲示板のミッション、読んだか?',
+  '社訓、言えるか?…無限労働はウソだぞ', '飯行ったか?', '夜食は何派だ?', '仮眠室、作ろうか迷ってる',
+  'マッサージチェア欲しくないか?', '観葉植物、増やそうと思ってる', 'オフィス、もっと良くしたいんだ',
+  '意見箱でも置くか', '最近どうだ?', '悩みはないか?', '人間関係は良好か?', '睡眠取れてるか?',
+  '趣味の時間、確保できてるか?', '運動してるか?', '目、疲れてないか?', '肩こりはどうだ?',
+  '今度みんなでBBQやるか(合法的に)', 'ジム部でも作るか', '次のイベント、何がいい?', '忘年会の幹事、頼めるか?',
+  '有給、ちゃんと使えよ', '残業するなよ?', '定時で帰っていいんだぞ', '(俺が言うのもなんだが)',
+  '会社は楽しいか?', '夢はあるか?', '10年後、何してたい?', 'お前の理想の働き方、聞かせてくれ',
+  '実は俺も休憩中なんだ', '社長業も疲れるもんでな', 'ここだけの話、経営は大変だ', '…なんてな、冗談だ',
+  '俺のこと、社長って呼ばなくていいぞ', 'MONさんでいい', 'いや、やっぱ社長で頼む', '今日もいい一日にしような',
+];
+const PATROL_REPLY_WORK = [
+  'はい!', '順調です!', '任せてください', 'ありがとうございます!', 'がんばります!', '押忍!',
+  'ちょうど波に乗ってます', 'あと少しで一段落です', '社長も休んでください', '進捗、後で共有します',
+  '励みになります!', '(タイピング速度が上がる)', 'この機能、自信あります', '納期、守ります!',
+  'ご期待に応えます', '見ててください', '恐縮です…!', 'うおおお燃えてきた', '社長のためにも頑張ります',
+  'コーヒーは大丈夫です!', '目薬ほしいです', 'いい椅子、お願いします!', 'ボーナス楽しみにしてます(圧)',
+  '責任、共有させてください', '愛社精神が高まりました',
+];
+const PATROL_REPLY_IDLE = [
+  'はい、充電中です', '5分だけ休んでます', 'すぐ戻ります!', '英気、養ってます', 'ソファ最高です',
+  '社長もどうですか?', '新作、当たりでした', '次の仕事、待ってます', 'ちゃんと休んでます(堂々)',
+  '悩みはゼロです', 'よく眠れてます', '会社、楽しいです', '夢は世界征服です', 'BBQ、次は合法で!',
+  'MONさん…いや社長、お疲れ様です',
+];
+
+function stepPatrol(t) {
+  const boss = employees.find(e => e.def.source === 'boss');
+  if (!boss || !boss.present) return;
+  if (patrol.active) {
+    const p = patrol.active;
+    const tgt = p.target;
+    if (!tgt.present) { endPatrol(boss, t); return; }
+    if (p.phase === 'go') {
+      if (boss.action !== 'walk') {
+        boss.dir = tgt.pos.x >= boss.pos.x ? 'right' : 'left';
+        const pool = tgt.mode === 'working' ? BOSS_PATROL_WORK : BOSS_PATROL_IDLE;
+        boss.say(t, pickFresh('patrol', pool), 3400);
+        p.phase = 'talk'; p.until = t + 3600;
+      }
+    } else if (p.phase === 'talk') {
+      if (t > p.until) {
+        const rpool = tgt.mode === 'working' ? PATROL_REPLY_WORK : PATROL_REPLY_IDLE;
+        if (tgt.action !== 'sleep') tgt.say(t, pickFresh('patrolreply', rpool), 3000);
+        else tgt.say(t, '……zzz(返事なし)', 2400);
+        p.phase = 'back'; p.until = t + 3000;
+      }
+    } else if (t > p.until) endPatrol(boss, t);
+    return;
+  }
+  if (t < patrol.next) return;
+  if (chimeBreak.until && t < chimeBreak.until) return;
+  if (boss.inChat || boss.atMeeting || boss.directing || boss.onChimeBreak || boss.action === 'walk') return;
+  if (directive.active || standup.active || fight.active) return;
+  // 見回り先: 稼働中を優先しつつ、たまに休憩中の社員も
+  const cands = employees.filter(e => e !== boss && e.present && !e.inChat && !e.atMeeting && !e.inEvent
+    && e.def.source !== 'janitor' && ['sit', 'sleep', 'stand', 'studio'].includes(e.action));
+  if (!cands.length) { patrol.next = t + 30000; return; }
+  const working = cands.filter(e => e.mode === 'working');
+  const pickFrom = working.length && Math.random() < 0.75 ? working : cands;
+  const tgt = pickFrom[Math.floor(Math.random() * pickFrom.length)];
+  boss.releaseSpot(); boss.releaseReception(); boss.resting = false;
+  boss.inChat = true;
+  if (tgt.id === 'tsukishiro' && tgt.action === 'studio') {
+    boss.goto({ x: TSUKI_STUDIO_POST.x - 26, y: TSUKI_STUDIO_POST.y + 2 }, 'faceR');
+  } else if (tgt.action === 'sit' && !tgt.resting) {
+    boss.goto({ x: tgt.desk.x - 30, y: tgt.desk.y + 20 }, 'faceR');
+  } else {
+    boss.goto({ x: tgt.pos.x - 20, y: tgt.pos.y + 2 }, 'faceR');
+  }
+  patrol.active = { target: tgt, phase: 'go' };
+}
+
+function endPatrol(boss, t) {
+  patrol.active = null;
+  patrol.next = t + 150000 + Math.random() * 150000;   // 見回りは2.5〜5分に1回
+  boss.inChat = false;
+  boss.nextThink = 0;
+  if (boss.mode === 'working') boss.goto(boss.seat, 'sit');
+}
+
 function startFight(a, b, t) {
   if (fight.active || t < fight.cooldown) return;
   if (a.inChat || b.inChat || a.atMeeting || b.atMeeting) return;
@@ -2152,6 +2402,8 @@ function loop(t) {
   stepGroupChat(t);
   stepFight(t);
   stepDirective(t);
+  stepRomance(t);
+  stepPatrol(t);
   stepStandup(t);
   stepEvent(t);
   stepChimeBreak(t);
@@ -2204,11 +2456,11 @@ function loop(t) {
   // 大型什器(前にいる人を隠す): キッチン家電・棚・スタジオ機材
   const OCCLUDERS = [
     ['coffee_st', 20, 182, 30, 36], ['vending', 58, 180, 24, 38], ['snack', 90, 182, 28, 36],
-    ['cooler', 126, 182, 20, 36], ['bin_g', 154, 186, 11, 16], ['plant_a', 232, 282, 20, 34],
+    ['cooler', 126, 182, 20, 36], ['bin_g', 154, 186, 11, 16], ['plant_a', 212, 276, 20, 34],
 
     ['copier', 524, 154, 26, 32], ['tower', 554, 148, 20, 38], ['netcab', 578, 150, 22, 36], ['rack', 604, 140, 26, 46],
     ['bin_g', 600, 192, 10, 15], ['bin_r', 613, 192, 10, 15], ['exting', 11, 66, 8, 17],
-    ['reception', 252, 284, 112, 42], ['sanitizer', 388, 314, 10, 24],
+    ['reception', 252, 272, 112, 42], ['sanitizer', 242, 280, 10, 24],
   ];
 
 
@@ -2231,6 +2483,23 @@ function loop(t) {
   }
   // ソファ前面(座ったキャラの脚を隠す)
   for (const e of employees) if (e.present) items.push({ y: e.pos.y, draw: g => e.drawSprite(g, t) });
+  // 名札(自席以外): 本人の足元レイヤーに置く=手前(下)を通る人が名札の上を通過する。
+  // 段差スタガーは廃止し、横並びの人は名札も横一列に揃う
+  for (const e of employees) {
+    if (!e.present) continue;
+    const seatedL = e.action === 'sit' || e.action === 'sleep';
+    if (seatedL && !e.resting && !e.atMeeting) continue;   // 自席は机の前板名札に任せる
+    items.push({ y: e.pos.y - 0.5, draw: g => {
+      g.font = '5px DotGothic16';
+      const nw = g.measureText(e.name).width;
+      const cbL = seatedL && (e.resting || e.atMeeting) ? 0.30 : 0;
+      const ny = e.pos.y + 3 - 30 * cbL;
+      g.fillStyle = 'rgba(255,250,240,.9)';
+      g.fillRect(e.pos.x - nw / 2 - 2, ny, nw + 4, 7);
+      g.fillStyle = INK;
+      g.fillText(e.name, e.pos.x - nw / 2, ny + 5.5);
+    } });
+  }
   if (officeEvent.active) {
     for (const [k, ox, oy, ow, oh] of EVENT_PROPS[officeEvent.active.kind]) {
       // 肉と串はテーブルの「上」に載っているので、テーブルより後に描く
