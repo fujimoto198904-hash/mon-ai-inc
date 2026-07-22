@@ -154,7 +154,8 @@ function drawSheet(g, sheet, dir, fi, x, y, h, cropBottom) {
   const row = dir === 'left' || dir === 'right' ? 1 : dir === 'up' ? 3 : 0;
   const b = sheet.boxes[row * 3 + fi] || sheet.boxes[1] || sheet.boxes[0];
   if (!b) return;
-  const w = h * b.w / b.h;
+  const f = sheet.boxes[1] || b;
+  const w = h * Math.min(b.w / b.h, (f.w / f.h) * 1.08);
   const sh2 = b.h * (1 - cb), dh = h * (1 - cb);
   g.save();
   g.imageSmoothingEnabled = true;
@@ -764,7 +765,7 @@ function pickRestSpot() {
   if (!free.length) return null;
   return free[Math.floor(Math.random() * free.length)];
 }
-const REST_TALK = ['ふぅ…ひと息', '指示待ちの休憩なう', 'コーヒーうまい', '次の仕事まだかな', '(サボってるわけでは…)'];
+const REST_TALK = ['コーヒーうまい', 'ソファ最高…', 'ちょっと目を閉じよう', 'お菓子補充されてる', 'のび〜', 'ふぅ…ひと息'];
 
 class Employee extends Person {
   constructor(def, i) {
@@ -1130,7 +1131,7 @@ function onSnapshot() {
       } else {
         e.setMode(tm.h >= 1 && tm.h < 7 ? 'sleep' : 'idle');
         e.jobText = '待機中';
-        e.bubbles = ['指示待ちです', 'いつでもどうぞ'];
+        e.bubbles = ['ふぅ、ひと息…', 'ストレッチしよ', 'コード見直そうかな'];
       }
     } else if (e.source === 'codex') {
       const act = cbuckets[e.id] || [];
@@ -1144,7 +1145,7 @@ function onSnapshot() {
       } else {
         e.setMode(tm.h >= 1 && tm.h < 7 ? 'sleep' : 'idle');
         e.jobText = '待機中';
-        e.bubbles = ['次のタスクどうぞ'];
+        e.bubbles = ['ログでも眺めるか…', '肩こったな…'];
       }
       if (e.showHp && rl) e.bubbles.push(`週次残量 ${codexHp}%`);
     } else if (e.source === 'schedule') {
@@ -1185,7 +1186,7 @@ function onSnapshot() {
       } else if (busy > 0) {
         e.setMode('working');
         e.jobText = `指揮中(稼働 ${busy}件)`;
-        e.bubbles = [`保留タスク ${tc ?? '-'}件`, '現場は任せた!', `今日は ${fmtYen((s.totals.todayCost || 0) * rate)} 分働いてる`];
+        e.bubbles = ['現場は頼んだぞ…', `今日は ${fmtYen((s.totals.todayCost || 0) * rate)} 分か…`, `保留が${tc ?? '-'}件…`];
       } else {
         e.setMode('idle');
         e.jobText = `保留 ${tc ?? '-'}件を検討中`;
@@ -1328,6 +1329,7 @@ function updateHud() {
    ================================================================ */
 let last = 0, lastAmbient = 0;
 function loop(t) {
+  cx.setTransform(4, 0, 0, 4, 0, 0);   // 4xスケールを毎フレーム保証
   const dt = Math.min(100, t - last);
   last = t;
   const tm = jstNow();
@@ -1335,6 +1337,23 @@ function loop(t) {
   for (const e of employees) { e.think(t, tm); e.step(dt, t); e.tickBubble(t); }
   stepChat(t);
   stepDog(dt, t);
+  // 簡易衝突回避(座っていない者同士を押し離す)
+  const movers = employees.filter(e => e.present && e.action !== 'sit' && e.action !== 'sleep');
+  for (let i = 0; i < movers.length; i++) {
+    for (let j = i + 1; j < movers.length; j++) {
+      const A = movers[i], B = movers[j];
+      const dx = B.pos.x - A.pos.x, dy = B.pos.y - A.pos.y;
+      const d = Math.hypot(dx, dy);
+      if (d > 0.1 && d < 11) {
+        const push = (11 - d) * 0.25;
+        A.pos.x -= dx / d * push; A.pos.y -= dy / d * push;
+        B.pos.x += dx / d * push; B.pos.y += dy / d * push;
+      }
+    }
+    const dxd = dog.pos.x - movers[i].pos.x, dyd = dog.pos.y - movers[i].pos.y;
+    const dd = Math.hypot(dxd, dyd);
+    if (dd > 0.1 && dd < 10) { dog.pos.x += dxd / dd * (10 - dd) * 0.5; dog.pos.y += dyd / dd * (10 - dd) * 0.5; }
+  }
   stepParticles(dt);
 
   // 環境パーティクル
