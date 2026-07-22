@@ -395,20 +395,24 @@ function drawDesk(g, seat, working, t, emp) {
     rr(g, x - 24, y + 13, 48, 11, '#dddbd4', INK);
   }
   const pc = (emp && emp.pc) || 'mon1';
-  if (working) {
-    g.fillStyle = 'rgba(150,220,255,.22)';
-    g.fillRect(x - 12, y - 10, 24, 12);            // 画面の光がキャラ側へ漏れる
-  }
-  if (OFFICE.mon1b) {
-    if (pc === 'mon2') { drawProp(g, 'mon1b', x - 15, y + 2, 15, 11); drawProp(g, 'mon1b', x, y + 2, 15, 11); }
-    else if (pc === 'laptop') drawProp(g, 'laptopb', x - 9, y + 5, 18, 12);
-    else drawProp(g, 'mon1b', x - 8, y + 2, 16, 12);
-    g.fillStyle = working ? '#4cff8e' : '#555a60';
-    g.fillRect(x + (pc === 'mon2' ? 12 : 6), y + 12, 2, 2);
+  let scr = null;
+  if (OFFICE.mon1) {
+    if (pc === 'mon2') { drawProp(g, 'mon2', x - 13, y + 1, 26, 20); scr = [x - 11, y + 2.5, 22, 8]; }
+    else if (pc === 'laptop') { drawProp(g, 'laptop', x - 10, y + 5, 20, 16); scr = [x - 7.5, y + 6.5, 15, 6]; }
+    else { drawProp(g, 'mon1', x - 10, y + 1, 20, 20); scr = [x - 8, y + 2.5, 16, 8.5]; }
   } else {
     rr(g, x - 9, y - 1, 18, 11, '#23252d', INK);
-    g.fillStyle = working ? '#4cff8e' : '#555a60';
-    g.fillRect(x + 6, y + 7, 2, 2);
+    scr = [x - 8, y, 16, 9];
+  }
+  if (working && scr) {
+    g.fillStyle = '#12241c';
+    g.fillRect(scr[0], scr[1], scr[2], scr[3]);
+    g.fillStyle = '#5affa0';
+    const rows = Math.floor(scr[3] / 2.3);
+    for (let i = 0; i < rows; i++) {
+      const lw = ((t / 260 + i * 2.7) % (scr[2] - 2));
+      g.fillRect(scr[0] + 1, scr[1] + 1.2 + i * 2.3, Math.max(1.5, lw), 1.1);
+    }
   }
 }
 
@@ -434,6 +438,31 @@ function drawOffice(g, t, tm) {
       const line = String(m).slice(0, 8);
       g.fillText(line, bcx - g.measureText(line).width / 2, 25 + k * 8);
     });
+    // 看板に社名とYT登録者
+    g.font = '13px DotGothic16'; g.fillStyle = '#f0d890';
+    g.fillText('MON-AI Inc.', 489, 24);
+    g.font = '8px DotGothic16'; g.fillStyle = '#e8d0a0';
+    const subs = snap && snap.youtube && snap.youtube.subs != null ? snap.youtube.subs.toLocaleString('ja-JP') + '人' : '---';
+    g.fillText(`YT登録者 ${subs} / 目標${(CFG.youtubeGoal || 0).toLocaleString('ja-JP')}`, 487, 40);
+    // 掲示板に「紙で貼った」ミッション+保留タグ
+    rr(g, 80, 15, 168, 26, '#fbf6ea', '#c8bca0');
+    g.fillStyle = '#e05a4e';
+    g.beginPath(); g.arc(87, 20, 1.6, 0, 7); g.fill();
+    g.beginPath(); g.arc(241, 20, 1.6, 0, 7); g.fill();
+    g.font = '10px DotGothic16';
+    g.fillStyle = '#3a2e20';
+    const mtxt = CFG.mission || '物語を、毎日届ける。';
+    g.fillText(mtxt, 164 - g.measureText(mtxt).width / 2, 32);
+    const n = snap && snap.tasks && snap.tasks.count != null ? snap.tasks.count : 0;
+    g.font = '6px DotGothic16';
+    const bt = `保留タスク ${n}件`;
+    const bw = g.measureText(bt).width + 12;
+    g.fillStyle = 'rgba(255,253,246,.94)';
+    g.beginPath(); g.roundRect(100.5, 46.5, bw, 10, 2); g.fill();
+    g.strokeStyle = 'rgba(74,59,42,.35)'; g.stroke();
+    g.fillStyle = '#e05a4e'; g.beginPath(); g.arc(105.5, 51.5, 2, 0, 7); g.fill();
+    g.fillStyle = '#4a3b2a'; g.fillText(bt, 110, 54);
+
     // 時計: 下絵を完全に覆う文字盤+リアル時刻
     const ccx = 353, ccy = 30;
     g.fillStyle = '#8a6a4a';
@@ -454,27 +483,6 @@ function drawOffice(g, t, tm) {
     g.beginPath(); g.moveTo(ccx, ccy); g.lineTo(ccx + Math.cos(mA) * 11, ccy + Math.sin(mA) * 11); g.stroke();
     g.lineCap = 'butt'; g.lineWidth = 1;
     g.fillStyle = '#3a2e20'; g.beginPath(); g.arc(ccx, ccy, 1.5, 0, 7); g.fill();
-    // 看板に社名とYT登録者
-    g.font = '13px DotGothic16'; g.fillStyle = '#f0d890';
-    g.fillText('MON-AI Inc.', 489, 24);
-    g.font = '8px DotGothic16'; g.fillStyle = '#e8d0a0';
-    const subs = snap && snap.youtube && snap.youtube.subs != null ? snap.youtube.subs.toLocaleString('ja-JP') + '人' : '---';
-    g.fillText(`YT登録者 ${subs} / 目標${(CFG.youtubeGoal || 0).toLocaleString('ja-JP')}`, 487, 40);
-    // 掲示板=ミッションボード(大きな文字)+保留タグ
-    rr(g, 66, 12, 196, 30, '#3a3026');
-    g.font = '13px DotGothic16';
-    g.fillStyle = '#f0d890';
-    const mtxt = CFG.mission || '物語を、毎日届ける。';
-    g.fillText(mtxt, 164 - g.measureText(mtxt).width / 2, 32);
-    const n = snap && snap.tasks && snap.tasks.count != null ? snap.tasks.count : 0;
-    g.font = '6px DotGothic16';
-    const bt = `保留タスク ${n}件`;
-    const bw = g.measureText(bt).width + 12;
-    g.fillStyle = 'rgba(255,253,246,.94)';
-    g.beginPath(); g.roundRect(100.5, 46.5, bw, 10, 2); g.fill();
-    g.strokeStyle = 'rgba(74,59,42,.35)'; g.stroke();
-    g.fillStyle = '#e05a4e'; g.beginPath(); g.arc(105.5, 51.5, 2, 0, 7); g.fill();
-    g.fillStyle = '#4a3b2a'; g.fillText(bt, 110, 54);
   } else {
     // 床
     g.fillStyle = '#e8d5ae';
@@ -608,7 +616,7 @@ function drawOffice(g, t, tm) {
   if (!drawProp(g, 'vending', 80, 206, 24, 40)) rr(g, 80, 210, 24, 36, '#d05a5a', INK);
   drawProp(g, 'snack', 108, 210, 28, 36);
   drawProp(g, 'cooler', 140, 208, 20, 36);
-  drawProp(g, 'plant_a', 166, 210, 22, 34);
+  drawProp(g, 'plant_a', 164, 296, 22, 36);
   if (!drawProp(g, 'sofa', 20, 286, 60, 30)) {
     rr(g, 24, 296, 52, 20, '#7a9ac8', INK);
   }
@@ -665,6 +673,7 @@ function outPath(pt) {
   if (y < 160) return [{ x, y: LANE_Y }];                                                   // 上段: 座席は机の下なので直進
   if (y > 210 && x >= 216 && x <= 368) return [{ x, y: 328 }, { x: 376, y: 328 }, { x: 376, y: LANE_Y }]; // 総務部: 机の下→右から出る
   if (y > 210 && x < 210) return [{ x, y: 274 }, { x: 150, y: 274 }, { x: 150, y: LANE_Y }]; // 休憩室: 室内通路y274→入口列x150
+  if (x > 392 && x < 458 && y > 198 && y < 252) return [{ x, y: 258 }, { x: 384, y: 258 }, { x: 384, y: LANE_Y }]; // 会議テーブル: 下から迂回
   if (y > 224 && x > 470) return [{ x: 460, y: 280 }, { x: 460, y: LANE_Y }];               // スタジオ側
   return [{ x, y: LANE_Y }];
 }
@@ -755,10 +764,10 @@ const REST_SPOTS = [
   { x: 60, y: 312, sy: 312, a: 'sit', via: 278 },   // ソファ右
   { x: 104, y: 314, sy: 314, a: 'sit', via: 278 },  // アームチェア1
   { x: 138, y: 314, sy: 314, a: 'sit', via: 278 },  // アームチェア2
-  { x: 34, y: 272, a: 'faceU' },                    // コーヒー前
-  { x: 92, y: 272, a: 'faceU' },                    // 自販機前
-  { x: 121, y: 272, a: 'faceU' },                   // スナック棚前
-  { x: 150, y: 272, a: 'faceU' },                   // 給水機前
+  { x: 34, y: 282, a: 'faceU' },                    // コーヒー前
+  { x: 92, y: 282, a: 'faceU' },                    // 自販機前
+  { x: 121, y: 282, a: 'faceU' },                   // スナック棚前
+  { x: 150, y: 282, a: 'faceU' },                   // 給水機前
 ];
 function pickRestSpot() {
   const free = REST_SPOTS.filter(sp => !sp.busy);
@@ -886,8 +895,8 @@ class Employee extends Person {
     if (this.hp != null) drawHp(g, x, y - 12, this.hp);
     g.font = '5px DotGothic16';
     const nw = g.measureText(this.name).width;
-    const restSeat = seated && (this.resting || this.atMeeting);
-    const ny = restSeat ? y - 3 : seated ? y + 35 : y + 3;
+    const cbL = seated && (this.resting || this.atMeeting) ? 0.30 : 0;
+    const ny = y + 3 - 30 * cbL;
     g.fillStyle = 'rgba(255,250,240,.9)';
     g.fillRect(x - nw / 2 - 2, ny, nw + 4, 7);
     g.fillStyle = INK;
@@ -922,7 +931,7 @@ const employees = CFG.employees.map((d, i) => new Employee(d, i));
    ================================================================ */
 const chat = { next: 25000, active: null };
 
-const MEET_SEATS = [ { x: 405, y: 224 }, { x: 445, y: 224 } ];
+const MEET_SEATS = [ { x: 406, y: 240 }, { x: 444, y: 240 } ];
 let meetBusy = false;
 
 const CHAT_OPENERS = [
@@ -1000,7 +1009,7 @@ function stepChat(t) {
     for (const [e, seat] of pair) {
       e.releaseSpot(); e.resting = false; e.atMeeting = true;
       e.arrivalSitY = seat.y;
-      e.goto({ x: seat.x, y: seat.y - 28 }, 'sit');
+      e.goto({ x: seat.x, y: seat.y + 6 }, 'sit');
     }
     chat.active = { a, b, lines: makeChatLines().concat(makeChatLines()), li: 0, meeting: true, phase: 'go', nextLine: 0 };
   } else {
