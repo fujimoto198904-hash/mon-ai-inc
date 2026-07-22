@@ -28,7 +28,7 @@ window.OFFICE_CONFIG = {
   // 体型フラグ: fat / tall / slim / bald
   employees: [
     { id: 'fujimoto', name: '藤本', dept: '社長室', role: '社長',
-      hair: '#2a2220', shirt: '#2a2a30', fat: true, desk: { x: 64, y: 96 }, source: 'boss', deskType: 'exec', pc: 'mon2' },
+      hair: '#2a2220', shirt: '#2a2a30', fat: true, desk: { x: 64, y: 96 }, source: 'boss', pc: 'mon2' },
 
     { id: 'ito', name: '伊藤', dept: 'プロジェクト-T', role: 'クロード作業',
       hair: '#f8d8b8', bald: true, tall: true, shirt: '#5a8a6a', desk: { x: 168, y: 96 },
@@ -53,13 +53,13 @@ window.OFFICE_CONFIG = {
       source: 'claude', match: '^yorutool' },
 
     { id: 'arimoto', name: '有本', dept: '総務部', role: 'クロード作業(基盤・ツール)',
-      hair: '#2a2220', shirt: '#3a3a4a', desk: { x: 240, y: 262 },
+      hair: '#2a2220', shirt: '#3a3a4a', desk: { x: 206, y: 262 },
       source: 'claude', match: '^(Irodori)' },
     { id: 'kato', name: '加藤', dept: '総務部', role: 'クロード作業(雑務)',
-      hair: '#8a5a2e', shirt: '#c8a04a', desk: { x: 292, y: 262 },
+      hair: '#8a5a2e', shirt: '#c8a04a', desk: { x: 256, y: 262 },
       source: 'claude', pc: 'laptop' },
     { id: 'zama', name: '座間', dept: '総務部', role: 'コーデックス作業(その他)',
-      hair: '#8a5a2e', slim: true, shirt: '#48a08a', desk: { x: 344, y: 262 },
+      hair: '#8a5a2e', slim: true, shirt: '#48a08a', desk: { x: 306, y: 262 },
       source: 'codex', pc: 'laptop' },
   ],
 };
