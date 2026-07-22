@@ -595,7 +595,7 @@ function drawOffice(g, t, tm) {
   g.fillStyle = '#fff'; g.font = '6px DotGothic16'; g.fillText('ON AIR', 581, 239);
   if (!onAir) { g.fillStyle = '#ff6a5e'; g.font = '6px DotGothic16'; g.fillText('TTS停止中!', 520, 239); }
 
-  drawProp(g, 'firstaid', 319, 14, 13, 13);
+
   if (!drawProp(g, 'sofa', 20, 288, 60, 30)) rr(g, 24, 296, 52, 20, '#7a9ac8', INK);
   drawProp(g, 'armchair', 92, 288, 26, 32);
   drawProp(g, 'armchair', 126, 288, 26, 32);
@@ -730,10 +730,10 @@ const REST_SPOTS = [
   { x: 60, y: 314, sy: 314, a: 'sit', via: 256 },   // ソファ右
   { x: 104, y: 316, sy: 316, a: 'sit', via: 256 },  // アームチェア1
   { x: 138, y: 316, sy: 316, a: 'sit', via: 256 },  // アームチェア2
-  { x: 34, y: 224, a: 'faceU' },                    // コーヒー前
-  { x: 68, y: 224, a: 'faceU' },                    // 自販機前
-  { x: 102, y: 224, a: 'faceU' },                   // スナック棚前
-  { x: 134, y: 224, a: 'faceU' },                   // 給水機前
+  { x: 34, y: 236, a: 'faceU' },                    // コーヒー前
+  { x: 68, y: 236, a: 'faceU' },                    // 自販機前
+  { x: 102, y: 236, a: 'faceU' },                   // スナック棚前
+  { x: 134, y: 236, a: 'faceU' },                   // 給水機前
 ];
 const RECEPTION_STAFF = ['tsukishiro', 'kato', 'zama'];
 const RECEPTION_POST = { x: 306, y: 302 };
@@ -1320,7 +1320,7 @@ function stepDog(dt, t) {
   if (!dog.target) {
     if (t > dog.next) {
       if (Math.random() < 0.35) { dog.napUntil = t + 12000 + Math.random() * 18000; dog.next = dog.napUntil; return; }
-      const spots = [{ x: 90, y: 192 }, { x: 200, y: 195 }, { x: 300, y: 198 }, { x: 380, y: 194 }, { x: 470, y: 200 }, { x: 240, y: 200 }];
+      const spots = [{ x: 250, y: 198 }, { x: 320, y: 200 }, { x: 420, y: 204 }, { x: 500, y: 205 }, { x: 560, y: 202 }, { x: 100, y: 258 }, { x: 60, y: 264 }];
       dog.target = spots[Math.floor(Math.random() * spots.length)];
     }
     return;
@@ -1682,7 +1682,7 @@ function loop(t) {
 
     ['copier', 524, 154, 26, 32], ['tower', 554, 148, 20, 38], ['netcab', 578, 150, 22, 36], ['rack', 604, 140, 26, 46],
     ['bin_g', 600, 192, 10, 15], ['bin_r', 613, 192, 10, 15], ['exting', 11, 66, 8, 17],
-    ['reception', 252, 284, 112, 42], ['sanitizer', 388, 314, 10, 24],
+    ['reception', 252, 284, 112, 42], ['sanitizer', 388, 314, 10, 24], ['firstaid', 386, 296, 13, 13],
   ];
 
 
