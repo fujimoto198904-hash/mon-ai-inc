@@ -630,7 +630,7 @@ function outPath(pt, lane) {
   const { x, y } = pt;
   if (y < 160 && x < 132) return [{ x, y: 168 }, { x: 240, y: 168 }, { x: 240, y: L }];      // 社長室: 休憩室の上の帯を東へ
   if (y < 160) { const a = x - 31; return [{ x: a, y }, { x: a, y: L }]; }                   // 上段: 机の間の隙間から
-  if (y > 282 && x >= 240 && x <= 380) return [{ x, y: 288 }, { x: 374, y: 288 }, { x: 374, y: L }]; // 受付まわり: 右の通路から
+  if (y > 276 && x >= 236 && x <= 380) return [{ x, y: 278 }, { x: 374, y: 278 }, { x: 374, y: L }]; // 受付まわり: 右の通路から
   if (y > 198 && y < 285 && x >= 228 && x <= 368) return [{ x, y: 254 }, { x: 370, y: 254 }, { x: 370, y: L }]; // 総務部: 机の下→右通路
   if (y > 195 && x < 226) return [{ x, y: 256 }, { x: 206, y: 256 }, { x: 206, y: L }];      // 休憩室: 中央通路→右端列
   return [{ x, y: L }];
@@ -748,7 +748,7 @@ const REST_SPOTS = [
   { x: 134, y: 224, a: 'faceU' },                   // 給水機前
 ];
 const RECEPTION_STAFF = ['tsukishiro', 'kato', 'zama'];
-const RECEPTION_POST = { x: 302, y: 314 };
+const RECEPTION_POST = { x: 306, y: 302 };
 let receptionBy = null;
 
 function pickRestSpot() {
@@ -1678,12 +1678,12 @@ function loop(t) {
   // 大型什器(前にいる人を隠す): キッチン家電・棚・スタジオ機材
   const OCCLUDERS = [
     ['coffee_st', 20, 182, 30, 36], ['vending', 58, 180, 24, 38], ['snack', 90, 182, 28, 36],
-    ['cooler', 126, 182, 20, 36], ['bin_g', 154, 186, 11, 16], ['plant_a', 238, 294, 20, 34],
+    ['cooler', 126, 182, 20, 36], ['bin_g', 154, 186, 11, 16], ['plant_a', 232, 282, 20, 34],
 
     ['copier', 554, 154, 26, 32], ['netcab', 584, 150, 22, 36], ['rack', 610, 140, 26, 46],
     ['ccart', 556, 192, 22, 24], ['ladder', 582, 196, 14, 18],
     ['bin_g', 600, 199, 10, 15], ['bin_r', 613, 199, 10, 15], ['exting', 632, 146, 8, 17],
-    ['reception', 258, 296, 100, 38], ['sanitizer', 366, 302, 10, 25],
+    ['reception', 252, 284, 112, 42], ['sanitizer', 388, 314, 10, 24],
   ];
 
 
@@ -1730,6 +1730,30 @@ function loop(t) {
   bubbleQ.length = 0;
   requestAnimationFrame(loop);
 }
+
+/* ================================================================
+   チャイム: 6:00〜22:00の2時間おき(JST正時)に鳴らす
+   ================================================================ */
+const chime = new Audio('assets/chime.mp3');
+chime.volume = 0.55;
+let chimeUnlocked = false;
+let lastChimeKey = '';
+document.addEventListener('click', () => {
+  if (chimeUnlocked) return;
+  chime.muted = true;
+  chime.play().then(() => { chime.pause(); chime.currentTime = 0; chime.muted = false; chimeUnlocked = true; }).catch(() => {});
+}, { once: true });
+
+setInterval(() => {
+  const tm = jstNow();
+  if (tm.m !== 0) return;
+  if (tm.h < 6 || tm.h > 22 || tm.h % 2 !== 0) return;
+  const key = `${tm.h}`;
+  if (lastChimeKey === key) return;
+  lastChimeKey = key;
+  chime.currentTime = 0;
+  chime.play().catch(() => {});
+}, 5000);
 
 /* ---------- 起動 ---------- */
 (async () => {
