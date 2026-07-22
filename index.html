@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>MON-AI Inc. 社内モニター</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f3ead8;
+    --panel: #fffaf0;
+    --ink: #4a3b2a;
+    --line: #d8c9a8;
+    --accent: #e8843c;
+    --good: #4caf6e;
+    --warn: #e8b93c;
+    --bad: #e05a4e;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'DotGothic16', monospace;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+  #topbar {
+    display: flex; align-items: baseline; gap: 16px;
+    padding: 8px 18px 4px;
+  }
+  #topbar h1 { font-size: 22px; letter-spacing: 2px; }
+  #topbar .sub { font-size: 12px; opacity: .7; }
+  #clock { margin-left: auto; font-size: 26px; letter-spacing: 2px; }
+  #clock small { font-size: 13px; opacity: .7; margin-right: 8px; }
+  #stale {
+    display: none; background: var(--bad); color: #fff;
+    padding: 3px 18px; font-size: 13px;
+  }
+  #main { flex: 1; display: flex; min-height: 0; }
+  #stage {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    min-width: 0; padding: 6px;
+  }
+  #office {
+    image-rendering: pixelated;
+    background: #fff;
+    border: 3px solid var(--ink);
+    border-radius: 4px;
+    box-shadow: 0 6px 0 rgba(74,59,42,.15);
+  }
+  #hud {
+    width: 350px; flex: none; overflow-y: auto;
+    padding: 6px 12px 12px 4px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .card {
+    background: var(--panel);
+    border: 2px solid var(--ink);
+    border-radius: 6px;
+    box-shadow: 3px 3px 0 rgba(74,59,42,.18);
+    padding: 8px 10px;
+  }
+  .card h2 {
+    font-size: 13px; letter-spacing: 1px; margin-bottom: 6px;
+    border-bottom: 2px dotted var(--line); padding-bottom: 3px;
+  }
+  .big { font-size: 24px; }
+  .row { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; padding: 1px 0; }
+  .row .lbl { opacity: .75; }
+  .bar { height: 8px; background: #e7dcc3; border: 1px solid var(--ink); border-radius: 3px; overflow: hidden; margin: 2px 0 5px; }
+  .bar > i { display: block; height: 100%; background: var(--good); }
+  .emp {
+    display: grid; grid-template-columns: 30px 1fr auto; gap: 6px;
+    align-items: center; padding: 4px 0;
+    border-bottom: 1px dashed var(--line);
+  }
+  .emp:last-child { border-bottom: none; }
+  .emp canvas { image-rendering: pixelated; }
+  .emp .nm { font-size: 13px; }
+  .emp .rl { font-size: 10px; opacity: .65; }
+  .emp .job { font-size: 10px; opacity: .8; grid-column: 2 / 4; margin-top: -2px; }
+  .chip {
+    font-size: 10px; padding: 1px 6px; border: 1px solid var(--ink);
+    border-radius: 8px; white-space: nowrap;
+  }
+  .chip.work { background: var(--good); color: #fff; }
+  .chip.idle { background: #efe6d0; }
+  .chip.rest { background: var(--warn); }
+  .chip.sleep { background: #b8c4e0; }
+  .chip.off { background: #ddd; opacity: .7; }
+  .chip.panic { background: var(--bad); color: #fff; }
+  .hp { width: 54px; }
+  .hp .bar { margin: 0; }
+  .hp .pct { font-size: 9px; text-align: right; opacity: .7; }
+  #tasks li { font-size: 12px; list-style: none; padding: 2px 0; border-bottom: 1px dashed var(--line); }
+  #tasks li:last-child { border-bottom: none; }
+  #tasks li b { color: var(--accent); margin-right: 4px; }
+  #footer { font-size: 11px; opacity: .65; text-align: right; }
+  #gate {
+    position: fixed; inset: 0; background: var(--bg);
+    display: none; align-items: center; justify-content: center;
+    z-index: 10; text-align: center; line-height: 2;
+  }
+</style>
+</head>
+<body>
+  <div id="topbar">
+    <h1>🏢 MON-AI Inc.</h1>
+    <span class="sub" id="mission"></span>
+    <div id="clock"><small id="date"></small><span id="time">--:--</span></div>
+  </div>
+  <div id="stale">⚠ データが届いていません(コレクター停止の可能性)— 最終受信: <span id="staleAge"></span></div>
+  <div id="main">
+    <div id="stage"><canvas id="office" width="640" height="360"></canvas></div>
+    <div id="hud">
+      <div class="card">
+        <h2>💰 経営ボード(API換算)</h2>
+        <div class="row"><span class="lbl">本日のAI人件費</span><span class="big" id="todayCost">--</span></div>
+        <div class="row"><span class="lbl">今月累計</span><span id="monthCost">--</span></div>
+        <div class="row"><span class="lbl">現在の燃焼率</span><span id="burnRate">--</span></div>
+        <div class="row"><span class="lbl">Claude / Codex(今日)</span><span id="splitCost">--</span></div>
+        <div class="bar"><i id="splitBar" style="width:50%;background:var(--accent)"></i></div>
+        <div id="subs"></div>
+      </div>
+      <div class="card">
+        <h2>👥 社員名簿</h2>
+        <div id="roster"></div>
+        <div style="font-size:10px;opacity:.55;margin-top:4px" id="staffNote"></div>
+      </div>
+      <div class="card">
+        <h2>📈 チャンネル(売上ボード)</h2>
+        <div id="youtube" class="row" style="gap:12px"></div>
+      </div>
+      <div class="card">
+        <h2>📦 本日の納品</h2>
+        <div id="deliveries" class="row" style="gap:12px"></div>
+      </div>
+      <div class="card">
+        <h2>📌 社長タスク(保留台帳)</h2>
+        <ul id="tasks"></ul>
+      </div>
+      <div id="footer">最終更新: <span id="lastTs">--</span></div>
+    </div>
+  </div>
+  <div id="gate">
+    <div>
+      <div style="font-size:28px">🔒 MON-AI Inc.</div>
+      <div>閲覧トークンがURLにありません。<br>URLの末尾に <b>#v=(閲覧トークン)</b> を付けてアクセスしてください。</div>
+    </div>
+  </div>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
