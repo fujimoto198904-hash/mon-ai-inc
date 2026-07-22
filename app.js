@@ -109,6 +109,28 @@ for (const id of ['fujimoto', 'amakawa', 'tsukishiro', 'ito', 'sasaki', 'ando', 
   img.src = `assets/sheets/${id}.png`;
 }
 
+/* ---------- オフィスパーツ(ユーザー製タイルセット) ---------- */
+const OFFICE = {};
+{
+  const bg = new Image();
+  bg.onload = () => { OFFICE.bg = bg; };
+  bg.src = 'assets/office/bg.png';
+  for (const k of ['vending', 'sofa', 'plant', 'cooler']) {
+    const im = new Image();
+    im.onload = () => { OFFICE[k] = keyOutBackground(im); };
+    im.src = `assets/office/${k}.png`;
+  }
+}
+function drawProp(g, key, x, y, w, h) {
+  const im = OFFICE[key];
+  if (!im) return false;
+  g.save();
+  g.imageSmoothingEnabled = true;
+  g.drawImage(im, x, y, w, h);
+  g.restore();
+  return true;
+}
+
 function drawSheet(g, img, dir, fi, x, y, h) {
   const cw = (img.naturalWidth || img.width) / 3, ch = (img.naturalHeight || img.height) / 4;
   const row = dir === 'left' || dir === 'right' ? 1 : dir === 'up' ? 3 : 0;
@@ -304,70 +326,99 @@ function drawOffice(g, t, tm) {
   const hour = tm.h + tm.m / 60;
   const night = hour >= 19 || hour < 6;
 
-  // 床
-  g.fillStyle = '#e8d5ae';
-  g.fillRect(0, 48, W, H - 48);
-  g.fillStyle = 'rgba(160,130,80,.25)';
-  for (let y = 48; y < H; y += 16) g.fillRect(0, y, W, 1);
-  for (let x = 0; x < W; x += 32) for (let y = 48; y < H; y += 16) g.fillRect(x + ((y / 16) % 2) * 16, y, 1, 16);
+  if (OFFICE.bg) {
+    // ユーザー製パーツのオフィス全景を背景に(壁・床・掲示板・時計・看板込み)
+    g.save(); g.imageSmoothingEnabled = true;
+    g.drawImage(OFFICE.bg, 0, 0, W, H);
+    g.restore();
+    rr(g, 288, 322, 74, 22, '#f2e4c2');  // bg側の入口表記を床色でならす(入口マットは下で描く)
+    // ホワイトボードに社訓
+    g.font = '8px DotGothic16'; g.fillStyle = 'rgba(74,59,42,.85)';
+    g.fillText('《社訓》', 272, 13);
+    (CFG.mottos || []).slice(0, 3).forEach((m, k) => g.fillText(String(m).slice(0, 8), 258, 22 + k * 9));
+    // 時計の針
+    g.strokeStyle = INK; g.lineWidth = 1.4;
+    const mA = tm.m / 60 * Math.PI * 2 - Math.PI / 2, hA = (tm.h % 12 + tm.m / 60) / 12 * Math.PI * 2 - Math.PI / 2;
+    g.beginPath(); g.moveTo(352, 28); g.lineTo(352 + Math.cos(hA) * 6, 28 + Math.sin(hA) * 6); g.stroke();
+    g.beginPath(); g.moveTo(352, 28); g.lineTo(352 + Math.cos(mA) * 9, 28 + Math.sin(mA) * 9); g.stroke();
+    g.lineWidth = 1;
+    // 看板に社名とYT登録者
+    g.font = '13px DotGothic16'; g.fillStyle = '#f0d890';
+    g.fillText('MON-AI Inc.', 489, 24);
+    g.font = '8px DotGothic16'; g.fillStyle = '#e8d0a0';
+    const subs = snap && snap.youtube && snap.youtube.subs != null ? snap.youtube.subs.toLocaleString('ja-JP') + '人' : '---';
+    g.fillText(`YT登録者 ${subs} / 目標${(CFG.youtubeGoal || 0).toLocaleString('ja-JP')}`, 487, 40);
+    // 保留タスク台帳の件数バッジ
+    const n = snap && snap.tasks && snap.tasks.count != null ? snap.tasks.count : 0;
+    rr(g, 98, 47, 56, 12, '#fff8e0', INK);
+    g.fillStyle = INK; g.fillText(`保留 ${n}件`, 103, 56);
+  } else {
+    // 床
+    g.fillStyle = '#e8d5ae';
+    g.fillRect(0, 48, W, H - 48);
+    g.fillStyle = 'rgba(160,130,80,.25)';
+    for (let y = 48; y < H; y += 16) g.fillRect(0, y, W, 1);
+    for (let x = 0; x < W; x += 32) for (let y = 48; y < H; y += 16) g.fillRect(x + ((y / 16) % 2) * 16, y, 1, 16);
 
-  // 壁
-  g.fillStyle = '#f7f0dd'; g.fillRect(0, 0, W, 44);
-  g.fillStyle = '#d8c9a8'; g.fillRect(0, 44, W, 4);
+    // 壁
+    g.fillStyle = '#f7f0dd'; g.fillRect(0, 0, W, 44);
+    g.fillStyle = '#d8c9a8'; g.fillRect(0, 44, W, 4);
 
-  // 窓と空
-  for (const wx of [168, 348]) {
-    let sky;
-    if (hour >= 20 || hour < 4) sky = '#1a2a4a';
-    else if (hour < 6) sky = '#4a5a8a';
-    else if (hour < 8) sky = '#f0b060';
-    else if (hour < 16) sky = '#8ecae6';
-    else if (hour < 18) sky = '#f0a860';
-    else sky = '#3a4a7a';
-    rr(g, wx, 6, 56, 34, sky, INK);
-    if (hour >= 20 || hour < 5) {
-      g.fillStyle = '#fff';
-      g.fillRect(wx + 10, 12, 1, 1); g.fillRect(wx + 30, 20, 1, 1); g.fillRect(wx + 44, 10, 1, 1);
-      g.fillStyle = '#f0e8a0'; g.fillRect(wx + 40, 26, 4, 4);
-    } else if (hour >= 8 && hour < 16) {
-      g.fillStyle = '#fff';
-      g.fillRect(wx + 8 + (Math.floor(t / 900) % 40), 12, 8, 3);
+    // 窓と空
+    for (const wx of [168, 348]) {
+      let sky;
+      if (hour >= 20 || hour < 4) sky = '#1a2a4a';
+      else if (hour < 6) sky = '#4a5a8a';
+      else if (hour < 8) sky = '#f0b060';
+      else if (hour < 16) sky = '#8ecae6';
+      else if (hour < 18) sky = '#f0a860';
+      else sky = '#3a4a7a';
+      rr(g, wx, 6, 56, 34, sky, INK);
+      if (hour >= 20 || hour < 5) {
+        g.fillStyle = '#fff';
+        g.fillRect(wx + 10, 12, 1, 1); g.fillRect(wx + 30, 20, 1, 1); g.fillRect(wx + 44, 10, 1, 1);
+        g.fillStyle = '#f0e8a0'; g.fillRect(wx + 40, 26, 4, 4);
+      } else if (hour >= 8 && hour < 16) {
+        g.fillStyle = '#fff';
+        g.fillRect(wx + 8 + (Math.floor(t / 900) % 40), 12, 8, 3);
+      }
+      g.strokeStyle = INK; g.beginPath();
+      g.moveTo(wx + 28.5, 6); g.lineTo(wx + 28.5, 40); g.stroke();
     }
-    g.strokeStyle = INK; g.beginPath();
-    g.moveTo(wx + 28.5, 6); g.lineTo(wx + 28.5, 40); g.stroke();
+
+    // 社長室コルクボード(保留タスク)
+    rr(g, 24, 6, 120, 34, '#c8a878', INK);
+    g.font = '9px DotGothic16'; g.fillStyle = INK;
+    g.fillText('保留タスク台帳', 52, 16);
+    const n = snap && snap.tasks && snap.tasks.count != null ? snap.tasks.count : 0;
+    for (let i = 0; i < Math.min(n, 14); i++) {
+      rr(g, 30 + (i % 7) * 16, 20 + Math.floor(i / 7) * 9, 10, 7, i % 2 ? '#fff8e0' : '#e0f0ff', '#a09070');
+    }
+
+    // 社訓ポスター
+    rr(g, 234, 5, 62, 38, '#fff8e8', INK);
+    g.font = '8px DotGothic16'; g.fillStyle = '#b04a3c';
+    g.fillText('《社訓》', 250, 14);
+    g.fillStyle = INK;
+    (CFG.mottos || []).slice(0, 3).forEach((m, i) => g.fillText(String(m).slice(0, 8), 238, 23 + i * 9));
+
+    // 時計
+    g.fillStyle = '#fff'; g.beginPath(); g.arc(320, 22, 11, 0, 7); g.fill();
+    g.strokeStyle = INK; g.lineWidth = 2; g.beginPath(); g.arc(320, 22, 11, 0, 7); g.stroke();
+    g.lineWidth = 1;
+    const mA = tm.m / 60 * Math.PI * 2 - Math.PI / 2, hA = (tm.h % 12 + tm.m / 60) / 12 * Math.PI * 2 - Math.PI / 2;
+    g.beginPath(); g.moveTo(320, 22); g.lineTo(320 + Math.cos(hA) * 5, 22 + Math.sin(hA) * 5); g.stroke();
+    g.beginPath(); g.moveTo(320, 22); g.lineTo(320 + Math.cos(mA) * 8, 22 + Math.sin(mA) * 8); g.stroke();
+
+    // 社名看板 + 登録者カウンター
+    rr(g, 412, 8, 204, 30, '#4a3b2a');
+    g.font = '13px DotGothic16'; g.fillStyle = '#f0d890';
+    g.fillText('MON-AI Inc.', 424, 22);
+    g.font = '9px DotGothic16'; g.fillStyle = '#e8d0a0';
+    const subs = snap && snap.youtube && snap.youtube.subs != null ? snap.youtube.subs.toLocaleString('ja-JP') + '人' : '---';
+    g.fillText(`YT登録者 ${subs} / 目標${(CFG.youtubeGoal || 0).toLocaleString('ja-JP')}`, 424, 33);
+
   }
-
-  // 社長室コルクボード(保留タスク)
-  rr(g, 24, 6, 120, 34, '#c8a878', INK);
-  g.font = '9px DotGothic16'; g.fillStyle = INK;
-  g.fillText('保留タスク台帳', 52, 16);
-  const n = snap && snap.tasks && snap.tasks.count != null ? snap.tasks.count : 0;
-  for (let i = 0; i < Math.min(n, 14); i++) {
-    rr(g, 30 + (i % 7) * 16, 20 + Math.floor(i / 7) * 9, 10, 7, i % 2 ? '#fff8e0' : '#e0f0ff', '#a09070');
-  }
-
-  // 社訓ポスター
-  rr(g, 234, 5, 62, 38, '#fff8e8', INK);
-  g.font = '8px DotGothic16'; g.fillStyle = '#b04a3c';
-  g.fillText('《社訓》', 250, 14);
-  g.fillStyle = INK;
-  (CFG.mottos || []).slice(0, 3).forEach((m, i) => g.fillText(String(m).slice(0, 8), 238, 23 + i * 9));
-
-  // 時計
-  g.fillStyle = '#fff'; g.beginPath(); g.arc(320, 22, 11, 0, 7); g.fill();
-  g.strokeStyle = INK; g.lineWidth = 2; g.beginPath(); g.arc(320, 22, 11, 0, 7); g.stroke();
-  g.lineWidth = 1;
-  const mA = tm.m / 60 * Math.PI * 2 - Math.PI / 2, hA = (tm.h % 12 + tm.m / 60) / 12 * Math.PI * 2 - Math.PI / 2;
-  g.beginPath(); g.moveTo(320, 22); g.lineTo(320 + Math.cos(hA) * 5, 22 + Math.sin(hA) * 5); g.stroke();
-  g.beginPath(); g.moveTo(320, 22); g.lineTo(320 + Math.cos(mA) * 8, 22 + Math.sin(mA) * 8); g.stroke();
-
-  // 社名看板 + 登録者カウンター
-  rr(g, 412, 8, 204, 30, '#4a3b2a');
-  g.font = '13px DotGothic16'; g.fillStyle = '#f0d890';
-  g.fillText('MON-AI Inc.', 424, 22);
-  g.font = '9px DotGothic16'; g.fillStyle = '#e8d0a0';
-  const subs = snap && snap.youtube && snap.youtube.subs != null ? snap.youtube.subs.toLocaleString('ja-JP') + '人' : '---';
-  g.fillText(`YT登録者 ${subs} / 目標${(CFG.youtubeGoal || 0).toLocaleString('ja-JP')}`, 424, 33);
 
   // ラグ(部署)
   rr(g, 16, 60, 104, 92, '#e0c8e8', '#c0a0c8');    // 社長室
@@ -427,22 +478,30 @@ function drawOffice(g, t, tm) {
   rr(g, 27, 232, 10, 7, '#4a3b2a');
   g.fillStyle = '#e05a4e'; g.fillRect(28, 246, 3, 3);
   if (Math.floor(t / 500) % 3) { g.fillStyle = 'rgba(200,200,210,.7)'; g.fillRect(31, 222 - Math.floor(t / 250) % 4, 2, 3); }
-  rr(g, 52, 222, 20, 32, '#d05a5a', INK);
-  g.fillStyle = '#fff'; g.fillRect(55, 226, 14, 10);
-  g.fillStyle = '#5ab0e8'; g.fillRect(55, 227, 4, 4);
-  g.fillStyle = '#e8b93c'; g.fillRect(60, 227, 4, 4);
-  g.fillStyle = '#4caf6e'; g.fillRect(65, 227, 4, 4);
-  rr(g, 40, 306, 52, 20, '#7a9ac8', INK);
-  rr(g, 40, 302, 52, 8, '#8aaad8', INK);
+  if (!drawProp(g, 'vending', 48, 218, 24, 40)) {
+    rr(g, 52, 222, 20, 32, '#d05a5a', INK);
+    g.fillStyle = '#fff'; g.fillRect(55, 226, 14, 10);
+    g.fillStyle = '#5ab0e8'; g.fillRect(55, 227, 4, 4);
+    g.fillStyle = '#e8b93c'; g.fillRect(60, 227, 4, 4);
+    g.fillStyle = '#4caf6e'; g.fillRect(65, 227, 4, 4);
+  }
+  if (!drawProp(g, 'sofa', 34, 296, 62, 30)) {
+    rr(g, 40, 306, 52, 20, '#7a9ac8', INK);
+    rr(g, 40, 302, 52, 8, '#8aaad8', INK);
+  }
   rr(g, 120, 276, 28, 18, '#b8905c', INK);
   rr(g, 126, 272, 6, 6, '#fff', '#c0b090');
-  rr(g, 168, 214, 12, 6, '#a06a3c');
-  g.fillStyle = '#4caf6e';
-  g.fillRect(170, 202, 8, 12); g.fillRect(166, 206, 6, 6); g.fillRect(176, 205, 6, 7);
+  if (!drawProp(g, 'plant', 158, 196, 28, 42)) {
+    rr(g, 168, 214, 12, 6, '#a06a3c');
+    g.fillStyle = '#4caf6e';
+    g.fillRect(170, 202, 8, 12); g.fillRect(166, 206, 6, 6); g.fillRect(176, 205, 6, 7);
+  }
 
   // ウォーターサーバー / プリンタ(廊下)
-  rr(g, 198, 240, 10, 22, '#d8e8f0', INK);
-  rr(g, 200, 234, 6, 8, '#8ec8e8', INK);
+  if (!drawProp(g, 'cooler', 192, 230, 20, 36)) {
+    rr(g, 198, 240, 10, 22, '#d8e8f0', INK);
+    rr(g, 200, 234, 6, 8, '#8ec8e8', INK);
+  }
   rr(g, 190, 284, 26, 14, '#b8905c', INK);
   rr(g, 194, 276, 18, 10, '#8a8a96', INK);
   if (Math.floor(t / 700) % 4 === 0) { g.fillStyle = '#fff'; g.fillRect(197, 284, 12, 2); }
@@ -575,10 +634,15 @@ class Person {
 /* ================================================================
    AI社員
    ================================================================ */
-const WANDER = [
-  { x: 240, y: 190 }, { x: 380, y: 190 }, { x: 120, y: 190 }, { x: 460, y: 200 },
-  { x: 44, y: 250 }, { x: 76, y: 258 }, { x: 130, y: 300 }, { x: 210, y: 330 }, { x: 202, y: 250 },
+const REST_SPOTS = [
+  { x: 52, y: 302, a: 'sit' },    // ソファ左
+  { x: 78, y: 302, a: 'sit' },    // ソファ右
+  { x: 132, y: 282, a: 'stand' }, // テーブル
+  { x: 60, y: 252, a: 'faceU' },  // 自販機
+  { x: 40, y: 252, a: 'coffee' }, // コーヒー
+  { x: 202, y: 252, a: 'faceU' }, // 給水機
 ];
+const REST_TALK = ['ふぅ…ひと息', '指示待ちの休憩なう', 'コーヒーうまい', '次の仕事まだかな', '(サボってるわけでは…)'];
 
 class Employee extends Person {
   constructor(def, i) {
@@ -590,12 +654,14 @@ class Employee extends Person {
     this.hp = null;
     this.jobText = '';
     this.bubbles = [];
+    this.resting = false;
     this.sweat = false;
   }
 
   setMode(m) {
     if (this.mode === m) return;
     this.mode = m;
+    if (m !== 'idle') this.resting = false;
     if (m === 'working') this.goto(this.desk, 'sit');
     else if (m === 'sleep') this.goto(this.desk, 'sleep');
     else if (m === 'off' || m === 'out' || m === 'sleephome') this.goto({ x: 318, y: 348 }, 'leave');
@@ -604,13 +670,24 @@ class Employee extends Person {
 
   think(t, tm) {
     if (this.action === 'walk') return;
-    if (this.mode === 'idle' && t > this.nextThink) {
-      const r = Math.random();
-      if (r < 0.35) { this.goto(this.desk, 'sit'); }
-      else if (r < 0.55) { this.goto({ x: 44, y: 250 }, 'coffee'); }
-      else { this.goto(WANDER[Math.floor(Math.random() * WANDER.length)], 'stand'); }
-      this.nextThink = t + 9000 + Math.random() * 14000;
+    if (this.mode !== 'idle' || t < this.nextThink) return;
+    const r = Math.random();
+    if (this.resting) {
+      if (r < 0.3) {
+        this.resting = false;
+        this.goto(this.desk, 'sit');            // たまに席へ戻って待機
+      } else if (r < 0.5) {
+        const sp = REST_SPOTS[Math.floor(Math.random() * REST_SPOTS.length)];
+        this.goto(sp, sp.a);                    // 休憩室内で場所替え
+      }
+      if (Math.random() < 0.6) this.say(t + 600, REST_TALK[Math.floor(Math.random() * REST_TALK.length)]);
+    } else if (r < 0.35) {
+      this.resting = true;                      // 休憩室へ(サボりモード)
+      const sp = REST_SPOTS[Math.floor(Math.random() * REST_SPOTS.length)];
+      this.goto(sp, sp.a);
     }
+    // それ以外はデスクで待機し続ける(無駄に歩かない)
+    this.nextThink = t + 30000 + Math.random() * 50000;
   }
 
   step(dt, t) {
@@ -937,7 +1014,8 @@ function updateHud() {
   const roster = $('roster');
   roster.innerHTML = '';
   for (const e of employees) {
-    const [cls, label] = CHIP[e.mode] || CHIP.idle;
+    let [cls, label] = CHIP[e.mode] || CHIP.idle;
+    if (e.mode === 'idle' && e.resting) [cls, label] = CHIP.break;
     const row = document.createElement('div');
     row.className = 'emp';
     const sheet = SHEETS[e.spriteId || e.id];
