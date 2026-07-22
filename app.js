@@ -70,7 +70,112 @@ let lastArrivalT = -1;
 /* ---------- 歩行スプライトシート(assets/sheets/<id>.png 3列x4行) ----------
    行: 0=正面 1=左向き 3=後ろ姿(右向きは左を反転)。列: 歩行3コマ(中央=立ち) */
 const SHEETS = {};
-// AI生成シートは背景の市松模様が実ピクセルなので、外周からのflood-fillで透過化する
+// AI生成シートの下ごしらえ:
+//  1) 外周flood-fillで背景(白/市松)を透過
+//  2) コマ(3x4)ごとに最大の連結成分だけ残す(ノイズ・隣コマの混入・影を除去)
+//  3) 実際に絵がある範囲(bbox)を記録し、描画はbbox基準(頭切れ・コマずれ解消)
+function processSheet(img) {
+  const w = img.naturalWidth, h = img.naturalHeight;
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  g.drawImage(img, 0, 0);
+  const im = g.getImageData(0, 0, w, h);
+  const d = im.data;
+  const isBg = i => {
+    const r = d[i], gg = d[i + 1], b = d[i + 2];
+    return Math.abs(r - gg) < 16 && Math.abs(gg - b) < 16 && Math.abs(r - b) < 16 && r > 178;
+  };
+  const seen = new Uint8Array(w * h);
+  const stack = [];
+  for (let x = 0; x < w; x++) { stack.push(x); stack.push((h - 1) * w + x); }
+  for (let y = 0; y < h; y++) { stack.push(y * w); stack.push(y * w + w - 1); }
+  while (stack.length) {
+    const pIdx = stack.pop();
+    if (seen[pIdx]) continue;
+    seen[pIdx] = 1;
+    const i4 = pIdx * 4;
+    if (!isBg(i4)) continue;
+    d[i4 + 3] = 0;
+    const x = pIdx % w, y = (pIdx / w) | 0;
+    if (x > 0) stack.push(pIdx - 1);
+    if (x < w - 1) stack.push(pIdx + 1);
+    if (y > 0) stack.push(pIdx - w);
+    if (y < h - 1) stack.push(pIdx + w);
+  }
+  // コマごとの成分解析
+  const cw = w / 3, ch = h / 4;
+  const label = new Int32Array(w * h);
+  const boxes = [];
+  for (let row = 0; row < 4; row++) for (let col = 0; col < 3; col++) {
+    const x0 = Math.floor(col * cw), x1 = Math.floor((col + 1) * cw);
+    const y0 = Math.floor(row * ch), y1 = Math.floor((row + 1) * ch);
+    let bestPix = [], bestCount = 0;
+    let cur = row * 3 + col + 1;
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+      const pi = y * w + x;
+      if (label[pi] || d[pi * 4 + 3] < 16) continue;
+      const comp = [];
+      const st = [pi];
+      label[pi] = cur;
+      while (st.length) {
+        const q = st.pop();
+        comp.push(q);
+        const qx = q % w, qy = (q / w) | 0;
+        const nb = [];
+        if (qx > x0) nb.push(q - 1);
+        if (qx < x1 - 1) nb.push(q + 1);
+        if (qy > y0) nb.push(q - w);
+        if (qy < y1 - 1) nb.push(q + w);
+        for (const n of nb) {
+          if (!label[n] && d[n * 4 + 3] >= 16) { label[n] = cur; st.push(n); }
+        }
+      }
+      if (comp.length > bestCount) {
+        for (const q of bestPix) d[q * 4 + 3] = 0;  // これまでの最大を消す
+        bestCount = comp.length;
+        bestPix = comp;
+      } else {
+        for (const q of comp) d[q * 4 + 3] = 0;     // 小さい成分=ノイズを消す
+      }
+    }
+    if (bestCount < 30) { boxes.push(null); continue; }
+    let bx0 = w, bx1 = 0, by0 = h, by1 = 0;
+    for (const q of bestPix) {
+      const qx = q % w, qy = (q / w) | 0;
+      if (qx < bx0) bx0 = qx; if (qx > bx1) bx1 = qx;
+      if (qy < by0) by0 = qy; if (qy > by1) by1 = qy;
+    }
+    boxes.push({ x: bx0, y: by0, w: bx1 - bx0 + 1, h: by1 - by0 + 1 });
+  }
+  g.putImageData(im, 0, 0);
+  return { cv: c, boxes };
+}
+for (const id of ['fujimoto', 'amakawa', 'tsukishiro', 'ito', 'sasaki', 'ando', 'hirose', 'arimoto', 'kato', 'zama', 'lala']) {
+  const img = new Image();
+  img.onload = () => { SHEETS[id] = processSheet(img); };
+  img.src = `assets/sheets/${id}.png`;
+}
+
+function drawSheet(g, sheet, dir, fi, x, y, h, cropBottom) {
+  const cb = cropBottom || 0;
+  const row = dir === 'left' || dir === 'right' ? 1 : dir === 'up' ? 3 : 0;
+  const b = sheet.boxes[row * 3 + fi] || sheet.boxes[1] || sheet.boxes[0];
+  if (!b) return;
+  const w = h * b.w / b.h;
+  const sh2 = b.h * (1 - cb), dh = h * (1 - cb);
+  g.save();
+  g.imageSmoothingEnabled = true;
+  if (dir === 'right') {
+    g.translate(Math.round(x), 0); g.scale(-1, 1);
+    g.drawImage(sheet.cv, b.x, b.y, b.w, sh2, -w / 2, Math.round(y) - h + 2, w, dh);
+  } else {
+    g.drawImage(sheet.cv, b.x, b.y, b.w, sh2, Math.round(x) - w / 2, Math.round(y) - h + 2, w, dh);
+  }
+  g.restore();
+}
+
+/* ---------- オフィスパーツ(ユーザー製タイルセット) ---------- */
 function keyOutBackground(img) {
   const w = img.naturalWidth, h = img.naturalHeight;
   const c = document.createElement('canvas');
@@ -103,13 +208,6 @@ function keyOutBackground(img) {
   g.putImageData(im, 0, 0);
   return c;
 }
-for (const id of ['fujimoto', 'amakawa', 'tsukishiro', 'ito', 'sasaki', 'ando', 'hirose', 'arimoto', 'kato', 'zama', 'lala']) {
-  const img = new Image();
-  img.onload = () => { SHEETS[id] = keyOutBackground(img); };
-  img.src = `assets/sheets/${id}.png`;
-}
-
-/* ---------- オフィスパーツ(ユーザー製タイルセット) ---------- */
 const OFFICE = {};
 {
   const bg = new Image();
@@ -131,21 +229,6 @@ function drawProp(g, key, x, y, w, h) {
   return true;
 }
 
-function drawSheet(g, img, dir, fi, x, y, h) {
-  const cw = (img.naturalWidth || img.width) / 3, ch = (img.naturalHeight || img.height) / 4;
-  const row = dir === 'left' || dir === 'right' ? 1 : dir === 'up' ? 3 : 0;
-  const sx = fi * cw + cw * 0.05, sy2 = row * ch + ch * 0.015, sw = cw * 0.9, sh2 = ch * 0.97;
-  const w = h * sw / sh2;
-  g.save();
-  g.imageSmoothingEnabled = true;
-  if (dir === 'right') {
-    g.translate(Math.round(x), 0); g.scale(-1, 1);
-    g.drawImage(img, sx, sy2, sw, sh2, -w / 2, Math.round(y) - h + 2, w, h);
-  } else {
-    g.drawImage(img, sx, sy2, sw, sh2, Math.round(x) - w / 2, Math.round(y) - h + 2, w, h);
-  }
-  g.restore();
-}
 
 /* ================================================================
    スプライト: チビキャラ 12x16
@@ -462,10 +545,10 @@ function drawOffice(g, t, tm) {
   }
 
   // ラグ(部署) — ユーザー製カーペットパーツ
-  if (!drawProp(g, 'rug_ceo', 16, 60, 104, 112)) rr(g, 16, 60, 104, 112, '#e0c8e8', '#c0a0c8');
-  if (!drawProp(g, 'rug_pt', 138, 60, 184, 112)) rr(g, 138, 60, 184, 112, '#c8dce8', '#a0bcd0');
-  if (!drawProp(g, 'rug_app', 336, 60, 116, 112)) rr(g, 336, 60, 116, 112, '#d0e8c8', '#a8cca0');
-  if (!drawProp(g, 'rug_yoru', 468, 60, 120, 112)) rr(g, 468, 60, 120, 112, '#f0e0c0', '#d0c098');
+  if (!drawProp(g, 'rug_ceo', 16, 72, 104, 100)) rr(g, 16, 72, 104, 100, '#e0c8e8', '#c0a0c8');
+  if (!drawProp(g, 'rug_pt', 138, 72, 184, 100)) rr(g, 138, 72, 184, 100, '#c8dce8', '#a0bcd0');
+  if (!drawProp(g, 'rug_app', 336, 72, 116, 100)) rr(g, 336, 72, 116, 100, '#d0e8c8', '#a8cca0');
+  if (!drawProp(g, 'rug_yoru', 468, 72, 120, 100)) rr(g, 468, 72, 120, 100, '#f0e0c0', '#d0c098');
   if (!drawProp(g, 'room_break', 16, 208, 176, 136)) rr(g, 16, 208, 176, 136, '#ecd8c0', '#d0b898');
   if (!drawProp(g, 'rug_soumu', 216, 232, 152, 104)) rr(g, 216, 232, 152, 104, '#e8e4c8', '#c8c4a0');
   function deptSign(text, x, y, color) {
@@ -478,10 +561,10 @@ function drawOffice(g, t, tm) {
     g.fillStyle = color; g.fillRect(x + 4, y + 4, 3, 7);
     g.fillStyle = '#f2f0e8'; g.fillText(text, x + 10, y + 11);
   }
-  deptSign('社長室', 20, 64, '#b06ac0');
-  deptSign('プロジェクト-T', 144, 64, '#4a7ac8');
-  deptSign('アプリ制作部', 344, 64, '#4aa86a');
-  deptSign('yorutool制作部', 472, 64, '#c8a04a');
+  deptSign('社長室', 20, 75, '#b06ac0');
+  deptSign('プロジェクト-T', 142, 75, '#4a7ac8');
+  deptSign('アプリ制作部', 340, 75, '#4aa86a');
+  deptSign('yorutool制作部', 472, 75, '#c8a04a');
   deptSign('総務部', 220, 236, '#d08a5a');
 
   // 音声スタジオ(TTS=watcher。人は住まない=機械の部屋)
@@ -556,9 +639,9 @@ function drawOffice(g, t, tm) {
   drawProp(g, 'copier', 532, 160, 26, 32);
 
   // 社長室の調度・入口まわり
-  drawProp(g, 'lamp', 98, 100, 16, 38);
-  drawProp(g, 'plant_mon', 20, 62, 20, 36);
-  drawProp(g, 'plant_snake', 566, 64, 16, 30);
+  drawProp(g, 'lamp', 96, 102, 17, 37);
+  drawProp(g, 'plant_mon', 20, 74, 20, 36);
+  drawProp(g, 'plant_snake', 566, 76, 16, 30);
   drawProp(g, 'coat', 282, 310, 16, 36);
   drawProp(g, 'umbrella', 346, 320, 12, 26);
 
@@ -670,9 +753,9 @@ class Person {
    AI社員
    ================================================================ */
 const REST_SPOTS = [
-  { x: 34, y: 308, sy: 308, a: 'sit', via: 280 },   // ソファ左
-  { x: 60, y: 308, sy: 308, a: 'sit', via: 280 },   // ソファ右
-  { x: 108, y: 310, sy: 310, a: 'sit', via: 280 },  // アームチェア
+  { x: 34, y: 312, sy: 312, a: 'sit', via: 278 },   // ソファ左
+  { x: 60, y: 312, sy: 312, a: 'sit', via: 278 },   // ソファ右
+  { x: 108, y: 314, sy: 314, a: 'sit', via: 278 },  // アームチェア
   { x: 34, y: 272, a: 'faceU' },                    // コーヒー前
   { x: 92, y: 274, a: 'faceU' },                    // 自販機前
   { x: 121, y: 274, a: 'faceU' },                   // スナック棚前
@@ -771,7 +854,8 @@ class Employee extends Person {
       let bob = 0;
       if (this.action === 'walk') bob = Math.floor(this.walked / 7) % 2 ? -1 : 0;   // コマ固定+縦ボブ(左右ブレなし)
       else if (this.mode === 'working' && seated && Math.floor((t + this.seed) / 420) % 2) bob = -1;
-      drawSheet(g, img, dir, fi, x, y + bob, 30);
+      const cb = seated && this.resting ? 0.30 : 0;   // ソファ等では脚をクッションに沈める
+      drawSheet(g, img, dir, fi, x, y + bob, 30, cb);
       if (e === 'sweat') {
         g.fillStyle = '#5ab0e8';
         const dy2 = Math.floor(t / 220) % 3;
@@ -1139,13 +1223,14 @@ function updateHud() {
     const row = document.createElement('div');
     row.className = 'emp';
     const sheet = SHEETS[e.spriteId || e.id];
-    if (sheet) {
+    if (sheet && sheet.boxes && sheet.boxes[1]) {
+      const b = sheet.boxes[1];
       const av = document.createElement('canvas');
       av.width = 44; av.height = 60;
       av.style.width = '24px'; av.style.height = '33px';
       const ag = av.getContext('2d');
-      const cw = (sheet.naturalWidth || sheet.width) / 3, ch = (sheet.naturalHeight || sheet.height) / 4;
-      ag.drawImage(sheet, cw, 0, cw, ch, 0, 0, 44, 60);
+      const dw = Math.min(44, 60 * b.w / b.h);
+      ag.drawImage(sheet.cv, b.x, b.y, b.w, b.h, (44 - dw) / 2, 0, dw, 60);
       row.appendChild(av);
     } else {
       const av = document.createElement('canvas');
@@ -1243,20 +1328,6 @@ function loop(t) {
     items.push({ y: e.desk.y + 20, draw: g => drawDesk(g, e.desk, e.mode === 'working' && e.present, t + e.seed, e.def) });
   }
   // ソファ前面(座ったキャラの脚を隠す)
-  if (OFFICE.sofa) items.push({ y: 316, draw: g => {
-    const im = OFFICE.sofa;
-    const sw = im.naturalWidth || im.width, sh = im.naturalHeight || im.height;
-    g.save(); g.imageSmoothingEnabled = true;
-    g.drawImage(im, 0, sh * 0.5, sw, sh * 0.5, 20, 286 + 15, 60, 15);
-    g.restore();
-  } });
-  if (OFFICE.armchair) items.push({ y: 317, draw: g => {
-    const im = OFFICE.armchair;
-    const sw = im.naturalWidth || im.width, sh = im.naturalHeight || im.height;
-    g.save(); g.imageSmoothingEnabled = true;
-    g.drawImage(im, 0, sh * 0.55, sw, sh * 0.45, 96, 286 + 17.6, 26, 14.4);
-    g.restore();
-  } });
   for (const e of employees) if (e.present) items.push({ y: e.pos.y, draw: g => e.drawSprite(g, t) });
   items.sort((a, b) => a.y - b.y);
   for (const it of items) it.draw(cx);
