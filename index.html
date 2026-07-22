@@ -116,12 +116,14 @@
   </div>
   <div id="stale">⚠ データが届いていません(コレクター停止の可能性)— 最終受信: <span id="staleAge"></span></div>
   <div id="main">
-    <div id="stage"><canvas id="office" width="640" height="360"></canvas></div>
+    <div id="stage"><canvas id="office" width="1280" height="720"></canvas></div>
     <div id="hud">
       <div class="card">
-        <h2>💰 経営ボード(API換算)</h2>
-        <div class="row"><span class="lbl">本日のAI人件費</span><span class="big" id="todayCost">--</span></div>
-        <div class="row"><span class="lbl">今月累計</span><span id="monthCost">--</span></div>
+        <h2>💰 経営ボード</h2>
+        <div class="row"><span class="lbl">本日の人件費(固定費日割)</span><span class="big" id="todayFixed">--</span></div>
+        <div class="row"><span class="lbl">本日API換算(参考)</span><span id="todayCost">--</span></div>
+        <div class="row"><span class="lbl">今月固定費(サブスク)</span><span id="monthFixed">--</span></div>
+        <div class="row"><span class="lbl">今月API換算(参考)</span><span id="monthCost">--</span></div>
         <div class="row"><span class="lbl">現在の燃焼率</span><span id="burnRate">--</span></div>
         <div class="row"><span class="lbl">Claude / Codex(今日)</span><span id="splitCost">--</span></div>
         <div class="bar"><i id="splitBar" style="width:50%;background:var(--accent)"></i></div>
@@ -133,8 +135,9 @@
         <div style="font-size:10px;opacity:.55;margin-top:4px" id="staffNote"></div>
       </div>
       <div class="card">
-        <h2>📈 チャンネル(売上ボード)</h2>
+        <h2>📈 売上ボード</h2>
         <div id="youtube" class="row" style="gap:12px"></div>
+        <div class="row"><span class="lbl">月間売上</span><span id="salesMonth">--</span></div>
       </div>
       <div class="card">
         <h2>📦 本日の納品</h2>

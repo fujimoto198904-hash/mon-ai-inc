@@ -5,6 +5,7 @@ const CFG = window.OFFICE_CONFIG;
 const W = 640, H = 360;
 const cv = document.getElementById('office');
 const cx = cv.getContext('2d');
+cx.scale(2, 2);              // 内部解像度1280x720、論理座標は640x360のまま
 cx.imageSmoothingEnabled = false;
 
 /* ---------- 閲覧トークン ---------- */
@@ -66,12 +67,61 @@ async function poll() {
 
 let lastArrivalT = -1;
 
-/* ---------- ポートレート(assets/ にGPT素材が置かれたら自動採用) ---------- */
-const portraits = {};
-for (const d of CFG.employees) {
+/* ---------- 歩行スプライトシート(assets/sheets/<id>.png 3列x4行) ----------
+   行: 0=正面 1=左向き 3=後ろ姿(右向きは左を反転)。列: 歩行3コマ(中央=立ち) */
+const SHEETS = {};
+// AI生成シートは背景の市松模様が実ピクセルなので、外周からのflood-fillで透過化する
+function keyOutBackground(img) {
+  const w = img.naturalWidth, h = img.naturalHeight;
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const g = c.getContext('2d');
+  g.drawImage(img, 0, 0);
+  const im = g.getImageData(0, 0, w, h);
+  const d = im.data;
+  const isBg = i => {
+    const r = d[i], gg = d[i + 1], b = d[i + 2];
+    return Math.abs(r - gg) < 16 && Math.abs(gg - b) < 16 && Math.abs(r - b) < 16 && r > 178;
+  };
+  const seen = new Uint8Array(w * h);
+  const stack = [];
+  for (let x = 0; x < w; x++) { stack.push(x); stack.push((h - 1) * w + x); }
+  for (let y = 0; y < h; y++) { stack.push(y * w); stack.push(y * w + w - 1); }
+  while (stack.length) {
+    const pIdx = stack.pop();
+    if (seen[pIdx]) continue;
+    seen[pIdx] = 1;
+    const i4 = pIdx * 4;
+    if (!isBg(i4)) continue;
+    d[i4 + 3] = 0;
+    const x = pIdx % w, y = (pIdx / w) | 0;
+    if (x > 0) stack.push(pIdx - 1);
+    if (x < w - 1) stack.push(pIdx + 1);
+    if (y > 0) stack.push(pIdx - w);
+    if (y < h - 1) stack.push(pIdx + w);
+  }
+  g.putImageData(im, 0, 0);
+  return c;
+}
+for (const id of ['fujimoto', 'amakawa', 'tsukishiro', 'ito', 'sasaki', 'ando', 'hirose', 'arimoto', 'kato', 'zama', 'lala']) {
   const img = new Image();
-  img.onload = () => { portraits[d.id] = img; };
-  img.src = `assets/${d.portrait || d.id}.png`;
+  img.onload = () => { SHEETS[id] = keyOutBackground(img); };
+  img.src = `assets/sheets/${id}.png`;
+}
+
+function drawSheet(g, img, dir, fi, x, y, h) {
+  const cw = (img.naturalWidth || img.width) / 3, ch = (img.naturalHeight || img.height) / 4;
+  const row = dir === 'left' || dir === 'right' ? 1 : dir === 'up' ? 3 : 0;
+  const w = h * cw / ch;
+  g.save();
+  g.imageSmoothingEnabled = true;
+  if (dir === 'right') {
+    g.translate(Math.round(x), 0); g.scale(-1, 1);
+    g.drawImage(img, fi * cw, row * ch, cw, ch, -w / 2, Math.round(y) - h + 2, w, h);
+  } else {
+    g.drawImage(img, fi * cw, row * ch, cw, ch, Math.round(x) - w / 2, Math.round(y) - h + 2, w, h);
+  }
+  g.restore();
 }
 
 /* ================================================================
@@ -232,22 +282,22 @@ function rr(g, x, y, w, h, c, sc) {
 }
 
 function drawDesk(g, seat, working, t) {
-  const dx = seat.x - 16, dy = seat.y + 6;
-  rr(g, dx, dy, 32, 16, '#b8905c', INK);
-  rr(g, dx + 2, dy + 14, 3, 4, '#8a6a3c'); rr(g, dx + 27, dy + 14, 3, 4, '#8a6a3c');
-  rr(g, dx + 10, dy - 8, 12, 9, '#3a3a44', INK);
+  const dx = seat.x - 22, dy = seat.y + 8;
+  rr(g, dx, dy, 44, 20, '#b8905c', INK);
+  rr(g, dx + 3, dy + 17, 4, 5, '#8a6a3c'); rr(g, dx + 37, dy + 17, 4, 5, '#8a6a3c');
+  rr(g, dx + 14, dy - 12, 16, 13, '#3a3a44', INK);
   if (working) {
-    g.fillStyle = '#c8f0d8'; g.fillRect(dx + 11, dy - 7, 10, 7);
+    g.fillStyle = '#c8f0d8'; g.fillRect(dx + 15, dy - 11, 14, 11);
     g.fillStyle = '#4a9a6a';
-    for (let i = 0; i < 3; i++) {
-      const lw = 3 + ((t / 300 + i * 2.7) % 6);
-      g.fillRect(dx + 12, dy - 6 + i * 2, Math.min(8, lw), 1);
+    for (let i = 0; i < 4; i++) {
+      const lw = 4 + ((t / 300 + i * 2.7) % 8);
+      g.fillRect(dx + 16, dy - 10 + i * 2.5, Math.min(12, lw), 1.5);
     }
   } else {
-    g.fillStyle = '#586068'; g.fillRect(dx + 11, dy - 7, 10, 7);
+    g.fillStyle = '#586068'; g.fillRect(dx + 15, dy - 11, 14, 11);
   }
-  rr(g, dx + 14, dy + 1, 4, 2, '#2a2a34');
-  rr(g, dx + 25, dy + 3, 5, 4, '#fff', '#c0b090');
+  rr(g, dx + 19, dy + 2, 6, 3, '#2a2a34');
+  rr(g, dx + 35, dy + 5, 6, 5, '#fff', '#c0b090');
 }
 
 function drawOffice(g, t, tm) {
@@ -587,6 +637,21 @@ class Employee extends Person {
     const { x, y } = this.pos;
     const e = this.expr(t);
     const seated = this.action === 'sit' || this.action === 'sleep';
+    const img = SHEETS[this.spriteId || this.id];
+    if (img) {
+      const dir = seated ? 'down' : this.dir;
+      let fi = 1;
+      if (this.action === 'walk') fi = [0, 1, 2, 1][Math.floor(this.walked / 7) % 4];
+      let bob = 0;
+      if (this.mode === 'working' && seated && Math.floor((t + this.seed) / 420) % 2) bob = -1;  // タイピングの揺れ
+      drawSheet(g, img, dir, fi, x, y + bob, this.tall ? 34 : 30);
+      if (e === 'sweat') {
+        g.fillStyle = '#5ab0e8';
+        const dy2 = Math.floor(t / 220) % 3;
+        g.fillRect(x + 8, y - 26 + dy2, 2, 3);
+      }
+      return;
+    }
     drawChar(g, x, y, this.def, seated ? 'sit' : this.dir, this.frame, e === 'typing' && this.action === 'sit' ? 'typing' : e, t);
     if (e === 'sweat') drawChar(g, x, y, this.def, 'sit', this.frame, 'sweat', t);
   }
@@ -605,18 +670,18 @@ class Employee extends Person {
     const { x, y } = this.pos;
     const e = this.expr(t);
     const seated = this.action === 'sit' || this.action === 'sleep';
-    if (e === 'sleep') drawZzz(g, x, y, t + this.seed);
-    if (this.mode === 'panic') drawAlert(g, x, y, t);
-    if (this.hp != null) drawHp(g, x, y, this.hp);
+    if (e === 'sleep') drawZzz(g, x, y - 12, t + this.seed);
+    if (this.mode === 'panic') drawAlert(g, x, y - 10, t);
+    if (this.hp != null) drawHp(g, x, y - 12, this.hp);
     g.font = '8px DotGothic16';
     const nw = g.measureText(this.name).width;
-    const ny = seated ? y + 24 : y + 2;
+    const ny = seated ? y + 30 : y + 3;
     g.fillStyle = 'rgba(255,250,240,.85)';
     g.fillRect(x - nw / 2 - 2, ny, nw + 4, 9);
     g.fillStyle = INK;
     g.fillText(this.name, x - nw / 2, ny + 8);
     if (this.action === 'coffee') { g.font = '9px DotGothic16'; g.fillText('☕', x + 8, y - 8); }
-    if (this.bubble && t < this.bubbleUntil) drawBubble(g, x, y, this.bubble);
+    if (this.bubble && t < this.bubbleUntil) drawBubble(g, x, y - 10, this.bubble);
   }
 
   tickBubble(t) {
@@ -666,26 +731,16 @@ function stepDog(dt, t) {
 function drawDog(g, t) {
   const { x, y } = dog.pos;
   const nap = t < dog.napUntil;
-  g.save(); g.translate(Math.round(x), Math.round(y));
-  if (dog.dir < 0) g.scale(-1, 1);
-  if (nap) {
-    g.fillStyle = '#f0e8dc'; g.fillRect(-6, -4, 11, 4);
-    g.fillStyle = '#a06a3c'; g.fillRect(-3, -4, 4, 2);
-    g.fillStyle = '#f0e8dc'; g.fillRect(-8, -6, 4, 3);
-    g.fillStyle = '#8a5230'; g.fillRect(-8, -7, 2, 2);
+  const img = SHEETS.lala;
+  if (img) {
+    const moving = !!dog.target;
+    const dir = nap || !moving ? 'down' : (dog.dir > 0 ? 'right' : 'left');
+    const fi = moving ? [0, 1, 2, 1][Math.floor(t / 160) % 4] : 1;
+    drawSheet(g, img, dir, fi, x, y, 16);
   } else {
-    const hop = dog.target && Math.floor(t / 180) % 2 ? -1 : 0;
-    const wag = Math.floor(t / 200) % 2;
-    g.fillStyle = '#f0e8dc'; g.fillRect(-5, -6 + hop, 9, 5);
-    g.fillStyle = '#a06a3c'; g.fillRect(-3, -6 + hop, 4, 3);
-    g.fillStyle = '#f0e8dc'; g.fillRect(3, -10 + hop, 5, 5);
-    g.fillStyle = '#8a5230'; g.fillRect(3, -11 + hop, 2, 3);
-    g.fillStyle = INK; g.fillRect(7, -8 + hop, 1, 1);
-    g.fillStyle = '#f0e8dc'; g.fillRect(-7, -7 + hop - wag, 2, 3);
-    g.fillStyle = '#5a4a3a'; g.fillRect(-4, -1 + hop, 2, 1); g.fillRect(1, -1 + hop, 2, 1);
+    g.fillStyle = '#f0e8dc'; g.fillRect(Math.round(x) - 5, Math.round(y) - 6, 10, 6);
   }
-  g.restore();
-  if (nap) drawZzz(g, x, y - 2, t + 1700);
+  if (nap) drawZzz(g, x, y - 8, t + 1700);
 }
 
 function drawCat(g, t) {
@@ -851,6 +906,12 @@ function updateHud() {
   const s = snap, rate = (s.billing && s.billing.jpyPerUsd) || 155;
 
   const tv = s.totals.todayCost || 0;
+  const subsCfg = CFG.subscriptions || (s.billing && s.billing.subscriptions) || [];
+  const fixedMonthly = subsCfg.reduce((a, x) => a + (x.monthlyJPY || 0), 0);
+  const dim = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+  const unset = subsCfg.some(x => !x.monthlyJPY);
+  $('todayFixed').textContent = fixedMonthly ? `${fmtYen(fixedMonthly / dim)}${unset ? '+α' : ''}` : '未設定';
+  $('monthFixed').textContent = fixedMonthly ? `${fmtYen(fixedMonthly)}${unset ? ' (一部未記入)' : ''}` : 'config.jsに記入';
   $('todayCost').textContent = `${fmtYen(tv * rate)}`;
   $('monthCost').textContent = `${fmtYen((s.totals.monthCost || 0) * rate)} (${fmtUsd(s.totals.monthCost || 0)})`;
   $('burnRate').textContent = s.claude.block && s.claude.block.costPerHour ? `${fmtYen(s.claude.block.costPerHour * rate)}/h` : '—';
@@ -860,7 +921,7 @@ function updateHud() {
 
   const subs = $('subs');
   subs.innerHTML = '';
-  for (const sub of (s.billing.subscriptions || [])) {
+  for (const sub of subsCfg) {
     const div = document.createElement('div');
     div.className = 'row';
     div.innerHTML = `<span class="lbl">${sub.name}${sub.plan ? `(${sub.plan})` : ''}</span><span>${sub.monthlyJPY ? fmtYen(sub.monthlyJPY) : '未設定'}</span>`;
@@ -879,11 +940,15 @@ function updateHud() {
     const [cls, label] = CHIP[e.mode] || CHIP.idle;
     const row = document.createElement('div');
     row.className = 'emp';
-    if (portraits[e.id]) {
-      const img = document.createElement('img');
-      img.src = portraits[e.id].src;
-      img.style.cssText = 'width:26px;height:26px;image-rendering:pixelated;border:1px solid var(--ink);border-radius:3px';
-      row.appendChild(img);
+    const sheet = SHEETS[e.spriteId || e.id];
+    if (sheet) {
+      const av = document.createElement('canvas');
+      av.width = 44; av.height = 60;
+      av.style.width = '24px'; av.style.height = '33px';
+      const ag = av.getContext('2d');
+      const cw = (sheet.naturalWidth || sheet.width) / 3, ch = (sheet.naturalHeight || sheet.height) / 4;
+      ag.drawImage(sheet, cw, 0, cw, ch, 0, 0, 44, 60);
+      row.appendChild(av);
     } else {
       const av = document.createElement('canvas');
       av.width = 12; av.height = 16;
@@ -919,6 +984,11 @@ function updateHud() {
   } else {
     yt.innerHTML = `<span style="opacity:.6">未接続 — collector/config.json の youtube に APIキー/チャンネルID を設定すると表示されます</span>`;
   }
+
+  const sales = CFG.sales || {};
+  $('salesMonth').textContent = sales.monthlyJPY != null
+    ? `${fmtYen(sales.monthlyJPY)}${sales.note ? `(${sales.note})` : ''}`
+    : '未設定(config.jsのsalesに記入)';
 
   const del = $('deliveries');
   del.innerHTML = `<span>🎤 講演 <b>${s.deliveries.koen ?? '-'}</b>本</span><span>📜 台本 <b>${s.deliveries.daihon ?? '-'}</b>本</span><span>🔤 出力 <b>${fmtTok(s.totals.todayTokens || 0)}</b>tok</span>`;
