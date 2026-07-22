@@ -437,8 +437,8 @@ function drawOffice(g, t, tm) {
     g.fillText(`YT登録者 ${subs} / 目標${(CFG.youtubeGoal || 0).toLocaleString('ja-JP')}`, 487, 40);
     // 窓: 昼/夜の景色素材を時間で切替
     const wkey = night ? 'window_night' : 'window_day';
-    drawProp(g, wkey, 176, 2, 76, 53);
-    drawProp(g, wkey, 386, 2, 78, 54);
+    drawProp(g, wkey, 166, 1, 82, 54);
+    drawProp(g, wkey, 384, 1, 82, 54);
 
     // 掲示板: コルクボード+紙ミッション+保留タグ(bg側の台帳ボードを完全に覆う)
     rr(g, 16, 0, 142, 60, '#f3edda');
@@ -564,10 +564,10 @@ function drawOffice(g, t, tm) {
     g.fillStyle = color; g.fillRect(x + 3, y + 2.5, 2, 5);
     g.fillStyle = '#f2f0e8'; g.fillText(text, x + 7, y + 7.5);
   }
-  deptSign('社長室', 20, 75, '#b06ac0');
-  deptSign('プロジェクト-T', 142, 75, '#4a7ac8');
-  deptSign('アプリ制作部', 340, 75, '#4aa86a');
-  deptSign('yorutool制作部', 472, 75, '#c8a04a');
+  deptSign('社長室', 20, 62, '#b06ac0');
+  deptSign('プロジェクト-T', 142, 62, '#4a7ac8');
+  deptSign('アプリ制作部', 340, 62, '#4aa86a');
+  deptSign('yorutool制作部', 472, 62, '#c8a04a');
   deptSign('総務部', 202, 322, '#d08a5a');
 
   // 音声スタジオ(TTS=watcher。人は住まない=機械の部屋)
@@ -621,8 +621,8 @@ function drawOffice(g, t, tm) {
 
   // 社長室の調度・入口まわり
   drawProp(g, 'lamp', 96, 102, 17, 37);
-  drawProp(g, 'plant_mon', 20, 74, 20, 36);
-  drawProp(g, 'plant_snake', 566, 76, 16, 30);
+  drawProp(g, 'plant_mon', 20, 88, 18, 34);
+  drawProp(g, 'plant_snake', 566, 88, 16, 30);
 
   // ミーティングスペース(丸テーブル)
 
@@ -869,11 +869,11 @@ class Employee extends Person {
     const seated = this.action === 'sit' || this.action === 'sleep';
     if (e === 'sleep') drawZzz(g, x, y - 26, t + this.seed);
     if (this.mode === 'panic') drawAlert(g, x, y - 10, t);
-    if (this.hp != null) drawHp(g, x, y - 32, this.hp);
     g.font = '5px DotGothic16';
     const nw = g.measureText(this.name).width;
     const cbL = seated && (this.resting || this.atMeeting) ? 0.30 : 0;
-    const ny = (seated && !this.resting && !this.atMeeting) ? y + 14 : y + 3 - 30 * cbL;
+    const stag = (this.resting || this.atMeeting) ? (this.seed % 3) * 4 : 0;
+    const ny = (seated && !this.resting && !this.atMeeting) ? y + 14 : y + 3 - 30 * cbL + stag;
     g.fillStyle = 'rgba(255,250,240,.9)';
     g.fillRect(x - nw / 2 - 2, ny, nw + 4, 7);
     g.fillStyle = INK;
