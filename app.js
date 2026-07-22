@@ -304,9 +304,8 @@ function rr(g, x, y, w, h, c, sc) {
 }
 
 function drawChair(g, seat) {
-  if (drawProp(g, 'chair', seat.x - 9, seat.y - 27, 18, 25)) return;
-  rr(g, seat.x - 9, seat.y - 26, 18, 8, '#3c3c46', INK);
-  rr(g, seat.x - 7, seat.y - 18, 14, 3, '#2e2e38');
+  if (drawProp(g, 'chair', seat.x - 9, seat.y - 26, 18, 25)) return;
+  rr(g, seat.x - 9, seat.y - 24, 18, 8, '#3c3c46', INK);
 }
 
 function drawDesk(g, seat, working, t, emp) {
@@ -320,15 +319,15 @@ function drawDesk(g, seat, working, t, emp) {
   }
   const pc = (emp && emp.pc) || 'mon1';
   if (OFFICE[pc]) {
-    if (pc === 'mon2') drawProp(g, 'mon2', x - 13, y + 1, 26, 20);
-    else if (pc === 'laptop') drawProp(g, 'laptop', x - 10, y + 5, 20, 16);
-    else drawProp(g, 'mon1', x - 10, y + 1, 20, 20);
+    if (pc === 'mon2') drawProp(g, 'mon2', x - 13, y + 2, 26, 20);
+    else if (pc === 'laptop') drawProp(g, 'laptop', x - 10, y + 6, 20, 16);
+    else drawProp(g, 'mon1', x - 10, y + 2, 20, 20);
     if (working) {
-      g.fillStyle = 'rgba(150,230,190,.30)';
-      if (pc === 'mon2') g.fillRect(x - 11, y + 2, 22, 8);
-      else if (pc === 'laptop') g.fillRect(x - 8, y + 6, 16, 6);
-      else g.fillRect(x - 8, y + 2, 16, 8);
-      g.fillStyle = '#4cff8e'; g.fillRect(x + 9, y + 16, 2, 2);
+      g.fillStyle = 'rgba(150,230,190,.32)';
+      if (pc === 'mon2') g.fillRect(x - 11, y + 3, 22, 8);
+      else if (pc === 'laptop') g.fillRect(x - 8, y + 7, 16, 6);
+      else g.fillRect(x - 8, y + 3, 16, 9);
+      g.fillStyle = '#4cff8e'; g.fillRect(x + 8, y + 18, 2, 2);
     }
   } else {
     rr(g, x - 9, y - 1, 18, 11, '#23252d', INK);
@@ -520,19 +519,19 @@ function drawOffice(g, t, tm) {
   const fresh = lastArrivalT >= 0 && (t - lastArrivalT) < 30000;
   const dead = snapAt > 0 && (Date.now() - snapAt) > (CFG.staleMin || 20) * 60000;
   if (OFFICE.rack) {
-    drawProp(g, 'rack', 584, 148, 26, 46);
-    drawProp(g, 'netcab', 612, 158, 22, 36);
+    drawProp(g, 'rack', 566, 148, 26, 46);
+    drawProp(g, 'netcab', 594, 158, 22, 36);
   } else {
     rr(g, 584, 150, 26, 44, '#3a3a44', INK);
     rr(g, 612, 160, 22, 34, '#4a4a54', INK);
   }
   g.fillStyle = dead ? '#e05a4e' : fresh ? (Math.floor(t / 300) % 2 ? '#5aff8e' : '#4caf6e') : '#4caf6e';
-  g.fillRect(586, 150, 5, 3);
+  g.fillRect(568, 150, 5, 3);
   g.font = '8px DotGothic16';
   g.fillStyle = dead ? '#e05a4e' : 'rgba(74,59,42,.75)';
-  g.fillText(dead ? '受信断!' : fresh ? '受信中' : '待受', 584, 206);
+  g.fillText(dead ? '受信断!' : fresh ? '受信中' : '待受', 566, 206);
   g.fillStyle = 'rgba(74,59,42,.55)';
-  g.fillText('コレクター/基盤', 578, 216);
+  g.fillText('コレクター/基盤', 560, 216);
 
   // 社長室の調度・入口まわり
   drawProp(g, 'lamp', 98, 100, 16, 38);
@@ -557,10 +556,10 @@ function aisleX(seat) { return seat.x - 32; }
 // 部屋の中の地点から廊下(LANE_Y)までの退出経路。机・什器を突っ切らない
 function outPath(pt) {
   const { x, y } = pt;
-  if (y < 160) { const a = x - 32; return [{ x: a, y }, { x: a, y: LANE_Y }]; }            // 上段の部署: 机の左脇
-  if (y > 210 && x >= 216 && x <= 368) { const a = x - 26; return [{ x: a, y }, { x: a, y: LANE_Y }]; } // 総務部
-  if (y > 210 && x < 210) { return [{ x: 105, y }, { x: 105, y: LANE_Y }]; }               // 休憩室: 中央通路
-  if (y > 224 && x > 470) { return [{ x: 460, y: 280 }, { x: 460, y: LANE_Y }]; }          // スタジオ側
+  if (y < 160) return [{ x, y: LANE_Y }];                                                  // 上段: 座席は机の下なので直進でOK
+  if (y > 210 && x >= 216 && x <= 368) return [{ x, y: 326 }, { x: 208, y: 326 }, { x: 208, y: LANE_Y }]; // 総務部: 机の下→左から出る
+  if (y > 210 && x < 210) return [{ x: 105, y }, { x: 105, y: LANE_Y }];                   // 休憩室: 中央通路
+  if (y > 224 && x > 470) return [{ x: 460, y: 280 }, { x: 460, y: LANE_Y }];              // スタジオ側
   return [{ x, y: LANE_Y }];
 }
 
@@ -656,6 +655,8 @@ const REST_TALK = ['ふぅ…ひと息', '指示待ちの休憩なう', 'コー�
 class Employee extends Person {
   constructor(def, i) {
     super(def, i);
+    this.seat = { x: def.desk.x, y: def.desk.y + 46 };
+    this.pos = { x: this.seat.x, y: this.seat.y };
     this.mode = 'idle';
     this.action = 'sit';
     this.nextThink = 0;
@@ -671,8 +672,8 @@ class Employee extends Person {
     if (this.mode === m) return;
     this.mode = m;
     if (m !== 'idle') this.resting = false;
-    if (m === 'working') this.goto(this.desk, 'sit');
-    else if (m === 'sleep') this.goto(this.desk, 'sleep');
+    if (m === 'working') this.goto(this.seat, 'sit');
+    else if (m === 'sleep') this.goto(this.seat, 'sleep');
     else if (m === 'off' || m === 'out' || m === 'sleephome') this.goto({ x: 318, y: 348 }, 'leave');
     else this.nextThink = 0;
   }
@@ -684,7 +685,7 @@ class Employee extends Person {
     if (this.resting) {
       if (r < 0.3) {
         this.resting = false;
-        this.goto(this.desk, 'sit');            // たまに席へ戻って待機
+        this.goto(this.seat, 'sit');            // たまに席へ戻って待機
       } else if (r < 0.5) {
         const sp = REST_SPOTS[Math.floor(Math.random() * REST_SPOTS.length)];
         this.goto(sp, sp.a);                    // 休憩室内で場所替え
@@ -725,7 +726,7 @@ class Employee extends Person {
     const seated = this.action === 'sit' || this.action === 'sleep';
     const img = SHEETS[this.spriteId || this.id];
     if (img) {
-      const dir = seated ? 'down' : this.dir;
+      const dir = seated ? (this.resting ? 'down' : 'up') : this.dir;
       let fi = 1;
       if (this.action === 'walk') fi = [0, 1, 2, 1][Math.floor(this.walked / 10) % 4];
       let bob = 0;
@@ -761,13 +762,13 @@ class Employee extends Person {
     if (this.hp != null) drawHp(g, x, y - 12, this.hp);
     g.font = '8px DotGothic16';
     const nw = g.measureText(this.name).width;
-    const ny = seated ? y + 30 : y + 3;
+    const ny = seated ? y + 5 : y + 3;
     g.fillStyle = 'rgba(255,250,240,.85)';
     g.fillRect(x - nw / 2 - 2, ny, nw + 4, 9);
     g.fillStyle = INK;
     g.fillText(this.name, x - nw / 2, ny + 8);
     if (this.action === 'coffee') { g.font = '9px DotGothic16'; g.fillText('☕', x + 8, y - 8); }
-    if (this.bubble && t < this.bubbleUntil) drawBubble(g, x, y - 10, this.bubble);
+    if (this.bubble && t < this.bubbleUntil) drawBubble(g, x, y - 12 - (this.seed % 3) * 7, this.bubble);
   }
 
   tickBubble(t) {
@@ -781,23 +782,6 @@ class Employee extends Person {
 
 const employees = CFG.employees.map((d, i) => new Employee(d, i));
 
-/* ---------- 猫 ---------- */
-const cat = { pos: { x: 130, y: 300 }, target: null, next: 0, napUntil: 0, dir: 1 };
-function stepCat(dt, t) {
-  if (t < cat.napUntil) return;
-  if (!cat.target) {
-    if (t > cat.next) {
-      if (Math.random() < 0.4) { cat.napUntil = t + 15000 + Math.random() * 20000; cat.next = cat.napUntil; return; }
-      const spots = [{ x: 90, y: 300 }, { x: 140, y: 260 }, { x: 250, y: 200 }, { x: 400, y: 210 }, { x: 60, y: 130 }, { x: 320, y: 300 }];
-      cat.target = spots[Math.floor(Math.random() * spots.length)];
-    }
-    return;
-  }
-  const dx = cat.target.x - cat.pos.x, dy = cat.target.y - cat.pos.y;
-  const dist = Math.hypot(dx, dy), sp = 22 * dt / 1000;
-  if (dist < sp) { cat.pos = cat.target; cat.target = null; cat.next = t + 6000 + Math.random() * 10000; }
-  else { cat.pos.x += dx / dist * sp; cat.pos.y += dy / dist * sp; cat.dir = dx > 0 ? 1 : -1; }
-}
 const dog = { pos: { x: 90, y: 150 }, target: null, next: 4000, napUntil: 0, dir: 1 };
 function stepDog(dt, t) {
   if (t < dog.napUntil) return;
@@ -1061,7 +1045,7 @@ function updateHud() {
     row.appendChild(job);
     roster.appendChild(row);
   }
-  $('staffNote').textContent = 'HP共有: 伊藤=クロード5h枠 / 安藤=コデックス週次 | 設備: コレクター/基盤(総務部)・TTS機(音声スタジオ) | ペット: モチ(猫)・ララ(犬)';
+  $('staffNote').textContent = 'HP共有: 伊藤=クロード5h枠 / 安藤=コデックス週次 | 設備: コレクター/基盤・TTS機 | ペット: ララ(犬)';
 
   const yt = $('youtube');
   if (s.youtube && s.youtube.subs != null) {
@@ -1110,7 +1094,6 @@ function loop(t) {
   const tm = jstNow();
 
   for (const e of employees) { e.think(t, tm); e.step(dt, t); e.tickBubble(t); }
-  stepCat(dt, t);
   stepDog(dt, t);
   stepParticles(dt);
 
@@ -1128,7 +1111,7 @@ function loop(t) {
 
   const items = [];
   for (const e of employees) {
-    items.push({ y: e.desk.y - 27, draw: g => drawChair(g, e.desk) });
+    items.push({ y: e.seat.y - 1, draw: g => drawChair(g, e.seat) });
     items.push({ y: e.desk.y + 20, draw: g => drawDesk(g, e.desk, e.mode === 'working' && e.present, t + e.seed, e.def) });
   }
   // ソファ前面(座ったキャラの脚を隠す)
@@ -1149,7 +1132,6 @@ function loop(t) {
   for (const e of employees) if (e.present) items.push({ y: e.pos.y, draw: g => e.drawSprite(g, t) });
   items.sort((a, b) => a.y - b.y);
   for (const it of items) it.draw(cx);
-  drawCat(cx, t);
   drawDog(cx, t);
   drawParticles(cx);
   for (const e of employees) e.drawOverlay(cx, t);
