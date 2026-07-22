@@ -1413,7 +1413,9 @@ function onSnapshot() {
     if (owner) buckets[owner.id].push(a);
   }
   const blk = s.claude.block;
-  const blockHp = blk && blk.remainingMinutes != null ? Math.max(0, Math.min(100, Math.round(blk.remainingMinutes / 3))) : 100;
+  const cq2 = s.quota && s.quota.claude;
+  const blockHp = cq2 && cq2.session ? Math.max(0, Math.round(100 - cq2.session.pct))
+    : (blk && blk.remainingMinutes != null ? Math.max(0, Math.min(100, Math.round(blk.remainingMinutes / 3))) : 100);
 
   // Codexもプロジェクト(proj=作業ディレクトリ由来)で振り分け
   const codexEmps = employees.filter(e => e.source === 'codex');
@@ -1573,6 +1575,31 @@ function updateHud() {
     div.className = 'row';
     div.innerHTML = `<span class="lbl">Codexプラン検出</span><span>${esc(s.codex.rateLimit.plan)}</span>`;
     subs.appendChild(div);
+  }
+
+  // 残量ボード(実データ: Claude公式usage API + Codexログ)
+  const q = s.quota && s.quota.claude;
+  const rlq = s.codex.rateLimit;
+  const fmtReset = iso => {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return d.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+  const qEl = $('quota');
+  if (qEl) {
+    const rows = [];
+    const qrow = (label, usedPct, resetTxt) => {
+      const remain = Math.max(0, Math.round(100 - usedPct));
+      const col = remain > 50 ? 'var(--good)' : remain > 20 ? 'var(--warn)' : 'var(--bad)';
+      rows.push(`<div class="row"><span class="lbl">${label}</span><span>残り <b>${remain}%</b></span></div>` +
+        `<div class="bar"><i style="width:${remain}%;background:${col}"></i></div>` +
+        (resetTxt ? `<div style="font-size:10px;opacity:.55;text-align:right;margin:-3px 0 4px">リセット ${resetTxt}</div>` : ''));
+    };
+    if (q && q.session) qrow('Claude セッション(5h)', q.session.pct, fmtReset(q.session.resetsAt));
+    if (q && q.week) qrow('Claude 週間(全モデル)', q.week.pct, fmtReset(q.week.resetsAt));
+    if (q && q.model) qrow(`Claude 週間(${esc(q.model.name)})`, q.model.pct, fmtReset(q.model.resetsAt));
+    if (rlq) qrow('Codex 週間', rlq.usedPercent, rlq.resetsAt ? fmtReset(new Date(rlq.resetsAt).toISOString()) : '');
+    qEl.innerHTML = rows.length ? rows.join('') : '<div style="opacity:.6;font-size:12px">残量データ待ち(次の収集で反映)</div>';
   }
 
   const roster = $('roster');
