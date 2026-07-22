@@ -10,14 +10,17 @@ window.OFFICE_CONFIG = {
   mottos: ['一、無限労働', '一、社長一筋', '一、品質第一'],
   youtubeGoal: 10000,
 
-  // 実際の固定費(月額)。人件費はここから日割り計算して表示する
-  // ChatGPT Proはサイドバー表記から$200/月として仮置き。違えば直してください
+  // 実際の固定費(月額・2026-07-22 MON申告)
   subscriptions: [
-    { name: 'Claude (Anthropic)', plan: '要記入', monthlyJPY: 0 },
-    { name: 'ChatGPT Pro (OpenAI)', plan: '$200', monthlyJPY: 31000 },
+    { name: 'Claude (Anthropic)', plan: '', monthlyJPY: 43200 },
+    { name: 'ChatGPT/Codex (OpenAI)', plan: '', monthlyJPY: 16800 },
+    { name: 'DomoAI', plan: '', monthlyJPY: 10000 },
+    { name: 'Mureka', plan: '', monthlyJPY: 1500 },
+    { name: 'Supabase', plan: '', monthlyJPY: 2000 },
+    { name: 'Vercel', plan: '', monthlyJPY: 3000 },
   ],
-  // 売上(手入力)。月間売上をJPYで入れると売上ボードに出ます
-  sales: { monthlyJPY: null, note: '' },
+  // 売上(手入力)。月間売上JPY
+  sales: { monthlyJPY: 0, note: 'これから' },
 
   // 社員名簿(全員実データ連動)
   // source: boss=在席検知 / claude=Claude Codeセッション(match=プロジェクト正規表現、無しはfallback雑務)
