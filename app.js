@@ -801,7 +801,7 @@ class Employee extends Person {
   }
 
   tickBubble(t) {
-    if (!this.present || !this.bubbles.length) return;
+    if (!this.present || !this.bubbles.length || this.inChat) return;
     if (t > this.nextBubble) {
       this.say(t, this.bubbles[Math.floor(Math.random() * this.bubbles.length)]);
       this.nextBubble = t + 9000 + Math.random() * 16000;
@@ -810,6 +810,83 @@ class Employee extends Person {
 }
 
 const employees = CFG.employees.map((d, i) => new Employee(d, i));
+
+/* ================================================================
+   雑談(スタッフ同士のコミュニケーション。ネタは実データ)
+   ================================================================ */
+const chat = { next: 25000, active: null };
+
+function makeChatLines() {
+  const pool = [
+    ['ランチどこ行きます?', 'ラーメン一択でしょ'],
+    ['最近調子どうですか', 'ぼちぼちですね〜'],
+    ['社訓見ました?', '「無限労働」て…'],
+    ['コーヒー切れてますよ', 'えっ、それは事件'],
+    ['今日も1日がんばりましょ', 'おー!'],
+  ];
+  if (snap) {
+    const rate = (snap.billing && snap.billing.jpyPerUsd) || 155;
+    const cost = snap.totals.todayCost || 0;
+    pool.push([`今日もう${fmtYen(cost * rate)}分働いたって`, 'AIはタフだね〜']);
+    if (snap.youtube && snap.youtube.subs != null) {
+      pool.push([`登録者${snap.youtube.subs}人になったね`, `目標は${(CFG.youtubeGoal || 0).toLocaleString('ja-JP')}人!`]);
+    }
+    if (snap.tasks && snap.tasks.count) {
+      pool.push([`保留タスク${snap.tasks.count}件だって`, '社長ファイトです…']);
+    }
+    if (snap.claude.block && snap.claude.block.remainingMinutes != null && snap.claude.block.remainingMinutes < 90) {
+      pool.push(['伊藤さん5h枠もうすぐらしい', 'ちょっと休ませよう']);
+    }
+    if (snap.deliveries && snap.deliveries.daihon) {
+      pool.push([`台本もう${snap.deliveries.daihon}本納品って`, '月城さんさすが']);
+    }
+    if (snap.codex.rateLimit) {
+      pool.push([`コデックス週次残り${Math.max(0, Math.round(100 - snap.codex.rateLimit.usedPercent))}%`, 'ペース配分だいじ']);
+    }
+  }
+  const l1 = pool[Math.floor(Math.random() * pool.length)];
+  const l2 = pool[Math.floor(Math.random() * pool.length)];
+  return l1 === l2 ? l1 : [...l1, ...l2];
+}
+
+function stepChat(t) {
+  if (chat.active) {
+    const c = chat.active;
+    if (c.a.mode !== 'idle' || c.b.mode !== 'idle' || !c.a.present || !c.b.present) {
+      c.a.inChat = c.b.inChat = false;
+      chat.active = null;
+      chat.next = t + 45000;
+      return;
+    }
+    if (t > c.nextLine) {
+      const line = c.lines[c.li];
+      if (line == null) {
+        c.a.inChat = c.b.inChat = false;
+        chat.active = null;
+        chat.next = t + 60000 + Math.random() * 90000;
+        return;
+      }
+      (c.li % 2 === 0 ? c.a : c.b).say(t, line, 3600);
+      c.li++;
+      c.nextLine = t + 4000;
+    }
+    return;
+  }
+  if (t < chat.next) return;
+  const idlers = employees.filter(e => e.present && e.mode === 'idle' && e.action !== 'walk');
+  if (idlers.length < 2) { chat.next = t + 30000; return; }
+  // 近い者同士で雑談(隣の席・同じ休憩室など)
+  let best = null, bestD = 1e9;
+  for (let i = 0; i < idlers.length; i++) for (let j = i + 1; j < idlers.length; j++) {
+    const d = Math.hypot(idlers[i].pos.x - idlers[j].pos.x, idlers[i].pos.y - idlers[j].pos.y);
+    if (d < bestD) { bestD = d; best = [idlers[i], idlers[j]]; }
+  }
+  if (!best || bestD > 220) { chat.next = t + 30000; return; }
+  const [a, b] = best;
+  a.inChat = b.inChat = true;
+  chat.active = { a, b, lines: makeChatLines(), li: 0, nextLine: t + 500 };
+}
+
 
 const dog = { pos: { x: 90, y: 150 }, target: null, next: 4000, napUntil: 0, dir: 1 };
 function stepDog(dt, t) {
@@ -1123,6 +1200,7 @@ function loop(t) {
   const tm = jstNow();
 
   for (const e of employees) { e.think(t, tm); e.step(dt, t); e.tickBubble(t); }
+  stepChat(t);
   stepDog(dt, t);
   stepParticles(dt);
 
