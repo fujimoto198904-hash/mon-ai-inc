@@ -1340,8 +1340,8 @@ const STANDUP_POS = [
 const officeEvent = { active: null, next: 90000, cooldown: 0 };
 const EVENT_PROPS = {
   bbq: [
-    ['b_grill', 268, 156, 34, 40], ['b_table', 310, 166, 42, 30], ['b_meat', 316, 156, 20, 13],
-    ['b_skewer', 336, 158, 16, 12], ['b_cooler', 356, 182, 18, 15], ['b_beer', 296, 198, 15, 14],
+    ['b_grill', 266, 164, 38, 31], ['b_table', 310, 166, 42, 31], ['b_meat', 314, 158, 18, 14],
+    ['b_skewer', 336, 160, 16, 13], ['b_cooler', 246, 184, 16, 16], ['b_beer', 296, 198, 11, 16],
   ],
   gym: [
     ['g_rack', 252, 150, 36, 21], ['g_barbell', 294, 160, 40, 13], ['g_bench', 340, 154, 26, 23],
