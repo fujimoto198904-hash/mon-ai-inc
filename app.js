@@ -600,9 +600,9 @@ function drawOffice(g, t, tm) {
   const onAir = snap && snap.launchd && snap.launchd['com.mon.tsuki.watcher'] && snap.launchd['com.mon.tsuki.watcher'].running;
   if (!drawProp(g, 'studio_film', 376, 240, 100, 66)) rr(g, 384, 246, 92, 60, '#e0e8e8', '#b0c0c0');
   if (!drawProp(g, 'studio_audio', 484, 226, 136, 90)) rr(g, 488, 234, 132, 82, '#e8e0f0', '#b0a8c0');
-  rr(g, 560, 218, 34, 11, onAir ? '#e05a4e' : '#706860', INK);
-  g.fillStyle = '#fff'; g.font = '6px DotGothic16'; g.fillText('ON AIR', 564, 226);
-  if (!onAir) { g.fillStyle = '#e05a4e'; g.font = '6px DotGothic16'; g.fillText('TTS停止中!', 588, 240); }
+  rr(g, 578, 231, 32, 10, onAir ? '#e05a4e' : '#565058', INK);
+  g.fillStyle = '#fff'; g.font = '6px DotGothic16'; g.fillText('ON AIR', 581, 239);
+  if (!onAir) { g.fillStyle = '#ff6a5e'; g.font = '6px DotGothic16'; g.fillText('TTS停止中!', 520, 239); }
 
   drawProp(g, 'firstaid', 319, 14, 13, 13);
   if (!drawProp(g, 'sofa', 20, 288, 60, 30)) rr(g, 24, 296, 52, 20, '#7a9ac8', INK);
@@ -765,7 +765,7 @@ const CLEAN_SPOTS = [
   { x: 420, y: 205, k: 'sweep' }, { x: 550, y: 205, k: 'sweep' }, { x: 366, y: 330, k: 'sweep' },
   { x: 130, y: 262, k: 'mop' }, { x: 310, y: 330, k: 'mop' }, { x: 500, y: 205, k: 'mop' }, { x: 200, y: 320, k: 'mop' },
   { x: 285, y: 64, k: 'wipe' }, { x: 424, y: 300, k: 'wipe' },
-  { x: 595, y: 232, k: 'bucket' }, { x: 300, y: 318, k: 'sweep' },
+  { x: 543, y: 344, k: 'bucket' }, { x: 300, y: 318, k: 'sweep' },
 ];
 
 const IDLE_MUTTER = ['のび〜', '肩回すか', '水飲みに行こうかな', '今日の晩ごはん何にしよ', 'ちょっと眠い',
@@ -1677,8 +1677,8 @@ function loop(t) {
     ['cooler', 140, 182, 20, 36], ['plant_a', 192, 296, 20, 32], ['bin_g', 196, 184, 11, 16],
 
     ['copier', 530, 150, 26, 32], ['rack', 562, 146, 26, 46], ['netcab', 590, 156, 22, 36],
-    ['ccart', 534, 200, 26, 28], ['ladder', 564, 204, 17, 22],
-    ['bin_g', 588, 206, 10, 15], ['bin_r', 601, 206, 10, 15], ['exting', 618, 150, 8, 17],
+    ['ccart', 486, 316, 24, 26], ['ladder', 514, 320, 16, 20],
+    ['bin_g', 536, 322, 10, 15], ['bin_r', 549, 322, 10, 15], ['exting', 618, 150, 8, 17],
     ['reception', 258, 296, 100, 38], ['sanitizer', 366, 302, 10, 25],
   ];
 
