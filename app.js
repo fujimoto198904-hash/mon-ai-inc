@@ -415,6 +415,10 @@ function drawParticles(g) {
       g.fillStyle = `rgba(232,90,120,${a})`;
       const x = Math.round(p.x), y = Math.round(p.y);
       g.fillRect(x, y, 2, 2); g.fillRect(x + 3, y, 2, 2); g.fillRect(x, y + 2, 5, 2); g.fillRect(x + 1, y + 4, 3, 1); g.fillRect(x + 2, y + 5, 1, 1);
+    } else if (p.type === 'bsmoke') {
+      const s = 2 + Math.floor((2600 - p.life) / 650);   // 立ちのぼるほど大きく
+      g.fillStyle = `rgba(120,120,130,${a * .5})`;
+      g.fillRect(Math.round(p.x - s / 2), Math.round(p.y), s, s);
     } else if (p.type === 'note') {
       g.fillStyle = `rgba(120,90,200,${a})`;
       g.font = '9px DotGothic16';
@@ -597,16 +601,7 @@ function drawOffice(g, t, tm) {
 
   // ラグ(部署) — ユーザー製カーペットパーツ
 
-  if (!drawProp(g, 'room_break', 16, 208, 176, 132)) rr(g, 16, 208, 176, 132, '#ecd8c0', '#d0b898');
-  rr(g, 16, 338, 176, 4, 'rgba(120,90,60,.35)');
-  // 休憩室の黄土色カーペット: room_break素材の床は壁まで届いているので、
-  // 室内を通常床(bg)で埋め戻してから、壁と絶対に接しないサイズで敷き直す
-  if (OFFICE.bg) {
-    const bw = OFFICE.bg.width / W, bh = OFFICE.bg.height / H;
-    g.save(); g.imageSmoothingEnabled = true;
-    g.drawImage(OFFICE.bg, 24 * bw, 226 * bh, 160 * bw, 104 * bh, 24, 226, 160, 104);
-    g.restore();
-  }
+  // 休憩室: 囲いの部屋枠は描かない(オープンスペース)。黄土色カーペットだけを敷く
   rr(g, 38, 242, 132, 78, '#dcc59a', '#b89468');
   g.strokeStyle = 'rgba(150,115,70,.5)'; g.lineWidth = 1;
   g.strokeRect(42.5, 246.5, 123, 69);
@@ -1449,8 +1444,8 @@ const STANDUP_POS = [
 const officeEvent = { active: null, next: 90000, cooldown: 0 };
 const EVENT_PROPS = {
   bbq: [
-    ['b_grill', 266, 150, 38, 31], ['b_table', 310, 152, 42, 31], ['b_meat', 314, 144, 18, 14],
-    ['b_skewer', 336, 146, 16, 13], ['b_cooler', 246, 170, 16, 16], ['b_beer', 296, 180, 11, 16],
+    ['b_grill', 266, 150, 38, 31], ['b_table', 310, 152, 42, 31], ['b_meat', 314, 147, 18, 14],
+    ['b_skewer', 336, 149, 16, 13], ['b_cooler', 246, 170, 16, 16], ['b_beer', 296, 180, 11, 16],
   ],
   gym: [
     ['g_rack', 252, 148, 36, 21], ['g_barbell', 294, 152, 40, 13], ['g_bench', 340, 152, 26, 23],
@@ -1482,8 +1477,16 @@ function startEvent(kind, members, t) {
     const p = EVENT_SPOTS[kind][i % EVENT_SPOTS[kind].length];
     e.goto({ x: p.x, y: p.y }, p.a);
   });
-  officeEvent.active = { kind, members, until: t + 160000 + Math.random() * 60000, nextLine: t + 6000, nextReact: t + 9000 };
+  officeEvent.active = { kind, members, startT: t, until: t + 160000 + Math.random() * 60000, nextLine: t + 6000, nextReact: t + 9000 };
 }
+
+// BBQの煙→もくもく→火災報知器
+let hazeLevel = 0;
+const ALARM_REACT = [
+  '警報!!', '煙すごい!!', 'けほけほっ', '窓!窓開けて!(無い)', '火元どこ!?',
+  'スタジオが霞んで見えない', 'スプリンクラー来るぞ!?', '肉は守れ!!', '避難訓練!?', '耳がぁぁ',
+  '誰か換気ー!!', 'うちわ持ってこい!', '報知器さん落ち着いて', '焼きすぎだって言った!',
+];
 
 // イベントの終わり=社長が怒りに来る
 const BOSS_BUST = [
@@ -1506,6 +1509,21 @@ function runEvent(t) {
       e.inChat = false; e.inEvent = false;
       if (e.mode === 'working') { e.say(t, '仕事きた!離脱!', 2400); e.gotoWork(); }
       ev.members = ev.members.filter(x => x !== e);
+    }
+  }
+  // BBQ: グリルから煙が立ちのぼり、部屋がもくもくして、やがて警報器が鳴る
+  if (ev.kind === 'bbq') {
+    if (!ev.nextSmoke || t > ev.nextSmoke) {
+      spawnParticle('bsmoke', 276 + Math.random() * 18, 149 + Math.random() * 4);
+      ev.nextSmoke = t + 240 + Math.random() * 260;
+    }
+    const elapsed = t - (ev.startT || t);
+    ev.haze = Math.min(0.26, Math.max(0, (elapsed - 20000) / 70000) * 0.26);
+    if (!ev.alarmed && elapsed > 90000 && ev.members.length) {
+      ev.alarmed = true;
+      const near = employees.filter(e => e.present && !e.inChat && e.def.source !== 'janitor').slice(0, 5);
+      ev.members.concat(near).forEach((e, i) => e.say(t + 300 + i * 450, pickFresh('alarm', ALARM_REACT), 2800));
+      ev.until = Math.min(ev.until, t + 6000);   // 警報→まもなく社長が飛んでくる
     }
   }
   // 社長の解散劇(お叱り)フェーズ
@@ -2215,7 +2233,9 @@ function loop(t) {
   for (const e of employees) if (e.present) items.push({ y: e.pos.y, draw: g => e.drawSprite(g, t) });
   if (officeEvent.active) {
     for (const [k, ox, oy, ow, oh] of EVENT_PROPS[officeEvent.active.kind]) {
-      items.push({ y: oy + oh - 6, draw: g => drawProp(g, k, ox, oy, ow, oh) });
+      // 肉と串はテーブルの「上」に載っているので、テーブルより後に描く
+      const sy = (k === 'b_meat' || k === 'b_skewer') ? 184 : oy + oh - 6;
+      items.push({ y: sy, draw: g => drawProp(g, k, ox, oy, ow, oh) });
     }
   }
   items.push({ y: dog.pos.y, draw: g => drawDog(g, t) });
@@ -2227,6 +2247,25 @@ function loop(t) {
   if (night) {
     cx.fillStyle = 'rgba(30,30,80,.16)';
     cx.fillRect(0, 0, W, H);
+  }
+  // BBQの煙もや: 部屋全体がもくもくする(イベント終了後はゆっくり晴れる)
+  const hazeTarget = officeEvent.active && officeEvent.active.kind === 'bbq' ? (officeEvent.active.haze || 0) : 0;
+  hazeLevel += (hazeTarget - hazeLevel) * (dt / 1000) * 0.9;
+  if (hazeLevel > 0.004) {
+    cx.fillStyle = `rgba(135,135,145,${hazeLevel.toFixed(3)})`;
+    cx.fillRect(0, 0, W, H);
+  }
+  // 火災報知器: 赤フラッシュ+天井ランプ
+  if (officeEvent.active && officeEvent.active.alarmed) {
+    const flash = Math.floor(t / 260) % 2;
+    if (flash) { cx.fillStyle = 'rgba(224,60,50,.09)'; cx.fillRect(0, 0, W, H); }
+    cx.fillStyle = flash ? '#ff4a3c' : '#7a2620';
+    cx.fillRect(306, 62, 8, 6);
+    if (flash) {
+      cx.font = '7px DotGothic16';
+      cx.fillStyle = '#e03c2e';
+      cx.fillText('🚨 火災報知器作動中!', 268, 58);
+    }
   }
   for (const b of bubbleQ) drawBubble(cx, b.x, b.y, b.text);
   bubbleQ.length = 0;
