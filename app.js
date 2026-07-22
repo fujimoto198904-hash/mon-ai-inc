@@ -432,7 +432,7 @@ function drawDesk(g, seat, working, t, emp) {
 
 function drawOffice(g, t, tm) {
   const hour = tm.h + tm.m / 60;
-  const night = hour >= 19 || hour < 6;
+  const night = hour >= 19 || hour < 5;   // 5:00には外が明るい
 
   if (OFFICE.bg) {
     // ユーザー製パーツのオフィス全景を背景に(壁・床・掲示板・時計・看板込み)
