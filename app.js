@@ -431,10 +431,7 @@ function drawDesk(g, seat, working, t, emp) {
     rr(g, x - 9, y - 4, 18, 12, '#23252d', INK);
   }
   if (working) {
-    // モニター縁が光る+背面ランプで稼働がわかる
-    g.fillStyle = 'rgba(150,230,190,.35)';
-    if (pc === 'mon2') { g.fillRect(x - 15, y - 5, 13, 9); g.fillRect(x + 2, y - 5, 13, 9); }
-    else g.fillRect(x - 8, y - 5, 16, 10);
+    // 稼働ランプのみ(画面光のエフェクトは廃止 — 光っていいのは伊藤の頭だけ)
     g.fillStyle = '#4cff8e';
     g.fillRect(x + 15, y + 6, 2, 2);
   }
@@ -691,6 +688,14 @@ class Person {
       this.dir = this.cleanDir || 'left';
       return;
     }
+    if (a === 'sabori') {
+      this.action = 'sabori';
+      this.saborUntil = t + 26000 + Math.random() * 28000;
+      this.saborMid = t + 11000 + Math.random() * 6000;
+      this.dir = this.saborDir || 'down';
+      this.say(t + 600, pickFresh('jansabo', JANITOR_SABORI), 3800);
+      return;
+    }
     if (a === 'leave') { this.present = false; this.action = 'gone'; }
     else if (a === 'sit' || a === 'sleep') {
       if (this.arrivalSitY != null) { this.pos = { x: this.pos.x, y: this.arrivalSitY }; this.arrivalSitY = null; }
@@ -781,6 +786,20 @@ const CLEAN_SPOTS = [
   { x: 285, y: 64, k: 'wipe' }, { x: 424, y: 312, k: 'wipe' }, { x: 436, y: 328, k: 'mop' }, { x: 607, y: 214, k: 'bucket' },
 ];
 
+// 白柳のサボりスポットとサボり中のつぶやき
+const JANITOR_SABORI_SPOTS = [
+  { x: 66, y: 232, d: 'up' },     // 自販機の前でぼーっと
+  { x: 150, y: 256, d: 'left' },  // 休憩室の隅
+  { x: 56, y: 306, d: 'down' },   // ロビーのソファ前
+  { x: 210, y: 330, d: 'left' },  // 受付脇の柱の影
+];
+const JANITOR_SABORI = [
+  '…5分だけ', '掃除は逃げない…', '腰が…限界…', '社長来たら掃くフリしよ',
+  'ここはさっき掃いたことにしよ', 'ほこりも休憩中だし…', '働き方改革です',
+  '自販機の前は空気がうまい', 'モップも乾かさないとね(言い訳)', '…見てないな、よし',
+  '床は明日も汚れる。焦るな俺', 'サボりじゃない、品質点検', '雲でも見るか…窓ないけど',
+];
+
 const IDLE_ANTICS = [
   '💪スクワット×10 いくぞ', '🎸エアギター熱演中', '🏃その場ダッシュ(本気)', '🧘謎のヨガポーズ',
   '💪デスクで腕立て(浅い)', '🩰つま先立ちチャレンジ', '🥊影とシャドーボクシング', '🤸ラジオ体操第一(雑)',
@@ -862,6 +881,18 @@ class Employee extends Person {
   }
 
   thinkJanitor(t) {
+    if (this.action === 'sabori') {
+      if (this.saborMid && t > this.saborMid) {
+        this.saborMid = null;
+        this.say(t, pickFresh('jansabo', JANITOR_SABORI), 3800);
+      }
+      if (t > this.saborUntil) {
+        this.action = 'stand';
+        this.say(t, ['…よし、働くか', 'はぁ、掃くか…', '休憩終わり!'][Math.floor(Math.random() * 3)], 2800);
+        this.nextThink = t + 3000;
+      }
+      return;
+    }
     if (this.action === 'cleaning') {
       if (t > this.cleanUntil) { this.action = 'stand'; this.nextThink = t + 1500; }
       return;
@@ -892,6 +923,14 @@ class Employee extends Person {
         tgt.nextThink = t + 30000;
         return;
       }
+    }
+    // たまにはサボる(18%)
+    if (Math.random() < 0.18) {
+      const sp = JANITOR_SABORI_SPOTS[Math.floor(Math.random() * JANITOR_SABORI_SPOTS.length)];
+      this.saborDir = sp.d || 'down';
+      this.goto({ x: sp.x, y: sp.y }, 'sabori');
+      this.nextThink = t + 2000;
+      return;
     }
     // 通常巡回: 掃除スポットへ移動して掃く
     const spots = CLEAN_SPOTS.filter(sp => sp !== this.lastClean);
@@ -1046,6 +1085,19 @@ class Employee extends Person {
     const { x, y } = this.pos;
     const e = this.expr(t);
     const seated = this.action === 'sit' || this.action === 'sleep';
+    if (this.id === 'ito') {
+      // 光っていいのは伊藤の頭だけ: スキンヘッドがときどきキラーン
+      const ph = (t + this.seed) % 5200;
+      if (ph < 750) {
+        const a = Math.sin(ph / 750 * Math.PI);
+        g.fillStyle = `rgba(255,255,235,${(0.9 * a).toFixed(2)})`;
+        const hx = x + 3.5, hy = y - 20.5;
+        g.fillRect(hx - .7, hy - 2.6, 1.4, 5.4);
+        g.fillRect(hx - 2.6, hy - .7, 5.4, 1.4);
+        g.fillStyle = `rgba(255,255,255,${(0.55 * a).toFixed(2)})`;
+        g.fillRect(hx - 1.4, hy - 1.4, 2.8, 2.8);
+      }
+    }
     if (e === 'sleep') drawZzz(g, x, y - 26, t + this.seed);
     if (this.mode === 'panic') drawAlert(g, x, y - 10, t);
     if (!(seated && !this.resting && !this.atMeeting)) {
@@ -1868,6 +1920,7 @@ function updateHud() {
     let [cls, label] = CHIP[e.mode] || CHIP.idle;
     if (e.mode === 'idle' && e.resting) [cls, label] = CHIP.break;
     if (e.mode === 'idle' && e.receptionOn) [cls, label] = CHIP.reception;
+    if (e.def.source === 'janitor' && e.action === 'sabori') [cls, label] = ['rest', 'サボり中'];
     const row = document.createElement('div');
     row.className = 'emp';
     const sheet = SHEETS[e.spriteId || e.id];
@@ -2053,15 +2106,6 @@ function loop(t) {
   if (night) {
     cx.fillStyle = 'rgba(30,30,80,.16)';
     cx.fillRect(0, 0, W, H);
-    for (const e of employees) {
-      if (e.mode === 'working' && e.present) {
-        const g = cx.createRadialGradient(e.desk.x, e.desk.y + 4, 4, e.desk.x, e.desk.y + 4, 34);
-        g.addColorStop(0, 'rgba(255,240,180,.28)');
-        g.addColorStop(1, 'rgba(255,240,180,0)');
-        cx.fillStyle = g;
-        cx.fillRect(e.desk.x - 34, e.desk.y - 30, 68, 68);
-      }
-    }
   }
   for (const b of bubbleQ) drawBubble(cx, b.x, b.y, b.text);
   bubbleQ.length = 0;
