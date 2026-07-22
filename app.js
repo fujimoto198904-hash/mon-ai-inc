@@ -13,6 +13,10 @@ const viewToken = (location.hash.match(/v=([0-9a-f]+)/) || [])[1];
 if (!viewToken) document.getElementById('gate').style.display = 'flex';
 document.getElementById('mission').textContent = `ミッション「${CFG.mission}」`;
 
+/* ---------- ライブ配信モード(9:16・URL末尾に &lv=1) ---------- */
+const LIVE = /\blv=1\b/.test(location.hash);
+if (LIVE) document.body.classList.add('live');
+
 /* ---------- JST時刻 ---------- */
 const jstFmt = new Intl.DateTimeFormat('ja-JP', {
   timeZone: 'Asia/Tokyo', hour12: false,
@@ -32,6 +36,7 @@ function jstNow() {
 
 /* ---------- キャンバススケール ---------- */
 function fitCanvas() {
+  if (LIVE) return;   // ライブモードは#stage非表示(カメラキャンバスに転写)
   const st = document.getElementById('stage');
   const aw = st.clientWidth - 12, ah = st.clientHeight - 12;
   const s = Math.min(aw / W, ah / H);
@@ -596,14 +601,16 @@ function drawOffice(g, t, tm) {
   drawProp(g, 'plant_mon', 20, 64, 18, 40);
   drawProp(g, 'lamp', 100, 66, 17, 38);
 
-  // コレクター受信ステータス(サーバー列の下)
+  // コレクター受信ステータス(社名看板の下・壁掛けLEDパネル=サーバーコーナー真上)
   const freshRx = lastArrivalT >= 0 && (t - lastArrivalT) < 30000;
   const deadRx = snapAt > 0 && (Date.now() - snapAt) > (CFG.staleMin || 20) * 60000;
-  g.fillStyle = deadRx ? '#e05a4e' : freshRx ? (Math.floor(t / 300) % 2 ? '#5aff8e' : '#4caf6e') : '#4caf6e';
-  g.fillRect(524, 214, 5, 3);
+  const syncMsg = deadRx ? '⚠ データ同期が止まってます!' : freshRx ? 'データ同期OK(5分毎)' : 'データ同期: 次の更新待ち';
+  rr(g, 486, 63, 146, 15, '#37332c', INK);
+  g.fillStyle = deadRx ? '#e05a4e' : (freshRx && Math.floor(t / 300) % 2 ? '#5aff8e' : '#4caf6e');
+  g.fillRect(492, 68, 4, 4);
   g.font = '6px DotGothic16';
-  g.fillStyle = deadRx ? '#e05a4e' : 'rgba(74,59,42,.7)';
-  g.fillText(deadRx ? '⚠ データ同期が止まってます!' : freshRx ? 'データ同期OK(5分毎)' : 'データ同期: 次の更新待ち', 500, 219);
+  g.fillStyle = deadRx ? '#ff7a6e' : '#8ef0b0';
+  g.fillText(syncMsg, 501, 73.5);
 
   if (!drawProp(g, 'sofa', 20, 288, 60, 30)) rr(g, 24, 296, 52, 20, '#7a9ac8', INK);
   drawProp(g, 'armchair', 92, 288, 26, 32);
@@ -2007,13 +2014,15 @@ function loop(t) {
 
     ['copier', 524, 154, 26, 32], ['tower', 554, 148, 20, 38], ['netcab', 578, 150, 22, 36], ['rack', 604, 140, 26, 46],
     ['bin_g', 600, 192, 10, 15], ['bin_r', 613, 192, 10, 15], ['exting', 11, 66, 8, 17],
-    ['reception', 252, 284, 112, 42], ['sanitizer', 388, 314, 10, 24], ['firstaid', 386, 296, 13, 13],
+    ['reception', 252, 284, 112, 42], ['sanitizer', 388, 314, 10, 24],
   ];
 
 
   for (const [k, ox, oy, ow, oh] of OCCLUDERS) {
     items.push({ y: oy + oh - 6, draw: g => drawProp(g, k, ox, oy, ow, oh) });
   }
+  // 救急箱: 受付カウンター天板の右端に置く(受付スプライトの後に描く)
+  items.push({ y: 321, draw: g => drawProp(g, 'firstaid', 344, 287, 13, 13) });
   for (const e of employees) {
     if (e.def.source === 'janitor') continue;
     const atDesk = e.present && (e.action === 'sit' || e.action === 'sleep') && !e.resting && !e.atMeeting;
@@ -2056,7 +2065,41 @@ function loop(t) {
   }
   for (const b of bubbleQ) drawBubble(cx, b.x, b.y, b.text);
   bubbleQ.length = 0;
+  if (LIVE) blitLive(t, tm);
   requestAnimationFrame(loop);
+}
+
+/* ================================================================
+   ライブ配信モード: オフィスを縦9:16カメラでゆっくりパンして転写
+   ================================================================ */
+const camCv = document.getElementById('cam');
+const camCx = camCv ? camCv.getContext('2d') : null;
+if (camCx) camCx.imageSmoothingEnabled = false;
+const CAM_W = 203;                 // 論理クロップ幅(203x360 ≒ 9:16)
+let camX = (W - CAM_W) / 2, lastLiveDom = -9999;
+function liveTarget(t) {
+  // 見どころがあればカメラが寄る: イベント > 朝会 > 社長の指示行脚
+  if (officeEvent.active) return 310 - CAM_W / 2;
+  if (standup.active) return 414 - CAM_W / 2;
+  const bossE = employees.find(e => e.def.source === 'boss');
+  if (bossE && bossE.directing) return bossE.x - CAM_W / 2;
+  return (W - CAM_W) / 2 * (1 + Math.sin(t / 60000 * Math.PI * 2));
+}
+function blitLive(t, tm) {
+  if (!camCx) return;
+  const tgt = Math.max(0, Math.min(W - CAM_W, liveTarget(t)));
+  camX += (tgt - camX) * 0.012;
+  camCx.drawImage(cv, Math.round(camX * 4), 0, CAM_W * 4, 1440, 0, 0, CAM_W * 4, 1440);
+  if (t - lastLiveDom > 1000) {
+    lastLiveDom = t;
+    $('lvClock').textContent = tm.hm;
+    $('lvMission').textContent = `「${CFG.mission}」`;
+    const subs = snap && snap.youtube && snap.youtube.subs != null ? snap.youtube.subs.toLocaleString('ja-JP') + '人' : '---';
+    $('lvSubs').textContent = `📺 YT登録者 ${subs}`;
+    $('lvWork').textContent = `🧑‍💻 稼働中 ${employees.filter(e => e.present && e.mode === 'working').length}人`;
+    const d = snap && snap.deliveries ? (snap.deliveries.koen || 0) + (snap.deliveries.daihon || 0) : null;
+    $('lvDel').textContent = `📦 本日の納品 ${d == null ? '-' : d}本`;
+  }
 }
 
 /* ================================================================

@@ -111,6 +111,40 @@
     display: none; align-items: center; justify-content: center;
     z-index: 10; text-align: center; line-height: 2;
   }
+  /* ライブ配信モード(9:16): #v=…&lv=1 で縦型カメラビュー */
+  #live { display: none; }
+  body.live { background: #181410; }
+  body.live #topbar, body.live #main, body.live #stale { display: none; }
+  body.live #live { display: block; position: fixed; inset: 0; }
+  body.live #cam {
+    width: 100%; height: 100%; object-fit: cover;
+    image-rendering: pixelated; display: block;
+  }
+  #liveTop {
+    position: absolute; top: 0; left: 0; right: 0;
+    padding: calc(10px + env(safe-area-inset-top)) 14px 26px;
+    display: flex; align-items: center; gap: 10px;
+    background: linear-gradient(rgba(20,14,8,.72), rgba(20,14,8,0));
+    color: #fff; font-size: 18px; letter-spacing: 1px;
+  }
+  #lvBadge {
+    background: #e0322e; border-radius: 6px; padding: 2px 8px;
+    font-size: 13px; animation: lvblink 1.6s infinite;
+  }
+  @keyframes lvblink { 0%, 100% { opacity: 1 } 50% { opacity: .5 } }
+  #lvClock { margin-left: auto; font-size: 22px; letter-spacing: 2px; }
+  #liveBot {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    padding: 34px 14px calc(14px + env(safe-area-inset-bottom));
+    background: linear-gradient(rgba(20,14,8,0), rgba(20,14,8,.8));
+    color: #fff;
+  }
+  #lvMission { font-size: 15px; opacity: .92; margin-bottom: 8px; }
+  #lvStats { display: flex; gap: 8px; flex-wrap: wrap; }
+  .lvchip {
+    background: rgba(255,250,240,.16); border: 1px solid rgba(255,250,240,.45);
+    border-radius: 999px; padding: 4px 10px; font-size: 13px;
+  }
   /* スマホ(iPhone)対応: 縦積み+スクロール */
   @media (max-width: 760px) {
     html, body { height: auto; overflow: auto; }
@@ -169,6 +203,22 @@
         <ul id="tasks"></ul>
       </div>
       <div id="footer">最終更新: <span id="lastTs">--</span></div>
+    </div>
+  </div>
+  <div id="live">
+    <canvas id="cam" width="812" height="1440"></canvas>
+    <div id="liveTop">
+      <span id="lvBadge">● LIVE</span>
+      <span>🏢 MON-AI Inc.</span>
+      <span id="lvClock">--:--</span>
+    </div>
+    <div id="liveBot">
+      <div id="lvMission"></div>
+      <div id="lvStats">
+        <span class="lvchip" id="lvSubs">📺 --</span>
+        <span class="lvchip" id="lvWork">🧑‍💻 --</span>
+        <span class="lvchip" id="lvDel">📦 --</span>
+      </div>
     </div>
   </div>
   <div id="gate">
