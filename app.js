@@ -209,7 +209,7 @@ const OFFICE = {};
   for (const k of ['vending', 'sofa', 'cooler', 'room_break', 'room_studio', 'room_film', 'chair',
     'rack', 'netcab', 'plant_a', 'plant_snake', 'plant_mon', 'lamp', 'coffee_st', 'armchair', 'ctable',
     'snack', 'copier', 'tvstand', 'projcart', 'tower', 'dskb1', 'dskb2', 'dskb4',
-    'corkboard', 'window_day', 'window_night', 'reception', 'bin_g', 'bin_r', 'exting', 'firstaid', 'sanitizer', 'ladder', 'ccart']) {
+    'corkboard', 'window_day', 'window_night', 'reception', 'bin_g', 'bin_r', 'exting', 'firstaid', 'sanitizer', 'ladder', 'ccart', 'studio_audio', 'studio_film']) {
     const im = new Image();
     im.onload = () => { OFFICE[k] = keyOutBackground(im); };
     im.src = `assets/office/${k}.png`;
@@ -596,65 +596,19 @@ function drawOffice(g, t, tm) {
     g.fillStyle = '#f2f0e8'; g.fillText(text, x + 7, y + 7.5);
   }
 
-  // 音声スタジオ(TTS=watcher。人は住まない=機械の部屋)
-  if (!drawProp(g, 'room_studio', 488, 224, 132, 112)) {
-    rr(g, 488, 224, 132, 112, '#e8e0f0', '#b0a8c0');
-    g.strokeStyle = INK; g.lineWidth = 2;
-    g.strokeRect(489, 225, 130, 110);
-    g.fillStyle = '#e8e0f0'; g.fillRect(487, 258, 4, 44);
-    g.lineWidth = 1;
-  }
+  // スタジオ2部屋(ユーザー製ルームアート)
   const onAir = snap && snap.launchd && snap.launchd['com.mon.tsuki.watcher'] && snap.launchd['com.mon.tsuki.watcher'].running;
-  rr(g, 560, 228, 34, 12, onAir ? '#e05a4e' : '#706860', INK);
-  g.fillStyle = '#fff'; g.font = '8px DotGothic16'; g.fillText('ON AIR', 563, 237);
-  // マイク+TTS機(稼働中は波形が動く)
-  rr(g, 543, 252, 2, 14, '#6a6a74');
-  rr(g, 541, 248, 6, 6, '#3a3a44', INK);
-
-  rr(g, 526, 268, 22, 16, '#2a2a34', INK);
-  g.fillStyle = onAir ? (Math.floor(t / 500) % 2 ? '#5aff8e' : '#4caf6e') : '#e05a4e';
-  g.fillRect(528, 270, 3, 3);
-  g.fillStyle = onAir ? '#4a9a6a' : '#5a5a64';
-  for (let i = 0; i < 4; i++) {
-    const hgt = onAir ? 2 + Math.floor(Math.abs(Math.sin(t / 180 + i)) * 8) : 2;
-    g.fillRect(533 + i * 4, 282 - hgt, 2, hgt);
-  }
-  g.font = '8px DotGothic16'; g.fillStyle = 'rgba(74,59,42,.65)';
-  g.fillText('TTS機', 502, 312);
-  if (!onAir) { g.fillStyle = '#e05a4e'; g.fillText('停止中!', 540, 312); }
-
-  // 撮影スタジオ(グリーンバック・カメラ・照明)
-  if (!drawProp(g, 'room_film', 384, 232, 92, 104)) rr(g, 384, 232, 92, 104, '#e0e8e8', '#b0c0c0');
-  rr(g, 392, 250, 76, 28, '#4ac858', '#2a8a3a');
-  rr(g, 394, 278, 4, 8, '#6a6a74'); rr(g, 462, 278, 4, 8, '#6a6a74');
-
-  // 休憩室(上=キッチン家電 / 中央=通路 / 下=ソファ+チェア×2で8席)
-
-  // 機材コーナー(右壁): コレクター=サーバーラック / ルーチン基盤=ネットワークキャビネット
-  const fresh = lastArrivalT >= 0 && (t - lastArrivalT) < 30000;
-  const dead = snapAt > 0 && (Date.now() - snapAt) > (CFG.staleMin || 20) * 60000;
-  g.fillStyle = dead ? '#e05a4e' : fresh ? (Math.floor(t / 300) % 2 ? '#5aff8e' : '#4caf6e') : '#4caf6e';
-  g.fillRect(568, 150, 5, 3);
-  g.font = '6px DotGothic16';
-  g.fillStyle = dead ? '#e05a4e' : 'rgba(74,59,42,.75)';
-  g.fillText(dead ? '受信断!' : fresh ? '受信中' : '待受', 566, 206);
-  g.fillStyle = 'rgba(74,59,42,.55)';
-  g.fillText('コレクター/基盤', 560, 216);
-
-  // 社長室の調度・入口まわり
-  drawProp(g, 'lamp', 100, 66, 17, 38);
-  drawProp(g, 'plant_mon', 20, 64, 18, 40);
-
-  // 壁際: サーバーはIT列(プロジェクト-T裏)に集約、各開発ゾーンにPCタワー
-  drawProp(g, 'rack', 146, 46, 26, 46);
-  drawProp(g, 'netcab', 176, 56, 22, 36);
-  drawProp(g, 'tower', 204, 54, 20, 38);
-  drawProp(g, 'tower', 352, 56, 20, 38);
-  drawProp(g, 'bin_r', 378, 74, 11, 17);
-  drawProp(g, 'tower', 488, 56, 20, 38);
-  drawProp(g, 'plant_snake', 514, 58, 15, 38);
+  if (!drawProp(g, 'studio_film', 376, 240, 100, 66)) rr(g, 384, 246, 92, 60, '#e0e8e8', '#b0c0c0');
+  if (!drawProp(g, 'studio_audio', 484, 226, 136, 90)) rr(g, 488, 234, 132, 82, '#e8e0f0', '#b0a8c0');
+  rr(g, 560, 218, 34, 11, onAir ? '#e05a4e' : '#706860', INK);
+  g.fillStyle = '#fff'; g.font = '6px DotGothic16'; g.fillText('ON AIR', 564, 226);
+  if (!onAir) { g.fillStyle = '#e05a4e'; g.font = '6px DotGothic16'; g.fillText('TTS停止中!', 588, 240); }
 
   drawProp(g, 'firstaid', 319, 14, 13, 13);
+  if (!drawProp(g, 'sofa', 20, 288, 60, 30)) rr(g, 24, 296, 52, 20, '#7a9ac8', INK);
+  drawProp(g, 'armchair', 92, 288, 26, 32);
+  drawProp(g, 'armchair', 126, 288, 26, 32);
+  drawProp(g, 'armchair', 158, 288, 26, 32);
 
   // ミーティングスペース(丸テーブル)
 
@@ -810,7 +764,7 @@ const CLEAN_SPOTS = [
   { x: 460, y: 200, k: 'sweep' }, { x: 90, y: 250, k: 'sweep' }, { x: 250, y: 320, k: 'sweep' },
   { x: 420, y: 205, k: 'sweep' }, { x: 550, y: 205, k: 'sweep' }, { x: 366, y: 330, k: 'sweep' },
   { x: 130, y: 262, k: 'mop' }, { x: 310, y: 330, k: 'mop' }, { x: 500, y: 205, k: 'mop' }, { x: 200, y: 320, k: 'mop' },
-  { x: 285, y: 64, k: 'wipe' }, { x: 428, y: 268, k: 'wipe' },
+  { x: 285, y: 64, k: 'wipe' }, { x: 424, y: 300, k: 'wipe' },
   { x: 595, y: 232, k: 'bucket' }, { x: 300, y: 318, k: 'sweep' },
 ];
 
@@ -1709,7 +1663,7 @@ function loop(t) {
     lastAmbient = t;
     const onAirNow = snap && snap.launchd && snap.launchd['com.mon.tsuki.watcher'] && snap.launchd['com.mon.tsuki.watcher'].running;
     if (onAirNow && Math.random() < 0.35) {
-      spawnParticle('note', 512 + Math.random() * 14, 258);
+      spawnParticle('note', 540 + Math.random() * 20, 250);
     }
   }
 
@@ -1721,12 +1675,11 @@ function loop(t) {
   const OCCLUDERS = [
     ['coffee_st', 20, 182, 30, 36], ['vending', 80, 180, 24, 38], ['snack', 108, 184, 28, 36],
     ['cooler', 140, 182, 20, 36], ['plant_a', 192, 296, 20, 32], ['bin_g', 196, 184, 11, 16],
-    ['sofa', 20, 288, 60, 30], ['armchair', 92, 288, 26, 32], ['armchair', 126, 288, 26, 32], ['armchair', 158, 288, 26, 32],
+
     ['copier', 530, 150, 26, 32], ['rack', 562, 146, 26, 46], ['netcab', 590, 156, 22, 36],
     ['ccart', 534, 200, 26, 28], ['ladder', 564, 204, 17, 22],
     ['bin_g', 588, 206, 10, 15], ['bin_r', 601, 206, 10, 15], ['exting', 618, 150, 8, 17],
     ['reception', 258, 296, 100, 38], ['sanitizer', 366, 302, 10, 25],
-    ['tvstand', 396, 292, 26, 34], ['projcart', 438, 294, 24, 32], ['tower', 500, 258, 22, 44],
   ];
 
 
