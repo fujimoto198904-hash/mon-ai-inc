@@ -115,7 +115,7 @@ const OFFICE = {};
   const bg = new Image();
   bg.onload = () => { OFFICE.bg = bg; };
   bg.src = 'assets/office/bg.png';
-  for (const k of ['vending', 'sofa', 'plant', 'cooler']) {
+  for (const k of ['vending', 'sofa', 'plant', 'cooler', 'rug_ceo', 'rug_pt', 'rug_app', 'rug_yoru', 'rug_soumu', 'room_break', 'room_studio', 'room_film', 'desk1', 'desk_exec', 'chair', 'mon1', 'mon2', 'laptop', 'rack', 'netcab', 'plant_a', 'plant_snake', 'plant_mon', 'lamp', 'coat', 'coffee_st', 'fridge', 'armchair', 'ctable', 'snack', 'copier', 'umbrella']) {
     const im = new Image();
     im.onload = () => { OFFICE[k] = keyOutBackground(im); };
     im.src = `assets/office/${k}.png`;
@@ -303,23 +303,38 @@ function rr(g, x, y, w, h, c, sc) {
   if (sc) { g.strokeStyle = sc; g.lineWidth = 1; g.strokeRect(x + .5, y + .5, w - 1, h - 1); }
 }
 
-function drawDesk(g, seat, working, t) {
-  const dx = seat.x - 22, dy = seat.y + 8;
-  rr(g, dx, dy, 44, 20, '#b8905c', INK);
-  rr(g, dx + 3, dy + 17, 4, 5, '#8a6a3c'); rr(g, dx + 37, dy + 17, 4, 5, '#8a6a3c');
-  rr(g, dx + 14, dy - 12, 16, 13, '#3a3a44', INK);
-  if (working) {
-    g.fillStyle = '#c8f0d8'; g.fillRect(dx + 15, dy - 11, 14, 11);
-    g.fillStyle = '#4a9a6a';
-    for (let i = 0; i < 4; i++) {
-      const lw = 4 + ((t / 300 + i * 2.7) % 8);
-      g.fillRect(dx + 16, dy - 10 + i * 2.5, Math.min(12, lw), 1.5);
+function drawChair(g, seat) {
+  if (drawProp(g, 'chair', seat.x - 9, seat.y - 27, 18, 25)) return;
+  rr(g, seat.x - 9, seat.y - 26, 18, 8, '#3c3c46', INK);
+  rr(g, seat.x - 7, seat.y - 18, 14, 3, '#2e2e38');
+}
+
+function drawDesk(g, seat, working, t, emp) {
+  const x = seat.x, y = seat.y;
+  const deskKey = emp && emp.deskType === 'exec' ? 'desk_exec' : 'desk1';
+  if (OFFICE[deskKey]) {
+    drawProp(g, deskKey, x - 25, y + 4, 50, 29);
+  } else {
+    rr(g, x - 24, y + 6, 48, 7, '#f4f2ee', INK);
+    rr(g, x - 24, y + 13, 48, 11, '#dddbd4', INK);
+  }
+  const pc = (emp && emp.pc) || 'mon1';
+  if (OFFICE[pc]) {
+    if (pc === 'mon2') drawProp(g, 'mon2', x - 13, y + 1, 26, 20);
+    else if (pc === 'laptop') drawProp(g, 'laptop', x - 10, y + 5, 20, 16);
+    else drawProp(g, 'mon1', x - 10, y + 1, 20, 20);
+    if (working) {
+      g.fillStyle = 'rgba(150,230,190,.30)';
+      if (pc === 'mon2') g.fillRect(x - 11, y + 2, 22, 8);
+      else if (pc === 'laptop') g.fillRect(x - 8, y + 6, 16, 6);
+      else g.fillRect(x - 8, y + 2, 16, 8);
+      g.fillStyle = '#4cff8e'; g.fillRect(x + 9, y + 16, 2, 2);
     }
   } else {
-    g.fillStyle = '#586068'; g.fillRect(dx + 15, dy - 11, 14, 11);
+    rr(g, x - 9, y - 1, 18, 11, '#23252d', INK);
+    g.fillStyle = working ? '#4cff8e' : '#555a60';
+    g.fillRect(x + 6, y + 7, 2, 2);
   }
-  rr(g, dx + 19, dy + 2, 6, 3, '#2a2a34');
-  rr(g, dx + 35, dy + 5, 6, 5, '#fff', '#c0b090');
 }
 
 function drawOffice(g, t, tm) {
@@ -333,9 +348,14 @@ function drawOffice(g, t, tm) {
     g.restore();
     rr(g, 288, 322, 74, 22, '#f2e4c2');  // bg側の入口表記を床色でならす(入口マットは下で描く)
     // ホワイトボードに社訓
-    g.font = '8px DotGothic16'; g.fillStyle = 'rgba(74,59,42,.85)';
-    g.fillText('《社訓》', 272, 13);
-    (CFG.mottos || []).slice(0, 3).forEach((m, k) => g.fillText(String(m).slice(0, 8), 258, 22 + k * 9));
+    g.font = '8px DotGothic16'; g.fillStyle = 'rgba(74,59,42,.9)';
+    const bcx = 277;
+    const title = '《社訓》';
+    g.fillText(title, bcx - g.measureText(title).width / 2, 14);
+    (CFG.mottos || []).slice(0, 3).forEach((m, k) => {
+      const line = String(m).slice(0, 7);
+      g.fillText(line, bcx - g.measureText(line).width / 2, 23 + k * 9);
+    });
     // 時計: 下絵の針を消してリアル時刻の針だけ描く
     g.fillStyle = '#fdf8f0';
     g.beginPath(); g.arc(352, 28, 10.5, 0, 7); g.fill();
@@ -424,23 +444,25 @@ function drawOffice(g, t, tm) {
 
   }
 
-  // ラグ(部署)
-  rr(g, 16, 60, 104, 92, '#e0c8e8', '#c0a0c8');    // 社長室
-  rr(g, 140, 60, 180, 92, '#c8dce8', '#a0bcd0');   // プロジェクト-T
-  rr(g, 340, 60, 108, 92, '#d0e8c8', '#a8cca0');   // アプリ制作部
-  rr(g, 468, 60, 120, 92, '#f0e0c0', '#d0c098');   // yorutool制作部
-  rr(g, 16, 208, 176, 136, '#ecd8c0', '#d0b898');  // 休憩室
-  rr(g, 216, 232, 152, 104, '#e8e4c8', '#c8c4a0'); // 総務部(機材ラック同居)
+  // ラグ(部署) — ユーザー製カーペットパーツ
+  if (!drawProp(g, 'rug_ceo', 16, 60, 104, 92)) rr(g, 16, 60, 104, 92, '#e0c8e8', '#c0a0c8');
+  if (!drawProp(g, 'rug_pt', 140, 60, 180, 92)) rr(g, 140, 60, 180, 92, '#c8dce8', '#a0bcd0');
+  if (!drawProp(g, 'rug_app', 340, 60, 108, 92)) rr(g, 340, 60, 108, 92, '#d0e8c8', '#a8cca0');
+  if (!drawProp(g, 'rug_yoru', 468, 60, 120, 92)) rr(g, 468, 60, 120, 92, '#f0e0c0', '#d0c098');
+  if (!drawProp(g, 'room_break', 16, 208, 176, 136)) rr(g, 16, 208, 176, 136, '#ecd8c0', '#d0b898');
+  if (!drawProp(g, 'rug_soumu', 216, 232, 152, 104)) rr(g, 216, 232, 152, 104, '#e8e4c8', '#c8c4a0');
   g.font = '9px DotGothic16'; g.fillStyle = 'rgba(74,59,42,.55)';
   g.fillText('社長室', 26, 72); g.fillText('プロジェクト-T', 150, 72); g.fillText('アプリ制作部', 350, 72); g.fillText('yorutool制作部', 474, 72);
-  g.fillText('休憩室', 26, 222); g.fillText('総務部', 224, 244);
+  g.fillText('休憩室', 26, 222); g.fillText('総務部', 224, 246);
 
   // 音声スタジオ(TTS=watcher。人は住まない=機械の部屋)
-  rr(g, 488, 224, 132, 112, '#e8e0f0', '#b0a8c0');
-  g.strokeStyle = INK; g.lineWidth = 2;
-  g.strokeRect(489, 225, 130, 110);
-  g.fillStyle = '#e8e0f0'; g.fillRect(487, 258, 4, 44);
-  g.lineWidth = 1;
+  if (!drawProp(g, 'room_studio', 488, 224, 132, 112)) {
+    rr(g, 488, 224, 132, 112, '#e8e0f0', '#b0a8c0');
+    g.strokeStyle = INK; g.lineWidth = 2;
+    g.strokeRect(489, 225, 130, 110);
+    g.fillStyle = '#e8e0f0'; g.fillRect(487, 258, 4, 44);
+    g.lineWidth = 1;
+  }
   g.fillStyle = 'rgba(74,59,42,.55)'; g.fillText('音声スタジオ', 496, 240);
   const onAir = snap && snap.launchd && snap.launchd['com.mon.tsuki.watcher'] && snap.launchd['com.mon.tsuki.watcher'].running;
   rr(g, 560, 228, 34, 12, onAir ? '#e05a4e' : '#706860', INK);
@@ -460,12 +482,9 @@ function drawOffice(g, t, tm) {
   g.font = '8px DotGothic16'; g.fillStyle = 'rgba(74,59,42,.65)';
   g.fillText('TTS機', 502, 312);
   if (!onAir) { g.fillStyle = '#e05a4e'; g.fillText('停止中!', 540, 312); }
-  // 防音壁
-  g.fillStyle = 'rgba(120,110,150,.25)';
-  for (let i = 0; i < 3; i++) g.fillRect(546 + i * 24, 300, 12, 24);
 
   // 撮影スタジオ(グリーンバック・カメラ・照明)
-  rr(g, 384, 232, 92, 104, '#e0e8e8', '#b0c0c0');
+  if (!drawProp(g, 'room_film', 384, 232, 92, 104)) rr(g, 384, 232, 92, 104, '#e0e8e8', '#b0c0c0');
   g.font = '9px DotGothic16'; g.fillStyle = 'rgba(74,59,42,.55)';
   g.fillText('撮影スタジオ', 388, 244);
   rr(g, 392, 250, 76, 28, '#4ac858', '#2a8a3a');
@@ -477,64 +496,50 @@ function drawOffice(g, t, tm) {
   rr(g, 450, 296, 2, 18, '#6a6a74');
   rr(g, 446, 288, 10, 8, '#f0e8c0', INK);
 
-  // 休憩室の什器
-  rr(g, 24, 228, 16, 26, '#8a8a96', INK);
-  rr(g, 27, 232, 10, 7, '#4a3b2a');
-  g.fillStyle = '#e05a4e'; g.fillRect(28, 246, 3, 3);
-  if (Math.floor(t / 500) % 3) { g.fillStyle = 'rgba(200,200,210,.7)'; g.fillRect(31, 222 - Math.floor(t / 250) % 4, 2, 3); }
-  if (!drawProp(g, 'vending', 48, 218, 24, 40)) {
-    rr(g, 52, 222, 20, 32, '#d05a5a', INK);
-    g.fillStyle = '#fff'; g.fillRect(55, 226, 14, 10);
-    g.fillStyle = '#5ab0e8'; g.fillRect(55, 227, 4, 4);
-    g.fillStyle = '#e8b93c'; g.fillRect(60, 227, 4, 4);
-    g.fillStyle = '#4caf6e'; g.fillRect(65, 227, 4, 4);
-  }
+  // 休憩室(キッチン家電・スナック棚・ソファセット)
+  drawProp(g, 'coffee_st', 20, 208, 30, 36);
+  drawProp(g, 'fridge', 54, 208, 21, 36);
+  if (!drawProp(g, 'vending', 80, 206, 24, 40)) rr(g, 80, 210, 24, 36, '#d05a5a', INK);
+  drawProp(g, 'snack', 108, 210, 28, 36);
+  drawProp(g, 'plant_a', 164, 210, 22, 34);
   if (!drawProp(g, 'sofa', 34, 296, 62, 30)) {
     rr(g, 40, 306, 52, 20, '#7a9ac8', INK);
     rr(g, 40, 302, 52, 8, '#8aaad8', INK);
   }
-  rr(g, 120, 276, 28, 18, '#b8905c', INK);
-  rr(g, 126, 272, 6, 6, '#fff', '#c0b090');
-  if (!drawProp(g, 'plant', 158, 196, 28, 42)) {
-    rr(g, 168, 214, 12, 6, '#a06a3c');
-    g.fillStyle = '#4caf6e';
-    g.fillRect(170, 202, 8, 12); g.fillRect(166, 206, 6, 6); g.fillRect(176, 205, 6, 7);
-  }
+  drawProp(g, 'ctable', 40, 322, 48, 20);
+  drawProp(g, 'armchair', 132, 294, 26, 32);
 
-  // ウォーターサーバー / プリンタ(廊下)
+  // 廊下: ウォーターサーバー / 複合機
   if (!drawProp(g, 'cooler', 192, 230, 20, 36)) {
     rr(g, 198, 240, 10, 22, '#d8e8f0', INK);
     rr(g, 200, 234, 6, 8, '#8ec8e8', INK);
   }
-  rr(g, 190, 284, 26, 14, '#b8905c', INK);
-  rr(g, 194, 276, 18, 10, '#8a8a96', INK);
-  if (Math.floor(t / 700) % 4 === 0) { g.fillStyle = '#fff'; g.fillRect(197, 284, 12, 2); }
+  drawProp(g, 'copier', 188, 274, 28, 30);
 
-  // コレクター受信ラック+ルーチン基盤(総務部の機材)
-  rr(g, 232, 296, 30, 34, '#3a3a44', INK);
-  g.fillStyle = '#2a2a34'; g.fillRect(234, 298, 26, 30);
-  for (let row = 0; row < 3; row++) {
-    for (let led = 0; led < 3; led++) {
-      const on = Math.floor(t / 400 + row * 1.7 + led * 2.3) % 5 !== 0;
-      g.fillStyle = on ? (led % 2 ? '#4caf6e' : '#e8b93c') : '#3a3a44';
-      g.fillRect(238 + led * 8, 302 + row * 7, 3, 2);
-    }
-  }
+  // 機材コーナー(右壁): コレクター=サーバーラック / ルーチン基盤=ネットワークキャビネット
   const fresh = lastArrivalT >= 0 && (t - lastArrivalT) < 30000;
   const dead = snapAt > 0 && (Date.now() - snapAt) > (CFG.staleMin || 20) * 60000;
+  if (OFFICE.rack) {
+    drawProp(g, 'rack', 584, 148, 26, 46);
+    drawProp(g, 'netcab', 612, 158, 22, 36);
+  } else {
+    rr(g, 584, 150, 26, 44, '#3a3a44', INK);
+    rr(g, 612, 160, 22, 34, '#4a4a54', INK);
+  }
   g.fillStyle = dead ? '#e05a4e' : fresh ? (Math.floor(t / 300) % 2 ? '#5aff8e' : '#4caf6e') : '#4caf6e';
-  g.fillRect(238, 324, 5, 3);
+  g.fillRect(586, 150, 5, 3);
   g.font = '8px DotGothic16';
   g.fillStyle = dead ? '#e05a4e' : 'rgba(74,59,42,.75)';
-  g.fillText(dead ? '受信断!' : fresh ? '受信中' : '待受', 246, 329);
-  rr(g, 276, 296, 26, 34, '#4a4a54', INK);
-  g.fillStyle = '#3a3a44'; g.fillRect(278, 298, 22, 30);
-  for (let row = 0; row < 3; row++) {
-    g.fillStyle = Math.floor(t / 700 + row) % 4 ? '#5a8ac8' : '#3a3a44';
-    g.fillRect(281 + row * 7, 302, 3, 2);
-  }
+  g.fillText(dead ? '受信断!' : fresh ? '受信中' : '待受', 584, 206);
   g.fillStyle = 'rgba(74,59,42,.55)';
-  g.fillText('コレクター', 228, 342); g.fillText('基盤', 280, 342);
+  g.fillText('コレクター/基盤', 578, 216);
+
+  // 社長室の調度・入口まわり
+  drawProp(g, 'lamp', 98, 100, 16, 38);
+  drawProp(g, 'plant_mon', 20, 62, 20, 36);
+  drawProp(g, 'plant_snake', 452, 62, 16, 32);
+  drawProp(g, 'coat', 266, 310, 17, 38);
+  drawProp(g, 'umbrella', 352, 318, 12, 26);
 
   // 入口マット
   rr(g, 296, 344, 48, 12, '#c0a878', '#a08858');
@@ -638,12 +643,13 @@ class Person {
    AI社員
    ================================================================ */
 const REST_SPOTS = [
-  { x: 52, y: 302, a: 'sit' },    // ソファ左
-  { x: 78, y: 302, a: 'sit' },    // ソファ右
-  { x: 132, y: 282, a: 'stand' }, // テーブル
-  { x: 60, y: 252, a: 'faceU' },  // 自販機
-  { x: 40, y: 252, a: 'coffee' }, // コーヒー
-  { x: 202, y: 252, a: 'faceU' }, // 給水機
+  { x: 48, y: 308, a: 'sit' },    // ソファ左
+  { x: 74, y: 308, a: 'sit' },    // ソファ右
+  { x: 144, y: 310, a: 'sit' },   // アームチェア
+  { x: 34, y: 274, a: 'faceU' },  // コーヒーステーション前
+  { x: 92, y: 276, a: 'faceU' },  // 自販機前
+  { x: 121, y: 276, a: 'faceU' }, // スナック棚前
+  { x: 202, y: 274, a: 'faceU' }, // 給水機前
 ];
 const REST_TALK = ['ふぅ…ひと息', '指示待ちの休憩なう', 'コーヒーうまい', '次の仕事まだかな', '(サボってるわけでは…)'];
 
@@ -1121,7 +1127,25 @@ function loop(t) {
   const night = drawOffice(cx, t, tm);
 
   const items = [];
-  for (const e of employees) items.push({ y: e.desk.y + 20, draw: g => drawDesk(g, e.desk, e.mode === 'working' && e.present, t + e.seed) });
+  for (const e of employees) {
+    items.push({ y: e.desk.y - 27, draw: g => drawChair(g, e.desk) });
+    items.push({ y: e.desk.y + 20, draw: g => drawDesk(g, e.desk, e.mode === 'working' && e.present, t + e.seed, e.def) });
+  }
+  // ソファ前面(座ったキャラの脚を隠す)
+  if (OFFICE.sofa) items.push({ y: 325, draw: g => {
+    const im = OFFICE.sofa;
+    const sw = im.naturalWidth || im.width, sh = im.naturalHeight || im.height;
+    g.save(); g.imageSmoothingEnabled = true;
+    g.drawImage(im, 0, sh * 0.5, sw, sh * 0.5, 34, 296 + 15, 62, 15);
+    g.restore();
+  } });
+  if (OFFICE.armchair) items.push({ y: 327, draw: g => {
+    const im = OFFICE.armchair;
+    const sw = im.naturalWidth || im.width, sh = im.naturalHeight || im.height;
+    g.save(); g.imageSmoothingEnabled = true;
+    g.drawImage(im, 0, sh * 0.55, sw, sh * 0.45, 132, 294 + 17.6, 26, 14.4);
+    g.restore();
+  } });
   for (const e of employees) if (e.present) items.push({ y: e.pos.y, draw: g => e.drawSprite(g, t) });
   items.sort((a, b) => a.y - b.y);
   for (const it of items) it.draw(cx);
