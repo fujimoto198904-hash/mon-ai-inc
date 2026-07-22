@@ -209,12 +209,31 @@ const OFFICE = {};
   for (const k of ['vending', 'sofa', 'cooler', 'room_break', 'room_studio', 'room_film', 'chair',
     'rack', 'netcab', 'plant_a', 'plant_snake', 'plant_mon', 'lamp', 'coffee_st', 'armchair', 'ctable',
     'snack', 'copier', 'tvstand', 'projcart', 'tower', 'dskb1', 'dskb2', 'dskb4',
-    'corkboard', 'window_day', 'window_night', 'sweep1', 'sweep2', 'broom_front']) {
+    'corkboard', 'window_day', 'window_night', 'reception', 'bin_g', 'bin_r', 'exting', 'firstaid', 'sanitizer', 'ladder', 'ccart']) {
     const im = new Image();
     im.onload = () => { OFFICE[k] = keyOutBackground(im); };
     im.src = `assets/office/${k}.png`;
   }
 }
+const SWEEPS = {};
+for (const k of ['sweep1', 'sweep2']) {
+  const im = new Image();
+  im.onload = () => {
+    const cv2 = keyOutBackground(im);
+    const g2 = cv2.getContext('2d');
+    const d2 = g2.getImageData(0, 0, cv2.width, cv2.height).data;
+    let x0 = cv2.width, x1 = 0, y0 = cv2.height, y1 = 0;
+    for (let yy = 0; yy < cv2.height; yy++) for (let xx = 0; xx < cv2.width; xx++) {
+      if (d2[(yy * cv2.width + xx) * 4 + 3] > 16) {
+        if (xx < x0) x0 = xx; if (xx > x1) x1 = xx;
+        if (yy < y0) y0 = yy; if (yy > y1) y1 = yy;
+      }
+    }
+    SWEEPS[k] = { cv: cv2, box: { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 } };
+  };
+  im.src = `assets/office/${k}.png`;
+}
+
 function drawProp(g, key, x, y, w, h) {
   const im = OFFICE[key];
   if (!im) return false;
@@ -406,6 +425,14 @@ function drawDesk(g, seat, working, t, emp) {
     g.fillStyle = '#4cff8e';
     g.fillRect(x + 15, y + 6, 2, 2);
   }
+  if (emp && emp.tag) {
+    g.font = '5px DotGothic16';
+    const tw = g.measureText(emp.tag).width + 6;
+    g.fillStyle = 'rgba(40,42,54,.85)';
+    g.beginPath(); g.roundRect(x - tw / 2 + .5, y + 21.5, tw, 8, 2); g.fill();
+    g.fillStyle = '#e8e6da';
+    g.fillText(emp.tag, x - tw / 2 + 3, y + 27.5);
+  }
 }
 
 function drawOffice(g, t, tm) {
@@ -566,11 +593,6 @@ function drawOffice(g, t, tm) {
     g.fillStyle = color; g.fillRect(x + 3, y + 2.5, 2, 5);
     g.fillStyle = '#f2f0e8'; g.fillText(text, x + 7, y + 7.5);
   }
-  deptSign('社長室', 20, 62, '#b06ac0');
-  deptSign('プロジェクト-T', 142, 62, '#4a7ac8');
-  deptSign('アプリ制作部', 340, 62, '#4aa86a');
-  deptSign('yorutool制作部', 472, 62, '#c8a04a');
-  deptSign('総務部', 202, 322, '#d08a5a');
 
   // 音声スタジオ(TTS=watcher。人は住まない=機械の部屋)
   if (!drawProp(g, 'room_studio', 488, 224, 132, 112)) {
@@ -580,7 +602,6 @@ function drawOffice(g, t, tm) {
     g.fillStyle = '#e8e0f0'; g.fillRect(487, 258, 4, 44);
     g.lineWidth = 1;
   }
-  deptSign('音声スタジオ', 494, 322, '#8a6ac8');
   const onAir = snap && snap.launchd && snap.launchd['com.mon.tsuki.watcher'] && snap.launchd['com.mon.tsuki.watcher'].running;
   rr(g, 560, 228, 34, 12, onAir ? '#e05a4e' : '#706860', INK);
   g.fillStyle = '#fff'; g.font = '8px DotGothic16'; g.fillText('ON AIR', 563, 237);
@@ -602,13 +623,10 @@ function drawOffice(g, t, tm) {
 
   // 撮影スタジオ(グリーンバック・カメラ・照明)
   if (!drawProp(g, 'room_film', 384, 232, 92, 104)) rr(g, 384, 232, 92, 104, '#e0e8e8', '#b0c0c0');
-  deptSign('撮影スタジオ', 388, 326, '#5a8a9a');
   rr(g, 392, 250, 76, 28, '#4ac858', '#2a8a3a');
   rr(g, 394, 278, 4, 8, '#6a6a74'); rr(g, 462, 278, 4, 8, '#6a6a74');
 
   // 休憩室(上=キッチン家電 / 中央=通路 / 下=ソファ+チェア×2で8席)
-  drawProp(g, 'ctable', 28, 324, 40, 14);
-  deptSign('休憩室', 116, 326, '#8a9a5a');
 
   // 機材コーナー(右壁): コレクター=サーバーラック / ルーチン基盤=ネットワークキャビネット
   const fresh = lastArrivalT >= 0 && (t - lastArrivalT) < 30000;
@@ -622,9 +640,19 @@ function drawOffice(g, t, tm) {
   g.fillText('コレクター/基盤', 560, 216);
 
   // 社長室の調度・入口まわり
-  drawProp(g, 'lamp', 96, 102, 17, 37);
-  drawProp(g, 'plant_mon', 20, 88, 18, 34);
-  drawProp(g, 'plant_snake', 566, 88, 16, 30);
+  drawProp(g, 'lamp', 100, 66, 17, 38);
+  drawProp(g, 'plant_mon', 20, 64, 18, 40);
+  drawProp(g, 'plant_snake', 594, 64, 15, 40);
+
+  // 壁際の機材列(デスクの後ろ)
+  drawProp(g, 'rack', 146, 46, 26, 46);
+  drawProp(g, 'netcab', 176, 56, 22, 36);
+  drawProp(g, 'tower', 204, 54, 20, 38);
+  drawProp(g, 'ccart', 342, 62, 26, 28);
+  drawProp(g, 'ladder', 372, 70, 17, 22);
+  drawProp(g, 'tower', 480, 54, 20, 38);
+  drawProp(g, 'bin_g', 506, 74, 11, 17);
+  drawProp(g, 'bin_r', 520, 74, 11, 17);
 
   // ミーティングスペース(丸テーブル)
 
@@ -644,7 +672,7 @@ function outPath(pt, lane) {
   const L = lane || LANE_Y;
   const { x, y } = pt;
   if (y < 160) { const a = x - 31; return [{ x: a, y }, { x: a, y: L }]; }                   // 上段: 机の間の隙間から
-  if (y > 210 && x >= 197 && x <= 355) return [{ x, y: 306 }, { x: 336, y: 306 }, { x: 336, y: L }]; // 総務部: 机の下→右の通用口
+  if (y > 210 && y < 290 && x >= 191 && x <= 355) { const a = x < 266 ? 187 : 345; return [{ x: a, y }, { x: a, y: L }]; } // 総務部: ブロックの脇から
   if (y > 210 && x < 195) return [{ x, y: 270 }, { x: 176, y: 270 }, { x: 176, y: L }];  // 休憩室: 室内通路→右端列
   return [{ x, y: L }];
 }
@@ -662,7 +690,7 @@ class Person {
     Object.assign(this, def);
     this.seed = (i + 1) * 977;
     this.lane = LANE_Y + (i % 3) * 8;   // 個人レーンで衝突減
-    this.pos = def.desk ? { x: def.desk.x, y: def.desk.y } : { x: 336, y: 340 };
+    this.pos = def.desk ? { x: def.desk.x, y: def.desk.y } : { x: 344, y: 340 };
     this.action = 'stand';
     this.dir = 'down';
     this.path = [];
@@ -676,7 +704,7 @@ class Person {
 
   goto(target, arrival) {
     this.arrival = arrival;
-    if (!this.present) { this.pos = { x: 336, y: 346 }; this.present = true; }
+    if (!this.present) { this.pos = { x: 344, y: 346 }; this.present = true; }
     if (Math.hypot(target.x - this.pos.x, target.y - this.pos.y) < 3) {
       this.pos = { x: target.x, y: target.y };
       this.path = [];
@@ -815,7 +843,7 @@ class Employee extends Person {
     if (m !== 'idle') { this.resting = false; this.releaseSpot(); }
     if (m === 'working') this.goto(this.seat, 'sit');
     else if (m === 'sleep') this.goto(this.seat, 'sleep');
-    else if (m === 'off' || m === 'out' || m === 'sleephome') this.goto({ x: 336, y: 346 }, 'leave');
+    else if (m === 'off' || m === 'out' || m === 'sleephome') this.goto({ x: 344, y: 346 }, 'leave');
     else this.nextThink = 0;
   }
 
@@ -918,16 +946,16 @@ class Employee extends Person {
     const { x, y } = this.pos;
     const e = this.expr(t);
     const seated = this.action === 'sit' || this.action === 'sleep';
-    if (this.action === 'cleaning' && OFFICE.sweep1) {
-      const frame = Math.floor(t / 450) % 2 ? OFFICE.sweep1 : OFFICE.sweep2;
-      const w = 20, h = 34;
+    if (this.action === 'cleaning' && SWEEPS.sweep1) {
+      const fr = Math.floor(t / 450) % 2 ? SWEEPS.sweep1 : SWEEPS.sweep2;
+      const h2 = 34, w2 = h2 * fr.box.w / fr.box.h;
       g.save();
       g.imageSmoothingEnabled = true;
       if (this.dir === 'right') {
         g.translate(Math.round(x), 0); g.scale(-1, 1);
-        g.drawImage(frame, -w / 2 - 2, Math.round(y) - h + 2, w, h);
+        g.drawImage(fr.cv, fr.box.x, fr.box.y, fr.box.w, fr.box.h, -w2 / 2, Math.round(y) - h2 + 2, w2, h2);
       } else {
-        g.drawImage(frame, Math.round(x) - w / 2 - 2, Math.round(y) - h + 2, w, h);
+        g.drawImage(fr.cv, fr.box.x, fr.box.y, fr.box.w, fr.box.h, Math.round(x) - w2 / 2, Math.round(y) - h2 + 2, w2, h2);
       }
       g.restore();
       if (Math.random() < 0.08) spawnParticle('smoke', x + (this.dir === 'right' ? 9 : -9), y - 2);
@@ -1591,6 +1619,8 @@ function loop(t) {
     ['cooler', 140, 208, 20, 36], ['plant_a', 164, 298, 20, 32],
     ['sofa', 20, 286, 60, 30], ['armchair', 92, 286, 26, 32], ['armchair', 126, 286, 26, 32],
     ['rack', 566, 148, 26, 46], ['netcab', 594, 158, 22, 36], ['copier', 532, 160, 26, 32],
+    ['exting', 556, 178, 8, 17], ['bin_g', 534, 196, 10, 15], ['bin_r', 547, 196, 10, 15],
+    ['reception', 228, 292, 80, 30], ['sanitizer', 312, 296, 10, 25], ['firstaid', 386, 246, 12, 12],
     ['tvstand', 396, 292, 26, 34], ['projcart', 438, 294, 24, 32], ['tower', 500, 258, 22, 44],
   ];
 
@@ -1598,6 +1628,7 @@ function loop(t) {
     items.push({ y: oy + oh - 6, draw: g => drawProp(g, k, ox, oy, ow, oh) });
   }
   for (const e of employees) {
+    if (e.def.source === 'janitor') continue;
     const atDesk = e.present && (e.action === 'sit' || e.action === 'sleep') && !e.resting && !e.atMeeting;
     if (!atDesk) items.push({ y: e.desk.y - 2, draw: g => drawChair(g, e.desk) });
     items.push({ y: e.desk.y + 20, draw: g => drawDesk(g, e.desk, e.mode === 'working' && e.present, t + e.seed, e.def) });
