@@ -599,8 +599,17 @@ function drawOffice(g, t, tm) {
 
   if (!drawProp(g, 'room_break', 16, 208, 176, 132)) rr(g, 16, 208, 176, 132, '#ecd8c0', '#d0b898');
   rr(g, 16, 338, 176, 4, 'rgba(120,90,60,.35)');
-  // 休憩室のラグ: 部屋中央に置き、壁からは四方とも必ず離す(壁接触の再発防止)
-  drawProp(g, 'rug_green', 49, 248, 110, 66);
+  // 休憩室の黄土色カーペット: room_break素材の床は壁まで届いているので、
+  // 室内を通常床(bg)で埋め戻してから、壁と絶対に接しないサイズで敷き直す
+  if (OFFICE.bg) {
+    const bw = OFFICE.bg.width / W, bh = OFFICE.bg.height / H;
+    g.save(); g.imageSmoothingEnabled = true;
+    g.drawImage(OFFICE.bg, 24 * bw, 226 * bh, 160 * bw, 104 * bh, 24, 226, 160, 104);
+    g.restore();
+  }
+  rr(g, 38, 242, 132, 78, '#dcc59a', '#b89468');
+  g.strokeStyle = 'rgba(150,115,70,.5)'; g.lineWidth = 1;
+  g.strokeRect(42.5, 246.5, 123, 69);
 
 
   // スタジオ2部屋(ユーザー製ルームアート)
