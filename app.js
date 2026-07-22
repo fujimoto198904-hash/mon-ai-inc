@@ -609,6 +609,7 @@ function drawOffice(g, t, tm) {
   drawProp(g, 'armchair', 92, 288, 26, 32);
   drawProp(g, 'armchair', 126, 288, 26, 32);
   drawProp(g, 'armchair', 158, 288, 26, 32);
+  drawProp(g, 'armchair', 190, 288, 26, 32);
 
   // ミーティングスペース(丸テーブル)
 
@@ -735,18 +736,19 @@ class Person {
    AI社員
    ================================================================ */
 const REST_SPOTS = [
-  { x: 34, y: 314, sy: 314, a: 'sit', via: 258 },   // ソファ左
-  { x: 60, y: 314, sy: 314, a: 'sit', via: 258 },   // ソファ右
-  { x: 104, y: 316, sy: 316, a: 'sit', via: 258 },  // アームチェア1
-  { x: 138, y: 316, sy: 316, a: 'sit', via: 258 },  // アームチェア2
-  { x: 170, y: 316, sy: 316, a: 'sit', via: 258 },  // アームチェア3
-  { x: 30, y: 228, a: 'faceU' },                    // コーヒー前
-  { x: 92, y: 226, a: 'faceU' },                    // 自販機前
-  { x: 122, y: 230, a: 'faceU' },                   // スナック棚前
-  { x: 150, y: 228, a: 'faceU' },                   // 給水機前
+  { x: 34, y: 314, sy: 314, a: 'sit', via: 256 },   // ソファ左
+  { x: 60, y: 314, sy: 314, a: 'sit', via: 256 },   // ソファ右
+  { x: 104, y: 316, sy: 316, a: 'sit', via: 256 },  // アームチェア1
+  { x: 138, y: 316, sy: 316, a: 'sit', via: 256 },  // アームチェア2
+  { x: 170, y: 316, sy: 316, a: 'sit', via: 256 },  // アームチェア3
+  { x: 202, y: 316, sy: 316, a: 'sit', via: 256 },  // アームチェア4
+  { x: 34, y: 224, a: 'faceU' },                    // コーヒー前
+  { x: 68, y: 224, a: 'faceU' },                    // 自販機前
+  { x: 102, y: 224, a: 'faceU' },                   // スナック棚前
+  { x: 134, y: 224, a: 'faceU' },                   // 給水機前
 ];
 const RECEPTION_STAFF = ['tsukishiro', 'kato', 'zama'];
-const RECEPTION_POST = { x: 300, y: 296 };
+const RECEPTION_POST = { x: 302, y: 314 };
 let receptionBy = null;
 
 function pickRestSpot() {
@@ -765,7 +767,7 @@ const CLEAN_SPOTS = [
   { x: 420, y: 205, k: 'sweep' }, { x: 550, y: 205, k: 'sweep' }, { x: 366, y: 330, k: 'sweep' },
   { x: 130, y: 262, k: 'mop' }, { x: 310, y: 330, k: 'mop' }, { x: 500, y: 205, k: 'mop' }, { x: 200, y: 320, k: 'mop' },
   { x: 285, y: 64, k: 'wipe' }, { x: 424, y: 300, k: 'wipe' },
-  { x: 543, y: 344, k: 'bucket' }, { x: 300, y: 318, k: 'sweep' },
+  { x: 618, y: 342, k: 'bucket' }, { x: 300, y: 318, k: 'sweep' },
 ];
 
 const IDLE_MUTTER = ['のび〜', '肩回すか', '水飲みに行こうかな', '今日の晩ごはん何にしよ', 'ちょっと眠い',
@@ -1673,12 +1675,12 @@ function loop(t) {
   const items = [];
   // 大型什器(前にいる人を隠す): キッチン家電・棚・スタジオ機材
   const OCCLUDERS = [
-    ['coffee_st', 20, 182, 30, 36], ['vending', 80, 180, 24, 38], ['snack', 108, 184, 28, 36],
-    ['cooler', 140, 182, 20, 36], ['plant_a', 192, 296, 20, 32], ['bin_g', 196, 184, 11, 16],
+    ['coffee_st', 20, 182, 30, 36], ['vending', 58, 180, 24, 38], ['snack', 90, 182, 28, 36],
+    ['cooler', 126, 182, 20, 36], ['bin_g', 154, 186, 11, 16], ['plant_a', 238, 294, 20, 34],
 
-    ['copier', 530, 150, 26, 32], ['rack', 562, 146, 26, 46], ['netcab', 590, 156, 22, 36],
+    ['copier', 554, 154, 26, 32], ['netcab', 584, 150, 22, 36], ['rack', 610, 140, 26, 46],
     ['ccart', 486, 316, 24, 26], ['ladder', 514, 320, 16, 20],
-    ['bin_g', 536, 322, 10, 15], ['bin_r', 549, 322, 10, 15], ['exting', 618, 150, 8, 17],
+    ['bin_g', 612, 322, 10, 15], ['bin_r', 625, 322, 10, 15], ['exting', 632, 146, 8, 17],
     ['reception', 258, 296, 100, 38], ['sanitizer', 366, 302, 10, 25],
   ];
 
