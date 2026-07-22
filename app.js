@@ -215,7 +215,7 @@ const OFFICE = {};
   for (const k of ['vending', 'sofa', 'cooler', 'chair',
     'rack', 'netcab', 'plant_a', 'plant_mon', 'lamp', 'coffee_st', 'armchair',
     'snack', 'copier', 'tower', 'dskb1', 'dskb2', 'dskb4',
-    'corkboard', 'window_day', 'window_night', 'reception', 'bin_g', 'bin_r', 'exting', 'firstaid', 'sanitizer', 'studio_audio', 'studio_film', 'rug_green', 'b_grill', 'b_table', 'b_meat', 'b_skewer', 'b_cooler', 'b_beer', 'g_rack', 'g_barbell', 'g_bench', 'g_tread', 'g_mats', 'g_ball']) {
+    'corkboard', 'window_day', 'window_night', 'reception', 'bin_g', 'bin_r', 'exting', 'sanitizer', 'studio_audio', 'studio_film', 'rug_green', 'b_grill', 'b_table', 'b_meat', 'b_skewer', 'b_cooler', 'b_beer', 'g_rack', 'g_barbell', 'g_bench', 'g_tread', 'g_mats', 'g_ball']) {
     const im = new Image();
     im.onload = () => { OFFICE[k] = keyOutBackground(im); };
     im.src = `assets/office/${k}.png`;
@@ -2196,8 +2196,6 @@ function loop(t) {
   for (const [k, ox, oy, ow, oh] of OCCLUDERS) {
     items.push({ y: oy + oh - 6, draw: g => drawProp(g, k, ox, oy, ow, oh) });
   }
-  // 救急箱: 受付カウンター右端の天板に平置き(受付スプライトの後に描く)
-  items.push({ y: 321, draw: g => drawProp(g, 'firstaid', 346, 292, 11, 12) });
   for (const e of employees) {
     if (e.def.source === 'janitor') continue;
     const atDesk = e.present && (e.action === 'sit' || e.action === 'sleep') && !e.resting && !e.atMeeting;
