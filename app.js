@@ -616,16 +616,7 @@ function drawOffice(g, t, tm) {
   drawProp(g, 'plant_mon', 20, 64, 18, 40);
   drawProp(g, 'lamp', 100, 66, 17, 38);
 
-  // コレクター受信ステータス(社名看板の下・壁掛けLEDパネル=サーバーコーナー真上)
-  const freshRx = lastArrivalT >= 0 && (t - lastArrivalT) < 30000;
-  const deadRx = snapAt > 0 && (Date.now() - snapAt) > (CFG.staleMin || 20) * 60000;
-  const syncMsg = deadRx ? '⚠ データ同期が止まってます!' : freshRx ? 'データ同期OK(5分毎)' : 'データ同期: 次の更新待ち';
-  rr(g, 486, 63, 146, 15, '#37332c', INK);
-  g.fillStyle = deadRx ? '#e05a4e' : (freshRx && Math.floor(t / 300) % 2 ? '#5aff8e' : '#4caf6e');
-  g.fillRect(492, 68, 4, 4);
-  g.font = '6px DotGothic16';
-  g.fillStyle = deadRx ? '#ff7a6e' : '#8ef0b0';
-  g.fillText(syncMsg, 501, 73.5);
+  // データ同期ステータスはHUD(経営ボード)側に表示(マップ上には出さない)
 
   if (!drawProp(g, 'sofa', 20, 288, 60, 30)) rr(g, 24, 296, 52, 20, '#7a9ac8', INK);
   drawProp(g, 'armchair', 92, 288, 26, 32);
@@ -1165,7 +1156,7 @@ class Employee extends Person {
     }
     if (this.action === 'coffee') { g.font = '9px DotGothic16'; g.fillText('☕', x + 8, y - 8); }
     // 作業タグ: いま何をしているかを常時表示
-    if (this.mode === 'working' && (seated || this.action === 'studio') && this.jobText) {
+    if (this.mode === 'working' && (seated || this.action === 'studio') && !this.resting && this.jobText) {
       g.font = '5px DotGothic16';
       const jt = this.jobText.length > 14 ? this.jobText.slice(0, 13) + '…' : this.jobText;
       const jw = g.measureText(jt).width + 7;
@@ -1186,7 +1177,7 @@ class Employee extends Person {
       }
       return;
     }
-    if (this.mode === 'working' && this.def.source !== 'janitor') {
+    if (this.mode === 'working' && !this.resting && this.def.source !== 'janitor') {
       if (t > this.nextBubble) {
         if (this.id === 'tsukishiro' && this.action === 'studio') {
           this.say(t, pickFresh('tsukistudio', TSUKI_STUDIO_TALK), 3800);
@@ -1465,6 +1456,7 @@ const EVENT_SPOTS = {
 
 function stepEvent(t) {
   if (officeEvent.active) { runEvent(t); return; }
+  if (chimeBreak.until && t < chimeBreak.until) return;   // チャイム休憩中はイベントを始めない
   if (t < officeEvent.next || t < officeEvent.cooldown) return;
   officeEvent.next = t + 30000;
   if (standup.active || fight.active) return;
@@ -1594,6 +1586,7 @@ function stepStandup(t) {
     return;
   }
   if (!standup.pending || t < standup.next) return;
+  if (chimeBreak.until && t < chimeBreak.until) { standup.next = t + 5000; return; }   // チャイム休憩中は朝会延期
   if (boss.inChat || boss.atMeeting || boss.action === 'walk' || directive.active) { standup.next = t + 5000; return; }
   const ids = standup.pending;
   standup.pending = null;
@@ -1649,6 +1642,7 @@ function stepDirective(t) {
     return;
   }
   if (t < directive.next || !directive.queue.length) return;
+  if (chimeBreak.until && t < chimeBreak.until) return;   // チャイム休憩中は指示しない
   if (boss.inChat || boss.atMeeting || boss.action === 'walk') return;
   const id = directive.queue.shift();
   const tgt = employees.find(e => e.id === id);
@@ -1979,6 +1973,15 @@ function updateHud() {
   $('splitCost').textContent = `${fmtUsd(cc)} / ${fmtUsd(xc)}`;
   $('splitBar').style.width = (cc + xc > 0 ? cc / (cc + xc) * 100 : 50) + '%';
 
+  // データ同期ステータス(5分毎コレクターの死活)
+  {
+    const ageMin = snapAt > 0 ? (Date.now() - snapAt) / 60000 : Infinity;
+    const el = $('syncHud');
+    if (ageMin >= (CFG.staleMin || 20)) { el.textContent = '⚠ 止まってます!'; el.style.color = 'var(--bad)'; }
+    else if (ageMin < 7) { el.textContent = '● OK(5分毎)'; el.style.color = 'var(--good)'; }
+    else { el.textContent = `受信待ち(${Math.round(ageMin)}分前)`; el.style.color = 'var(--warn)'; }
+  }
+
   const subs = $('subs');
   subs.innerHTML = '';
   for (const sub of subsCfg) {
@@ -2122,6 +2125,7 @@ function loop(t) {
   stepDirective(t);
   stepStandup(t);
   stepEvent(t);
+  stepChimeBreak(t);
   stepDog(dt, t);
   // 簡易衝突回避(座っていない者同士を押し離す)
   const movers = employees.filter(e => e.present && e.action === 'walk');
@@ -2255,6 +2259,50 @@ function blitLive(t, tm) {
 }
 
 /* ================================================================
+   チャイム休憩: 鐘が鳴ったら全員5分休憩
+   ================================================================ */
+const chimeBreak = { until: 0 };
+const CHIME_BREAK_TALK = [
+  '鐘だ!休憩!', '5分だけ肩の力抜こ', 'コーヒー淹れよ', '目薬タイム', '立つの久しぶりかも',
+  'あ〜〜〜(伸び)', 'チャイム最高', '5分後の俺、頼んだ', '肩がバキバキ', '水分水分',
+  '窓の外見たい(遠い)', '糖分補給', '正座で作業してた足が…', 'まばたきの練習しよ',
+];
+const CHIME_BREAK_END = [
+  'よし、再開!', '戻るか〜', '5分って一瞬だな…', '続きやるぞ', '席戻ろ',
+  'まだ休みたい…', 'エンジン再点火', '後半戦!', '次の鐘まで頑張る',
+];
+
+function startChimeBreak(t) {
+  chimeBreak.until = t + 300000;   // 5分
+  for (const e of employees) {
+    if (!e.present || e.def.source === 'janitor') continue;
+    if (e.inChat || e.atMeeting || e.receptionOn) continue;
+    if (e.mode !== 'working' && !(e.mode === 'idle' && !e.resting)) continue;
+    e.onChimeBreak = true;
+    e.say(t + 400 + Math.random() * 2200, pickFresh('chimebrk', CHIME_BREAK_TALK), 3200);
+    const sp = pickRestSpot();
+    if (sp) { e.resting = true; e.takeSpot(sp); }
+    else e.goto({ x: 60 + Math.random() * 110, y: 246 + Math.random() * 20 }, 'faceD');   // 満席なら休憩室に立つ
+  }
+}
+
+function stepChimeBreak(t) {
+  if (!chimeBreak.until || t < chimeBreak.until) return;
+  chimeBreak.until = 0;
+  for (const e of employees) {
+    if (!e.onChimeBreak) continue;
+    e.onChimeBreak = false;
+    e.releaseSpot();
+    e.resting = false;
+    e.nextThink = 0;
+    if (e.present && e.mode === 'working') {
+      e.say(t + 400 + Math.random() * 1500, pickFresh('chimeend', CHIME_BREAK_END), 2600);
+      e.gotoWork();
+    }
+  }
+}
+
+/* ================================================================
    チャイム: 6:00〜22:00の2時間おき(JST正時)に鳴らす
    ================================================================ */
 const chime = new Audio('assets/chime.mp3');
@@ -2278,6 +2326,7 @@ setInterval(() => {
   lastChimeKey = key;
   chime.currentTime = 0;
   chime.play().catch(() => {});
+  startChimeBreak(performance.now());   // 鐘が鳴ったら全員5分休憩
 }, 5000);
 
 /* ---------- 起動 ---------- */
