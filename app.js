@@ -513,7 +513,7 @@ function drawChair(g, seat) {
   rr(g, seat.x - 9, seat.y - 16, 18, 8, '#3c3c46', INK);
 }
 
-function drawDesk(g, seat, working, t, emp) {
+function drawDesk(g, seat, working, t, emp, st) {
   const x = seat.x, y = seat.y;
   const pc = (emp && emp.pc) || 'mon1';
   const key = pc === 'mon2' ? 'dskb2' : pc === 'laptop' ? 'dskb4' : 'dskb1';
@@ -529,9 +529,20 @@ function drawDesk(g, seat, working, t, emp) {
     g.fillRect(x + 15, y + 6, 2, 2);
   }
   if (emp && emp.tag) {
+    // 席札は担当者の状況で色が変わる: 稼働=緑(ゆっくり明滅)/休憩=琥珀/睡眠=藍/停止=赤点滅/収録=紫/退勤=灰
+    let plateBg = 'rgba(40,42,54,.85)';
+    if (st) {
+      if (!st.present) plateBg = 'rgba(120,116,108,.65)';
+      else if (st.mode === 'panic') plateBg = Math.floor(t / 400) % 2 ? '#c03a2e' : '#7a221a';
+      else if (st.recording) plateBg = '#7a3a9a';
+      else if (st.mode === 'working' && (st.resting || st.onChimeBreak)) plateBg = '#c8963c';
+      else if (st.mode === 'working') plateBg = Math.floor(t / 1000) % 2 ? '#2e8a57' : '#26744a';
+      else if (st.mode === 'sleep' || st.action === 'sleep') plateBg = '#4a5a8a';
+      else if (st.resting) plateBg = '#c8963c';
+    }
     g.font = '5px DotGothic16';
     const tw = g.measureText(emp.tag).width + 6;
-    g.fillStyle = 'rgba(40,42,54,.85)';
+    g.fillStyle = plateBg;
     g.beginPath(); g.roundRect(x - tw / 2 + .5, y + 14.5, tw, 8, 2); g.fill();
     g.fillStyle = '#e8e6da';
     g.fillText(emp.tag, x - tw / 2 + 3, y + 20.5);
@@ -782,6 +793,13 @@ class Person {
       this.dir = 'up';   // ミキシング卓に向かって立つ
       return;
     }
+    if (a === 'playdog') {
+      this.action = 'playdog';
+      this.playUntil = t + 12000 + Math.random() * 8000;
+      this._playLine = 0;
+      this.dir = dog.pos.x >= this.pos.x ? 'right' : 'left';
+      return;
+    }
     if (a === 'sabori') {
       this.action = 'sabori';
       this.saborUntil = t + 26000 + Math.random() * 28000;
@@ -882,6 +900,14 @@ const CLEAN_SPOTS = [
   { x: 285, y: 64, k: 'wipe' }, { x: 424, y: 312, k: 'wipe' }, { x: 436, y: 328, k: 'mop' }, { x: 607, y: 214, k: 'bucket' },
 ];
 
+// ララと遊ぶ(暇な社員が犬のところへ行って構う)
+const PLAY_DOG_LINES = [
+  'ララ〜、よしよし', 'お手!…天才!', 'だれがいい子だ?ララだ!', 'ボール行くぞ〜',
+  'ふわっふわだなお前', '肉球プニプニさせて', '散歩行くか?(会社から出られない)', 'ララは今日もかわいいなあ',
+  'おなか見せた!勝った!', 'ララ、社訓言ってみ?…ワン?正解!',
+];
+const DOG_PLAY_REACT = ['ワン!', '(ゴロン)', '(しっぽ高速回転)', 'クゥーン💕', '(お手)', '(じゃれつく)'];
+
 // 白柳のサボりスポットとサボり中のつぶやき
 const JANITOR_SABORI_SPOTS = [
   { x: 66, y: 232, d: 'up' },     // 自販機の前でぼーっと
@@ -907,7 +933,7 @@ const TSUKI_STUDIO_TALK = [
   'ここ、間を2秒置きたい', '原稿のここ、読みにくい…直そ', 'エアコン切ると無音が深い',
   '波形がきれいに揃うと気持ちいい', 'この章、感情もう少し乗せたい', 'ノイズゲートかけすぎた…語尾が消える',
   'リバーブは薄めが好き', '書き出し完了…よし', 'サムネ用の一言も録っておこ',
-  'のど飴補給', '深夜の声、ちょっと低くていい感じ', 'コンプのかかり具合、ちょうどいい',
+  'のど飴補給', '今日の声、よく通るな', 'コンプのかかり具合、ちょうどいい',
   '台本のルビ、助かる', 'この固有名詞、アクセント合ってる?', '録り直し3回目…集中',
   'モニターヘッドホン、耳が蒸れる', '息継ぎの位置、ここだ', '1本録り終えた…次',
   '「ですます」が続くと単調…語尾変えよ', '今日のノルマ、あと2本', '静かすぎて心臓の音が入りそう',
@@ -963,8 +989,27 @@ const SLEEP_TALK = [
 
 const IDLE_MUTTER = ['肩回すか', '水飲みに行こうかな', '今日の晩ごはん何にしよ', 'ちょっと眠い',
   'デスク片付けようかな', 'ウィンドウ整理しよ', '壁紙変えたいな', '5分だけぼーっとする', '天気どうなるかな',
-  '夜景きれいだな', 'ストレッチしよ', 'マウスの感度いじろ', '次の仕事なにかな',
+  'ストレッチしよ', 'マウスの感度いじろ', '次の仕事なにかな',
   '指ならし完了', 'メモ帳きれいにしよ', 'ショートカット覚えたい'];
+// 夜だけのつぶやき(昼に「夜景きれい」と言わないための分離プール)
+const IDLE_MUTTER_NIGHT = ['夜景きれいだな', '夜のオフィス、落ち着く', '星、出てるかな', '夜風にあたりたい気分'];
+function idleMutterPool() {
+  const h = jstNow().h;
+  return (h >= 19 || h < 5) ? IDLE_MUTTER.concat(IDLE_MUTTER_NIGHT) : IDLE_MUTTER;
+}
+// 暇すぎる日の自虐(1時間以上仕事が来ていない時に混ざる)
+const IDLE_LAMENT = [
+  '今日、何もしてないなぁ…', '俺、今日まだ呼ばれてない…', '仕事…来ない…', '存在意義を問い始めている',
+  '暇すぎて掃除でも手伝おうかな', '座ってるだけで月給換算が増えていく…', '指名待ちの気分', '社長、仕事ください…',
+  '今日の作業ログ、まっさらだ', '暇も極めれば芸のうち', '待機も立派な仕事(と信じたい)', 'デスクの木目、全部覚えた',
+];
+
+// チャイム休憩を待ち侘びる(作業中・鐘のある時間帯だけ)
+const CHIME_WAIT = [
+  'チャイムまであと{n}分…', '休憩の鐘、まだかな…', 'あと{n}分がんばれば休める', '鐘の音を待ちわびている',
+  '時計ばかり見てしまう', '次の休憩でコーヒー飲むんだ…', '{n}分後の自分へ:よく耐えた', '休憩を糧に生きている',
+  'そろそろ鐘では?(まだ)', '耳が鐘の音を求めている', '休憩後の俺は無敵になる予定', '鐘が鳴ったらソファへ直行する',
+];
 
 // キャラ別の性格プール(暇・休憩時のひとりごと)
 // 藤本=自己啓発 / 伊藤=なんでもやります / 月城=真面目レディ / 佐々木=だるい+詮索+悪巧み
@@ -1059,6 +1104,7 @@ class Employee extends Person {
   setMode(m) {
     if (this.mode === m) return;
     this.mode = m;
+    if (m === 'idle') this._idleAt = performance.now();
     if (m !== 'idle') { this.resting = false; this.releaseSpot(); this.releaseReception(); }
     if (m === 'working') this.gotoWork();
     else if (m === 'sleep') this.goto(this.seat, 'sleep');
@@ -1147,6 +1193,24 @@ class Employee extends Person {
   think(t, tm) {
     if (this.action === 'walk' || this.inChat || this.atMeeting) return;
     if (this.def.source === 'janitor') { this.thinkJanitor(t); return; }
+    // ララと遊んでいる最中
+    if (this.action === 'playdog') {
+      if (t > this.playUntil || this.mode !== 'idle') {
+        this.action = 'stand';
+        if (dog.playWith === this.id) dog.playWith = null;
+        this.nextThink = t + 2500;
+        return;
+      }
+      this.dir = dog.pos.x >= this.pos.x ? 'right' : 'left';
+      if (t > this._playLine) {
+        this.say(t, pickFresh('playdog', PLAY_DOG_LINES), 3000);
+        dog.bubble = DOG_PLAY_REACT[Math.floor(Math.random() * DOG_PLAY_REACT.length)];
+        dog.bubbleUntil = t + 2600;
+        if (Math.random() < 0.6) spawnParticle('heart', dog.pos.x + 4, dog.pos.y - 12);
+        this._playLine = t + 3600 + Math.random() * 2400;
+      }
+      return;
+    }
     if (this.mode !== 'idle' || t < this.nextThink) return;
     if (this.receptionOn) {
       if (Math.random() < 0.15) { this.releaseReception(); this.goto(this.seat, 'sit'); }
@@ -1155,6 +1219,13 @@ class Employee extends Person {
       return;
     }
     if (!this.resting) {
+      // ララと遊びに行く(犬が空いていれば)
+      if (!dog.playWith && t >= dog.napUntil && !(officeEvent.active && officeEvent.active.kind === 'bbq') && Math.random() < 0.12) {
+        dog.playWith = this.id;
+        this.goto({ x: dog.pos.x + (dog.pos.x < 320 ? 14 : -14), y: dog.pos.y + 2 }, 'playdog');
+        this.nextThink = t + 4000;
+        return;
+      }
       if (Math.random() < 0.25) {
         this.anticUntil = t + 6500;
         this.say(t, pickFresh('antic', IDLE_ANTICS), 6000);
@@ -1325,10 +1396,19 @@ class Employee extends Person {
           this.say(t, pickFresh('bossrec', BOSS_RECORD_TALK), 3800);
           this.nextBubble = t + 28000 + Math.random() * 30000;
         } else {
-          // 共通の愚痴+キャラ別の性格つぶやきを半々で
+          const tmB = jstNow();
+          const r = Math.random();
           const ppool = PERSONAL_GRUMBLE[this.id];
-          const pool = ppool && Math.random() < 0.5 ? ppool : WORK_GRUMBLES;
-          this.say(t, pickFresh('grumble:' + this.id, pool), 3800);
+          if (tmB.h >= 6 && tmB.h < 22 && r < 0.2) {
+            // チャイム休憩を待ち侘びる(次の偶数正時までの分数入り)
+            const nextEven = tmB.m === 0 && tmB.h % 2 === 0 ? tmB.h + 2 : (tmB.h % 2 === 0 ? tmB.h + 2 : tmB.h + 1);
+            const mins = nextEven * 60 - (tmB.h * 60 + tmB.m);
+            this.say(t, pickFresh('chimewait', CHIME_WAIT).replace('{n}', mins), 3800);
+          } else if (ppool && r < 0.55) {
+            this.say(t, pickFresh('grumble:' + this.id, ppool), 3800);
+          } else {
+            this.say(t, pickFresh('grumble', WORK_GRUMBLES), 3800);
+          }
           this.nextBubble = t + 50000 + Math.random() * 60000;   // 愚痴は控えめに
         }
       }
@@ -1336,7 +1416,11 @@ class Employee extends Person {
     }
     if (!this.bubbles.length) return;
     if (t > this.nextBubble) {
-      this.say(t, pickFresh('idle:' + this.id, this.bubbles), 3800);
+      if (this.mode === 'idle' && this._idleAt && t - this._idleAt > 3600000 && Math.random() < 0.3) {
+        this.say(t, pickFresh('lament', IDLE_LAMENT), 3800);   // 1時間以上仕事が来ていない
+      } else {
+        this.say(t, pickFresh('idle:' + this.id, this.bubbles), 3800);
+      }
       this.nextBubble = t + 16000 + Math.random() * 22000;
     }
   }
@@ -1915,7 +1999,7 @@ function stepDirective(t) {
 
 function endDirective(boss, t) {
   directive.active = null;
-  directive.next = t + 25000;
+  directive.next = t + 15000;
   boss.inChat = false; boss.directing = false;
   boss.nextThink = 0;
   if (boss.mode === 'working') boss.goto(boss.seat, 'sit');
@@ -2061,7 +2145,20 @@ function endRomance(t) {
    社長の見回り: 作業中でも定期的に全員の様子を見に行き、
    励まし・指示・雑談を繰り広げる(200パターン)
    ================================================================ */
-const patrol = { active: null, next: 120000 };
+const patrol = { active: null, next: 40000 };
+// 警備巡回の点検ポイントとセリフ
+const SECURITY_STOPS = [
+  { x: 592, y: 198, d: 'up', name: 'サーバー' },
+  { x: 430, y: 316, d: 'up', name: '撮影スタジオ' },
+  { x: 306, y: 268, d: 'down', name: '受付' },
+  { x: 96, y: 232, d: 'up', name: '給湯コーナー' },
+  { x: 336, y: 336, d: 'down', name: '入口' },
+];
+const BOSS_SECURITY = [
+  '{p}、異常なし', '{p}よし!', '{p}…問題ないな', '戸締まりよし(閉まる戸はないが)', '消火器の位置、よし',
+  '不審者…ララしかいないな', '機材の熱、問題なし', 'コード類、つまずかない配置…よし', '防犯は経営の基本だ',
+  '整理整頓…社訓どおりだな', '電気の消し忘れ…はAIには無いか', '床、今日もピカピカだな(白柳さんに感謝)',
+];
 const BOSS_PATROL_WORK = [
   'その調子だ', '頼りにしてるぞ', '進捗どうだ?', '無理はするなよ', '品質第一で頼む', 'いいぞいいぞ',
   '困ったらすぐ言え', 'お前が頼みの綱だ', '休憩も取れよ', 'さすがだな', '背中が頼もしい', '仕上がり楽しみにしてる',
@@ -2132,6 +2229,23 @@ function stepPatrol(t) {
   if (!boss || !boss.present) return;
   if (patrol.active) {
     const p = patrol.active;
+    if (p.kind === 'security') {
+      // 警備巡回: 点検ポイントを順に回って確認する
+      if (boss.action !== 'walk') {
+        if (!p.saidAt) {
+          const stop = p.stops[p.si];
+          boss.dir = stop.d || 'down';
+          boss.say(t, pickFresh('security', BOSS_SECURITY).replace('{p}', stop.name), 3000);
+          p.saidAt = t;
+        } else if (t > p.saidAt + 3400) {
+          p.si++;
+          p.saidAt = 0;
+          if (p.si >= p.stops.length) { endPatrol(boss, t); return; }
+          boss.goto({ x: p.stops[p.si].x, y: p.stops[p.si].y }, 'stand');
+        }
+      }
+      return;
+    }
     const tgt = p.target;
     if (!tgt.present) { endPatrol(boss, t); return; }
     if (p.phase === 'go') {
@@ -2156,6 +2270,16 @@ function stepPatrol(t) {
   if (boss.inChat || boss.atMeeting || boss.directing || boss.onChimeBreak || boss.recording || boss.action === 'walk') return;
   if (directive.active || standup.active || fight.active) return;
   // 見回り先: 稼働中を優先しつつ、たまに休憩中の社員も
+  if (Math.random() < 0.3) {
+    // 警備巡回モード: ランダムに3箇所を点検
+    const stops = SECURITY_STOPS.slice().sort(() => Math.random() - 0.5).slice(0, 3);
+    boss.releaseSpot(); boss.releaseReception(); boss.resting = false;
+    boss.inChat = true;
+    patrol.active = { kind: 'security', stops, si: 0, saidAt: 0 };
+    boss.say(t, ['よし、見回りだ', '社内パトロール、開始', '異常がないか見てくる'][Math.floor(Math.random() * 3)], 2600);
+    boss.goto({ x: stops[0].x, y: stops[0].y }, 'stand');
+    return;
+  }
   const cands = employees.filter(e => e !== boss && e.present && !e.inChat && !e.atMeeting && !e.inEvent
     && e.def.source !== 'janitor' && ['sit', 'sleep', 'stand', 'studio'].includes(e.action));
   if (!cands.length) { patrol.next = t + 30000; return; }
@@ -2176,7 +2300,7 @@ function stepPatrol(t) {
 
 function endPatrol(boss, t) {
   patrol.active = null;
-  patrol.next = t + 150000 + Math.random() * 150000;   // 見回りは2.5〜5分に1回
+  patrol.next = t + 60000 + Math.random() * 80000;   // 見回り・警備は1〜2.3分に1回(社長は現場主義)
   boss.inChat = false;
   boss.nextThink = 0;
   if (boss.mode === 'working') boss.goto(boss.seat, 'sit');
@@ -2282,6 +2406,19 @@ function endChat(t, wait) {
 
 const dog = { pos: { x: 90, y: 150 }, target: null, next: 4000, napUntil: 0, dir: 1 };
 function stepDog(dt, t) {
+  // 遊んでくれる人がいる間はそばを離れない
+  if (dog.playWith) {
+    const p = employees.find(e => e.id === dog.playWith);
+    if (!p || !p.present || (p.action !== 'playdog' && p.action !== 'walk')) {
+      dog.playWith = null;
+    } else {
+      dog.napUntil = 0;
+      const dpx = p.pos.x - dog.pos.x, dpy = p.pos.y - dog.pos.y;
+      if (!dog.target && Math.hypot(dpx, dpy) > 18) {
+        dog.target = { x: p.pos.x + (dpx > 0 ? -12 : 12), y: p.pos.y + 2 };
+      }
+    }
+  }
   // BBQ中は必ずグリル前に来て餌をねだる
   const bbqOn = officeEvent.active && officeEvent.active.kind === 'bbq';
   if (bbqOn) {
@@ -2489,7 +2626,7 @@ function onSnapshot() {
       } else {
         e.setMode(tm.h >= 1 && tm.h < 7 ? 'sleep' : 'idle');
         e.jobText = '待機中';
-        e.bubbles = IDLE_MUTTER.concat(PERSONAL_MUTTER[e.id] || []);
+        e.bubbles = idleMutterPool().concat(PERSONAL_MUTTER[e.id] || []);
       }
     } else if (e.source === 'codex') {
       const act = cbuckets[e.id] || [];
@@ -2504,7 +2641,7 @@ function onSnapshot() {
       } else {
         e.setMode(tm.h >= 1 && tm.h < 7 ? 'sleep' : 'idle');
         e.jobText = '待機中';
-        e.bubbles = IDLE_MUTTER.concat(PERSONAL_MUTTER[e.id] || []);
+        e.bubbles = idleMutterPool().concat(PERSONAL_MUTTER[e.id] || []);
       }
       if (e.showHp && rl) e.bubbles.push(`週次残量 ${codexHp}%`);
     } else if (e.source === 'schedule') {
@@ -2937,7 +3074,7 @@ function loop(t) {
       g.fillStyle = INK;
       g.fillText(e.name, e.desk.x - nw / 2, e.desk.y + 30.5);
     } });
-    items.push({ y: e.desk.y + 20, draw: g => drawDesk(g, e.desk, e.mode === 'working' && e.present, t + e.seed, e.def) });
+    items.push({ y: e.desk.y + 20, draw: g => drawDesk(g, e.desk, e.mode === 'working' && e.present, t + e.seed, e.def, e) });
   }
   // ソファ前面(座ったキャラの脚を隠す)
   for (const e of employees) if (e.present) items.push({ y: e.pos.y, draw: g => e.drawSprite(g, t) });
