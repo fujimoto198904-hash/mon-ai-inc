@@ -393,7 +393,7 @@ const _recentSay = {};
 // 感情絵文字: セリフの種類ごとに合う絵文字を語尾に添える(元から絵文字入りの行はそのまま)
 const EMOJI_MAP = {
   sleep: ['💤', '😪', '🌙'],
-  grumble: ['💦', '😮‍💨', '🥲', '😵‍💫', '😩'],
+  grumble: ['💦', '😩', '🥲', '😵', '😩'],
   idle: ['🤔', '💭', '😶', '🙄'],
   rest: ['☕', '😌', '🍵', '😋'],
   opener: ['😊', '💬', '🤔'],
@@ -401,10 +401,10 @@ const EMOJI_MAP = {
   gtopic: ['😆', '🎉', '😂', '✨'],
   greact: ['😂', '👏', '🤣', '😲'],
   order: ['💼', '👊', '🔥'],
-  orderreply: ['💪', '✨', '🫡'],
+  orderreply: ['💪', '✨', '😤'],
   worktalk: ['📝', '💼', '🤔', '👀'],
   'ev:bbq': ['🍖', '🔥', '😋', '🍻'],
-  'ev:gym': ['💪', '🔥', '😤', '🏋️'],
+  'ev:gym': ['💪', '🔥', '😤', '💪'],
   evreact: ['👀', '😅', '😂', '🤨'],
   evsorry: ['💦', '🙏', '😱'],
   bossbust: ['💢', '🔥', '😡'],
@@ -412,14 +412,14 @@ const EMOJI_MAP = {
   chimebrk: ['☕', '😌', '🎐'],
   chimeend: ['💪', '🔥', '✊'],
   kyokocheer: ['❤️', '💕', '✨', '🥰'],
-  itocheer: ['😳', '❤️', '☺️'],
+  itocheer: ['😳', '❤️', '😊'],
   kyokoinvite: ['💕', '🥺', '❤️'],
   itodateok: ['😊', '❤️', '😳'],
-  datetalk: ['❤️', '💞', '☺️', '🥰'],
+  datetalk: ['❤️', '💞', '😊', '🥰'],
   patrol: ['👍', '✨', '🔥', '😊'],
-  patrolreply: ['💪', '✨', '😊', '🫡'],
-  jansabo: ['😪', '🫥', '🍃'],
-  tsukistudio: ['🎙️', '🎧', '✨', '🎵'],
+  patrolreply: ['💪', '✨', '😊', '😤'],
+  jansabo: ['😪', '😶', '🍃'],
+  tsukistudio: ['🎤', '🎧', '✨', '🎵'],
 };
 const EMOJI_RE = /\p{Extended_Pictographic}/u;
 function decorate(key, text) {
@@ -494,7 +494,7 @@ function drawParticles(g) {
     } else if (p.type === 'note') {
       g.fillStyle = `rgba(120,90,200,${a})`;
       g.font = '9px DotGothic16';
-      g.fillText('♪', Math.round(p.x), Math.round(p.y));
+      g.fillText('🎵', Math.round(p.x), Math.round(p.y));
     }
   }
 }
@@ -928,11 +928,11 @@ const IDLE_ANTICS = [
   '💪スクワット×10 いくぞ', '🎸エアギター熱演中', '🏃その場ダッシュ(本気)', '🧘謎のヨガポーズ',
   '💪デスクで腕立て(浅い)', '🩰つま先立ちチャレンジ', '🥊影とシャドーボクシング', '🤸ラジオ体操第一(雑)',
   '🎿エア縄跳び', '⚾エア素振り(フルスイング)', '🏌️エアゴルフスイング', '🥁エアドラム全国大会',
-  '🦵ももあげ(静音モード)', '🙆背伸びで天井タッチ未遂', '🪑椅子スクワット(椅子なし)', '☝️指立て伏せ(できてない)',
+  '🦵ももあげ(静音モード)', '🙆背伸びで天井タッチ未遂', '🪑椅子スクワット(椅子なし)', '👆️指立て伏せ(できてない)',
   '🦶アキレス腱のばし', '👀目の体操(ぐるぐる)', '🤏手首ぶらぶら体操', '💨深呼吸×10(過呼吸気味)',
   '🦴肩甲骨はがし中', '🗿マッスルポーズ(鏡なし)', '🦩片足バランス勝負', '🐄腰に手を当てて牛乳(エア)',
   '🌀首をコキコキ', '🛌床で伸び(だらしない)', '🚶モデルウォーク練習', '🤖ロボットダンス披露',
-  '🏋️ペットボトルでカール', '🧎ストレッチ…固くて悲鳴',
+  '💪ペットボトルでカール', '🧎ストレッチ…固くて悲鳴',
 ];
 
 const SLEEP_TALK = [
@@ -2892,7 +2892,7 @@ function blitLive(t, tm) {
     $('lvMission').textContent = `「${CFG.mission}」`;
     const subs = snap && snap.youtube && snap.youtube.subs != null ? snap.youtube.subs.toLocaleString('ja-JP') + '人' : '---';
     $('lvSubs').textContent = `📺 YT登録者 ${subs}`;
-    $('lvWork').textContent = `🧑‍💻 稼働中 ${employees.filter(e => e.present && e.mode === 'working').length}人`;
+    $('lvWork').textContent = `💻 稼働中 ${employees.filter(e => e.present && e.mode === 'working').length}人`;
     const d = snap && snap.deliveries ? (snap.deliveries.koen || 0) + (snap.deliveries.daihon || 0) : null;
     $('lvDel').textContent = `📦 本日の納品 ${d == null ? '-' : d}本`;
   }
