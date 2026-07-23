@@ -554,9 +554,9 @@ function drawOffice(g, t, tm) {
     g.fillText(btitle, bcx - g.measureText(btitle).width / 2, 16);
     g.font = '6px DotGothic16';
     g.fillStyle = 'rgba(74,59,42,.92)';
-    (CFG.mottos || []).slice(0, 3).forEach((m, k) => {
+    (CFG.mottos || []).slice(0, 4).forEach((m, k) => {
       const line = String(m).slice(0, 8);
-      g.fillText(line, bcx - g.measureText(line).width / 2, 25 + k * 8);
+      g.fillText(line, bcx - g.measureText(line).width / 2, 24 + k * 7.5);
     });
     // 看板に社名とYT登録者
     g.font = '13px DotGothic16'; g.fillStyle = '#f0d890';
@@ -651,7 +651,7 @@ function drawOffice(g, t, tm) {
     g.font = '8px DotGothic16'; g.fillStyle = '#b04a3c';
     g.fillText('《社訓》', 250, 14);
     g.fillStyle = INK;
-    (CFG.mottos || []).slice(0, 3).forEach((m, i) => g.fillText(String(m).slice(0, 8), 238, 23 + i * 9));
+    (CFG.mottos || []).slice(0, 4).forEach((m, i) => g.fillText(String(m).slice(0, 8), 238, 23 + i * 9));
 
     // 時計
     g.fillStyle = '#fff'; g.beginPath(); g.arc(320, 22, 11, 0, 7); g.fill();
@@ -2335,6 +2335,7 @@ function onSnapshot() {
 
   for (const e of employees) {
     e.bubbles = [];
+    e.jobDetail = null;
     e.happy = false; e.sweat = false; e.tired = false;
     if (e.source === 'claude') {
       const act = buckets[e.id] || [];
@@ -2343,8 +2344,10 @@ function onSnapshot() {
       if (act.length) {
         e.setMode('working');
         e.sweat = (blk && blk.costPerHour > 90) || act.reduce((a, b) => a + (b.sessions || 1), 0) >= 2;
-        e.jobText = act.map(a => a.project + (a.sessions > 1 ? `×${a.sessions}` : '')).join(' / ');
-        e.bubbles = act.map(a => `「${a.project}」作業中`);
+        // 頭上タグ=いま実際にやっている作業(最後の指示)。名簿にはプロジェクト名込みの詳細
+        e.jobText = act.map(a => a.task ? a.task : a.project + (a.sessions > 1 ? `×${a.sessions}` : '')).join(' / ');
+        e.jobDetail = act.map(a => `${a.project}${a.sessions > 1 ? `×${a.sessions}` : ''}${a.task ? `: ${a.task}` : ''}`).join(' / ');
+        e.bubbles = act.map(a => a.task ? `いま「${a.task.slice(0, 24)}」を進めてます` : `「${a.project}」作業中`);
         if (e.showHp && s.claude.today) e.bubbles.push(`本日 ${fmtTok(s.claude.today.tokensOut)}tok 出力`);
         if (e.tired) e.bubbles.push('5h枠がもうすぐ…');
       } else {
@@ -2360,6 +2363,7 @@ function onSnapshot() {
         e.setMode('working');
         e.sweat = act.length >= 2;
         e.jobText = act.map(a => a.thread).join(' / ');
+        e.jobDetail = act.map(a => `${a.proj || 'その他'}: ${a.thread}`).join(' / ');
         e.bubbles = act.map(a => `「${(a.thread || '').slice(0, 14)}」進行中`);
       } else {
         e.setMode(tm.h >= 1 && tm.h < 7 ? 'sleep' : 'idle');
@@ -2576,6 +2580,13 @@ function updateHud() {
 
   const roster = $('roster');
   roster.innerHTML = '';
+  // 今月の経過営業日(JST・土日除く)
+  const jd = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Tokyo' }));
+  let bizDays = 0;
+  for (let i = 1; i <= jd.getDate(); i++) {
+    const w = new Date(jd.getFullYear(), jd.getMonth(), i).getDay();
+    if (w !== 0 && w !== 6) bizDays++;
+  }
   for (const e of employees) {
     let [cls, label] = CHIP[e.mode] || CHIP.idle;
     if (e.mode === 'idle' && e.resting) [cls, label] = CHIP.break;
@@ -2610,15 +2621,27 @@ function updateHud() {
       const col = e.hp > 50 ? 'var(--good)' : e.hp > 20 ? 'var(--warn)' : 'var(--bad)';
       hpHtml = `<div class="hp"><div class="bar"><i style="width:${e.hp}%;background:${col}"></i></div><div class="pct">HP ${e.hp}%</div></div>`;
     }
-    right.innerHTML = `<span class="chip ${cls}">${label}</span>${hpHtml}`;
+    // 人間換算の月給(時給×8h×今月の営業日)
+    let salHtml = '';
+    if (e.def.wage != null) {
+      salHtml = e.def.wage > 0
+        ? `<div class="sal">月給換算 ¥${(e.def.wage * 8 * bizDays).toLocaleString('ja-JP')}</div>`
+        : '<div class="sal">無給(経営者)</div>';
+    }
+    right.innerHTML = `<span class="chip ${cls}">${label}</span>${hpHtml}${salHtml}`;
     row.appendChild(right);
     const job = document.createElement('div');
     job.className = 'job';
-    job.textContent = e.jobText || '';
+    job.textContent = e.jobDetail || e.jobText || '';
     row.appendChild(job);
     roster.appendChild(row);
   }
-  $('staffNote').textContent = 'HP共有: 伊藤=クロード5h枠 / 安藤=コデックス週次 | 設備: コレクター/基盤・TTS機 | ペット: ララ(犬)';
+  const totalSal = employees.reduce((a, e) => a + (e.def.wage || 0) * 8 * bizDays, 0);
+  const fixedM = (CFG.subscriptions || []).reduce((a, x) => a + (x.monthlyJPY || 0), 0);
+  $('staffNote').innerHTML =
+    `人間を雇った場合の人件費(今月${bizDays}営業日×8h): <b>¥${totalSal.toLocaleString('ja-JP')}</b>` +
+    (fixedM ? ` / AI実費 ¥${fixedM.toLocaleString('ja-JP')} = <b>約${Math.round(totalSal / fixedM)}分の1</b>のコスト` : '') +
+    '<br>HP共有: 伊藤=クロード5h枠 / 安藤=コデックス週次 | ペット: ララ(犬)';
 
   const yt = $('youtube');
   if (s.youtube && s.youtube.subs != null) {
