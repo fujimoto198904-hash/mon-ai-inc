@@ -34,7 +34,7 @@ window.OFFICE_CONFIG = {
 
     { id: 'ito', wage: 5000, name: '伊藤', dept: 'プロジェクト-T', role: 'クロード作業',
       hair: '#f8d8b8', bald: true, tall: true, shirt: '#5a8a6a', desk: { x: 168, y: 112 }, tag: 'Project-T',
-      source: 'claude', match: '^(Project-T|koen|youtubesozai)', showHp: true, pc: 'mon2' },
+      source: 'claude', match: '^(Project-T)', showHp: true, pc: 'mon2' },
     { id: 'tsukishiro', wage: 3500, name: '月城', dept: 'プロジェクト-T', role: 'ルーチン作業',
       hair: '#b8a8e8', shirt: '#6a5a9a', desk: { x: 230, y: 112 }, tag: 'ルーチン',
       source: 'schedule', shift: [3, 0, 7, 0], deliveryKeys: ['koen', 'daihon'],
@@ -54,9 +54,9 @@ window.OFFICE_CONFIG = {
       hair: '#d83a2e', shirt: '#c85a8a', desk: { x: 528, y: 112 }, tag: 'yorutool',
       source: 'claude', match: '^yorutool' },
 
-    { id: 'arimoto', wage: 4500, name: '有本', dept: '総務部', role: 'クロード作業(基盤・ツール)',
-      hair: '#2a2220', shirt: '#3a3a4a', desk: { x: 240, y: 216 }, tag: '基盤・ツール',
-      source: 'claude', match: '^(Irodori)' },
+    { id: 'arimoto', wage: 4500, name: '有本', dept: '総務部', role: 'クロード作業(基盤・講演・素材)',
+      hair: '#2a2220', shirt: '#3a3a4a', desk: { x: 240, y: 216 }, tag: '基盤・講演',
+      source: 'claude', match: '^(Irodori|koen|youtubesozai)' },
     { id: 'kato', wage: 800, name: '加藤', dept: '総務部', role: 'クロード作業(雑務)',
       hair: '#8a5a2e', shirt: '#c8a04a', desk: { x: 290, y: 216 }, tag: '雑務全般',
       source: 'claude', pc: 'laptop' },
