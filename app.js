@@ -446,8 +446,8 @@ function drawBubble(g, x, y, text) {
   g.font = '6px DotGothic16';
   const lines = [];
   let s = String(text);
-  while (s.length && lines.length < 2) { lines.push(s.slice(0, 14)); s = s.slice(14); }
-  if (s.length) lines[1] = lines[1].slice(0, 13) + '…';
+  while (s.length && lines.length < 3) { lines.push(s.slice(0, 14)); s = s.slice(14); }
+  if (s.length) lines[2] = lines[2].slice(0, 13) + '…';
   const w = Math.max(...lines.map(l => g.measureText(l).width)) + 8;
   const h = lines.length * 8 + 5;
   let bx = Math.min(Math.max(4, x - w / 2), W - w - 4);
@@ -1235,12 +1235,18 @@ class Employee extends Person {
     // 作業タグ: いま何をしているかを常時表示
     if (this.mode === 'working' && (seated || this.action === 'studio') && !this.resting && this.jobText) {
       g.font = '5px DotGothic16';
-      const jt = this.jobText.length > 14 ? this.jobText.slice(0, 13) + '…' : this.jobText;
-      const jw = g.measureText(jt).width + 7;
+      // 作業タグは2行まで(切れて内容が分からなくならないように)
+      const full = this.jobText;
+      const jl = [full.slice(0, 14)];
+      if (full.length > 14) jl.push(full.length > 28 ? full.slice(14, 27) + '…' : full.slice(14, 28));
+      const jw = Math.max(...jl.map(l => g.measureText(l).width)) + 7;
+      const jh = jl.length * 7 + 3;
+      const jtop = y - 35.5 - jh;
       g.fillStyle = 'rgba(40,42,54,.88)';
-      g.beginPath(); g.roundRect(x - jw / 2 + .5, y - 44.5, jw, 9, 2); g.fill();
-      g.fillStyle = '#5aff9e'; g.fillRect(x - jw / 2 + 2.5, y - 42, 1.5, 4);
-      g.fillStyle = '#f0f0e8'; g.fillText(jt, x - jw / 2 + 5.5, y - 38);
+      g.beginPath(); g.roundRect(x - jw / 2 + .5, jtop, jw, jh, 2); g.fill();
+      g.fillStyle = '#5aff9e'; g.fillRect(x - jw / 2 + 2.5, jtop + 2.5, 1.5, 4);
+      g.fillStyle = '#f0f0e8';
+      jl.forEach((l, i) => g.fillText(l, x - jw / 2 + 5.5, jtop + 6.5 + i * 7));
     }
     if (this.bubble && t < this.bubbleUntil) bubbleQ.push({ x, y: y - 16 - (this.seed % 3) * 7, text: this.bubble });
   }
@@ -2347,7 +2353,7 @@ function onSnapshot() {
         // 頭上タグ=いま実際にやっている作業(最後の指示)。名簿にはプロジェクト名込みの詳細
         e.jobText = act.map(a => a.task ? a.task : a.project + (a.sessions > 1 ? `×${a.sessions}` : '')).join(' / ');
         e.jobDetail = act.map(a => `${a.project}${a.sessions > 1 ? `×${a.sessions}` : ''}${a.task ? `: ${a.task}` : ''}`).join(' / ');
-        e.bubbles = act.map(a => a.task ? `いま「${a.task.slice(0, 24)}」を進めてます` : `「${a.project}」作業中`);
+        e.bubbles = act.map(a => a.task ? `いま「${a.task.slice(0, 34)}」を進めてます` : `「${a.project}」作業中`);
         if (e.showHp && s.claude.today) e.bubbles.push(`本日 ${fmtTok(s.claude.today.tokensOut)}tok 出力`);
         if (e.tired) e.bubbles.push('5h枠がもうすぐ…');
       } else {
@@ -2364,7 +2370,7 @@ function onSnapshot() {
         e.sweat = act.length >= 2;
         e.jobText = act.map(a => a.thread).join(' / ');
         e.jobDetail = act.map(a => `${a.proj || 'その他'}: ${a.thread}`).join(' / ');
-        e.bubbles = act.map(a => `「${(a.thread || '').slice(0, 14)}」進行中`);
+        e.bubbles = act.map(a => `「${(a.thread || '').slice(0, 30)}」進行中`);
       } else {
         e.setMode(tm.h >= 1 && tm.h < 7 ? 'sleep' : 'idle');
         e.jobText = '待機中';
