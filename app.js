@@ -3140,8 +3140,16 @@ function loop(t) {
   for (const e of employees) e.drawOverlay(cx, t);
 
   if (night) {
-    cx.fillStyle = 'rgba(30,30,80,.16)';
+    // 22:00〜5:00は消灯(ぐっと暗く)。それ以外の夜は薄暗い程度
+    const lightsOut = tm.h >= 22 || tm.h < 5;
+    cx.fillStyle = lightsOut ? 'rgba(8,8,34,.5)' : 'rgba(30,30,80,.16)';
     cx.fillRect(0, 0, W, H);
+    if (lightsOut) {
+      rr(cx, 6, 6, 86, 13, 'rgba(20,20,44,.85)', 'rgba(120,130,190,.5)');
+      cx.font = '6px DotGothic16';
+      cx.fillStyle = '#aab4e8';
+      cx.fillText('🌙 消灯中 22:00-5:00', 10, 15);
+    }
   }
   // BBQの煙もや: 部屋全体がもくもくする(イベント終了後はゆっくり晴れる)
   const hazeTarget = officeEvent.active && officeEvent.active.kind === 'bbq' ? (officeEvent.active.haze || 0) : 0;
