@@ -411,11 +411,11 @@ const EMOJI_MAP = {
   alarm: ['🚨', '💦', '😱'],
   chimebrk: ['☕', '😌', '🎐'],
   chimeend: ['💪', '🔥', '✊'],
-  kyokocheer: ['❤️', '💕', '✨', '🥰'],
-  itocheer: ['😳', '❤️', '😊'],
-  kyokoinvite: ['💕', '🥺', '❤️'],
-  itodateok: ['😊', '❤️', '😳'],
-  datetalk: ['❤️', '💞', '😊', '🥰'],
+  kyokocheer: ['💗', '💕', '✨', '🥰'],
+  itocheer: ['😳', '💗', '😊'],
+  kyokoinvite: ['💕', '🥺', '💗'],
+  itodateok: ['😊', '💗', '😳'],
+  datetalk: ['💗', '💞', '😊', '🥰'],
   patrol: ['👍', '✨', '🔥', '😊'],
   patrolreply: ['💪', '✨', '😊', '😤'],
   jansabo: ['😪', '😶', '🍃'],
@@ -927,8 +927,8 @@ const JANITOR_SABORI = [
 const IDLE_ANTICS = [
   '💪スクワット×10 いくぞ', '🎸エアギター熱演中', '🏃その場ダッシュ(本気)', '🧘謎のヨガポーズ',
   '💪デスクで腕立て(浅い)', '🩰つま先立ちチャレンジ', '🥊影とシャドーボクシング', '🤸ラジオ体操第一(雑)',
-  '🎿エア縄跳び', '⚾エア素振り(フルスイング)', '🏌️エアゴルフスイング', '🥁エアドラム全国大会',
-  '🦵ももあげ(静音モード)', '🙆背伸びで天井タッチ未遂', '🪑椅子スクワット(椅子なし)', '👆️指立て伏せ(できてない)',
+  '🎿エア縄跳び', '⚾エア素振り(フルスイング)', '⛳エアゴルフスイング', '🥁エアドラム全国大会',
+  '🦵ももあげ(静音モード)', '🙆背伸びで天井タッチ未遂', '🪑椅子スクワット(椅子なし)', '👆指立て伏せ(できてない)',
   '🦶アキレス腱のばし', '👀目の体操(ぐるぐる)', '🤏手首ぶらぶら体操', '💨深呼吸×10(過呼吸気味)',
   '🦴肩甲骨はがし中', '🗿マッスルポーズ(鏡なし)', '🦩片足バランス勝負', '🐄腰に手を当てて牛乳(エア)',
   '🌀首をコキコキ', '🛌床で伸び(だらしない)', '🚶モデルウォーク練習', '🤖ロボットダンス披露',
@@ -974,7 +974,7 @@ const PERSONAL_MUTTER = {
   arimoto: ['備品発注しとくか', '経費精算たまってる…', '規程読み直そ', 'ネクタイ曲がってないかな'],
   kato: ['雑務こそ会社の土台', 'ラベル貼り気持ちいい', '文具そろえたい', 'お茶くみじゃなくてインフラ係です'],
   zama: ['まあ、ぼちぼちやるか', '猫の動画みたい', 'うどん食べたい', 'その他って言うな、何でも屋と言え'],
-  shirayanagi: ['そうじ そうじ♪', '床は会社の顔ですから', 'ゴミは俺が拾う', 'ワックスそろそろ切れる…', 'ほこり一つ許さん'],
+  shirayanagi: ['そうじ そうじ🎵', '床は会社の顔ですから', 'ゴミは俺が拾う', 'ワックスそろそろ切れる…', 'ほこり一つ許さん'],
 };
 
 
@@ -2489,7 +2489,7 @@ function onSnapshot() {
     if (cq2.session.pct > 85 && !onSnapshot._quotaPanic) {
       onSnapshot._quotaPanic = true;
       const itoQ = employees.find(e => e.id === 'ito');
-      if (itoQ && itoQ.present) itoQ.say(now + 6000, '⚠️セッション残量15%切った…配分考えないと💦', 4600);
+      if (itoQ && itoQ.present) itoQ.say(now + 6000, '🚨セッション残量15%切った…配分考えないと💦', 4600);
     }
     if (cq2.session.pct < 70) onSnapshot._quotaPanic = false;
   }
@@ -2536,7 +2536,7 @@ function updateHud() {
     const ageMin = snapAt > 0 ? (Date.now() - snapAt) / 60000 : Infinity;
     const el = $('syncHud');
     const rxTime = snapAt > 0 ? new Date(snapAt).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' }) : '--:--';
-    if (ageMin >= (CFG.staleMin || 20)) { el.textContent = `⚠ 止まってます!(最終 ${rxTime})`; el.style.color = 'var(--bad)'; }
+    if (ageMin >= (CFG.staleMin || 20)) { el.textContent = `🚨 止まってます!(最終 ${rxTime})`; el.style.color = 'var(--bad)'; }
     else if (ageMin < 7) { el.textContent = `● OK ${rxTime}受信(5分毎)`; el.style.color = 'var(--good)'; }
     else { el.textContent = `受信待ち(最終 ${rxTime})`; el.style.color = 'var(--warn)'; }
   }
