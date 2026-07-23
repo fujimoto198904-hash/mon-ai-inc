@@ -364,6 +364,45 @@ function drawAlert(g, x, y, t) {
 
 /* ---------- 吹き出し ---------- */
 const _recentSay = {};
+// 感情絵文字: セリフの種類ごとに合う絵文字を語尾に添える(元から絵文字入りの行はそのまま)
+const EMOJI_MAP = {
+  sleep: ['💤', '😪', '🌙'],
+  grumble: ['💦', '😮‍💨', '🥲', '😵‍💫', '😩'],
+  idle: ['🤔', '💭', '😶', '🙄'],
+  rest: ['☕', '😌', '🍵', '😋'],
+  opener: ['😊', '💬', '🤔'],
+  reply: ['😄', '🤝', '😂'],
+  gtopic: ['😆', '🎉', '😂', '✨'],
+  greact: ['😂', '👏', '🤣', '😲'],
+  order: ['💼', '👊', '🔥'],
+  orderreply: ['💪', '✨', '🫡'],
+  worktalk: ['📝', '💼', '🤔', '👀'],
+  'ev:bbq': ['🍖', '🔥', '😋', '🍻'],
+  'ev:gym': ['💪', '🔥', '😤', '🏋️'],
+  evreact: ['👀', '😅', '😂', '🤨'],
+  evsorry: ['💦', '🙏', '😱'],
+  bossbust: ['💢', '🔥', '😡'],
+  alarm: ['🚨', '💦', '😱'],
+  chimebrk: ['☕', '😌', '🎐'],
+  chimeend: ['💪', '🔥', '✊'],
+  kyokocheer: ['❤️', '💕', '✨', '🥰'],
+  itocheer: ['😳', '❤️', '☺️'],
+  kyokoinvite: ['💕', '🥺', '❤️'],
+  itodateok: ['😊', '❤️', '😳'],
+  datetalk: ['❤️', '💞', '☺️', '🥰'],
+  patrol: ['👍', '✨', '🔥', '😊'],
+  patrolreply: ['💪', '✨', '😊', '🫡'],
+  jansabo: ['😪', '🫥', '🍃'],
+  tsukistudio: ['🎙️', '🎧', '✨', '🎵'],
+};
+const EMOJI_RE = /\p{Extended_Pictographic}/u;
+function decorate(key, text) {
+  const set = EMOJI_MAP[key] || EMOJI_MAP[key.split(':')[0]];
+  if (!set || !text || EMOJI_RE.test(text)) return text;
+  if (Math.random() < 0.25) return text;   // たまには無印も残す
+  return text + set[Math.floor(Math.random() * set.length)];
+}
+
 function pickFresh(key, pool) {
   if (!pool || !pool.length) return '';
   const hist = _recentSay[key] || (_recentSay[key] = []);
@@ -372,7 +411,7 @@ function pickFresh(key, pool) {
   do { cand = pool[Math.floor(Math.random() * pool.length)]; tries++; } while (hist.includes(cand) && tries < 25);
   hist.push(cand);
   while (hist.length > cap) hist.shift();
-  return cand;
+  return decorate(key, cand);
 }
 
 const bubbleQ = [];
@@ -399,6 +438,10 @@ function drawBubble(g, x, y, text) {
 /* ---------- パーティクル(煙・ハート・音符) ---------- */
 const particles = [];
 function spawnParticle(type, x, y) {
+  if (type === 'confetti') {
+    particles.push({ type, x, y, vy: 0.3 + Math.random() * 0.35, vx: (Math.random() - 0.5) * 0.3, life: 4200, hue: Math.floor(Math.random() * 360) });
+    return;
+  }
   particles.push({ type, x, y, vy: -0.14 - Math.random() * 0.1, vx: (Math.random() - 0.5) * 0.14, life: 2600 });
 }
 function stepParticles(dt) {
@@ -415,6 +458,9 @@ function drawParticles(g) {
       g.fillStyle = `rgba(232,90,120,${a})`;
       const x = Math.round(p.x), y = Math.round(p.y);
       g.fillRect(x, y, 2, 2); g.fillRect(x + 3, y, 2, 2); g.fillRect(x, y + 2, 5, 2); g.fillRect(x + 1, y + 4, 3, 1); g.fillRect(x + 2, y + 5, 1, 1);
+    } else if (p.type === 'confetti') {
+      g.fillStyle = `hsla(${p.hue},85%,60%,${a})`;
+      g.fillRect(Math.round(p.x), Math.round(p.y), 2, 3);
     } else if (p.type === 'bsmoke') {
       const s = 2 + Math.floor((2600 - p.life) / 650);   // 立ちのぼるほど大きく
       g.fillStyle = `rgba(120,120,130,${a * .5})`;
@@ -1439,8 +1485,8 @@ const EVENT_PROPS = {
     ['b_skewer', 336, 149, 16, 13], ['b_cooler', 246, 170, 16, 16], ['b_beer', 296, 180, 11, 16],
   ],
   gym: [
-    ['g_rack', 252, 148, 36, 21], ['g_barbell', 294, 152, 40, 13], ['g_bench', 340, 152, 26, 23],
-    ['g_mats', 274, 172, 30, 16], ['g_ball', 350, 174, 15, 16],
+    ['g_tread', 222, 146, 26, 26], ['g_rack', 252, 148, 36, 21], ['g_barbell', 294, 152, 40, 13],
+    ['g_bench', 340, 152, 26, 23], ['g_mats', 274, 172, 30, 16], ['g_ball', 350, 174, 15, 16],
   ],
 };
 // 総務部(y216の机列)と被らないよう、イベントの立ち位置はy198以下に収める
@@ -1470,6 +1516,23 @@ function startEvent(kind, members, t) {
   });
   officeEvent.active = { kind, members, startT: t, until: t + 160000 + Math.random() * 60000, nextLine: t + 6000, nextReact: t + 9000 };
 }
+
+// ララ×焼肉: BBQ中は必ず餌をねだりに来る。あげようとすると怒られる
+const LARA_BEG = [
+  'くぅ〜ん…🍖', 'ワン!ワン!🍖', '(お座りして待機)', '(しっぽ高速回転)', '(よだれ)',
+  'じーーーっ👀', '(前足ちょいちょい)', 'クゥーン…💕', 'ワンッ🍖ワンッ🍖', '(胸を張ってアピール)',
+  '(圧のあるお座り)', 'へっへっへっ(息)',
+];
+const LARA_FEED = [
+  'ララにひとくちだけ…🍖', 'タレついてないとこなら…', 'ララもBBQ参加でしょ?', '(こっそり肉を下ろす)',
+  'この端っこ、あげていい?', 'ララ、お手!できたらあげる', '見てられない…あげちゃお', '野菜ならいいよね?',
+  'ララ専用の皿、用意しちゃった', '小さいのならバレない…', '焼く前のやつなら…', 'ララが泣いてるんだけど!?',
+];
+const LARA_SCOLD = [
+  '人の食べ物あげちゃダメ!💢', 'タレも塩もダメ!全部ダメ!', '犬にネギ類は厳禁だよ!?', '社長に怒られるよ!?',
+  'ララのごはんはあっち!', 'あーあ、味覚えちゃうじゃん', 'ダメったらダメ!鬼と呼ばれても!', '獣医さんに怒られるやつ!',
+  'その皿しまいなさい!', 'BBQ奉行より犬奉行になりなさい', 'かわいさに負けるな!', '俺が我慢してるのに!?',
+];
 
 // BBQの煙→もくもく→火災報知器
 let hazeLevel = 0;
@@ -1510,6 +1573,16 @@ function runEvent(t) {
     }
     const elapsed = t - (ev.startT || t);
     ev.haze = Math.min(0.26, Math.max(0, (elapsed - 20000) / 70000) * 0.26);
+    // ララに肉をあげようとして怒られる小芝居
+    if ((!ev.nextLara || t > ev.nextLara) && ev.members.length >= 2 && !ev.phase) {
+      const A = ev.members[Math.floor(Math.random() * ev.members.length)];
+      const B = ev.members[(ev.members.indexOf(A) + 1) % ev.members.length];
+      A.say(t, pickFresh('larafeed', LARA_FEED), 3000);
+      B.say(t + 2700, pickFresh('larascold', LARA_SCOLD), 3000);
+      dog.bubble = ['(しっぽ全開)💕', 'ワンッ!!', 'くーん…😢', '(スン…)'][Math.floor(Math.random() * 4)];
+      dog.bubbleUntil = t + 6200;
+      ev.nextLara = t + 25000 + Math.random() * 20000;
+    }
     if (!ev.alarmed && elapsed > 90000 && ev.members.length) {
       ev.alarmed = true;
       const near = employees.filter(e => e.present && !e.inChat && e.def.source !== 'janitor').slice(0, 5);
@@ -1543,7 +1616,7 @@ function runEvent(t) {
       ev.phase = 'bust'; ev.bustStage = 'walk'; ev.boss = boss;
       boss.releaseSpot(); boss.releaseReception(); boss.resting = false;
       boss.inChat = true;
-      boss.goto({ x: 310, y: 208 }, 'faceU');   // イベントゾーンの手前で仁王立ち
+      boss.goto({ x: 148, y: 162 }, 'faceR');   // 自席近くから遠雷のように怒鳴る(歩かせすぎない)
     } else {
       endEvent(t);   // 社長不在なら自然解散
     }
@@ -2040,9 +2113,24 @@ function endChat(t, wait) {
 
 const dog = { pos: { x: 90, y: 150 }, target: null, next: 4000, napUntil: 0, dir: 1 };
 function stepDog(dt, t) {
+  // BBQ中は必ずグリル前に来て餌をねだる
+  const bbqOn = officeEvent.active && officeEvent.active.kind === 'bbq';
+  if (bbqOn) {
+    dog.napUntil = 0;
+    const gx = 292, gy = 198;
+    if (!dog.target && Math.hypot(dog.pos.x - gx, dog.pos.y - gy) > 16) {
+      dog.target = { x: gx + Math.random() * 14 - 7, y: gy + Math.random() * 8 - 4 };
+    }
+    if (t > (dog.nextBeg || 0)) {
+      dog.bubble = pickFresh('larabeg', LARA_BEG);
+      dog.bubbleUntil = t + 3000;
+      dog.nextBeg = t + 9000 + Math.random() * 9000;
+    }
+  }
   if (t < dog.napUntil) return;
   if (!dog.target) {
     if (t > dog.next) {
+      if (bbqOn) return;
       if (Math.random() < 0.35) { dog.napUntil = t + 12000 + Math.random() * 18000; dog.next = dog.napUntil; return; }
       const spots = [{ x: 250, y: 198 }, { x: 320, y: 200 }, { x: 420, y: 204 }, { x: 500, y: 205 }, { x: 560, y: 202 }, { x: 100, y: 258 }, { x: 60, y: 264 }];
       dog.target = spots[Math.floor(Math.random() * spots.length)];
@@ -2081,6 +2169,97 @@ function shiftActive(shift, tm) {
 const fmtYen = n => '¥' + Math.round(n).toLocaleString('ja-JP');
 const fmtUsd = n => '$' + (n >= 100 ? Math.round(n) : n.toFixed(1));
 const fmtTok = n => n >= 1e9 ? (n / 1e9).toFixed(1) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'K' : String(n);
+
+/* ================================================================
+   データ駆動イベント: 実データの変化を物語にする
+   (登録者増→お祝い / 納品→報告と称賛 / コスト→社長の悲鳴 / 残量→焦り)
+   ================================================================ */
+const celebration = { until: 0 };
+let prevSubs = null, prevDeliv = null, costMilestone = 0;
+const CELEBRATE = [
+  '🎉登録者{n}人突破ー!!', '📈増えてる!増えてるぞ!', '{d}人!ようこそ!', 'YT見てくれてありがとうー!🙌',
+  'うちの動画、届いてる…!', '祝!{n}人!', '次は目標1万人!', 'TSUKIの声が世界に…✨', '拍手ー!!👏',
+  'スクショ撮っとこ📸', '経営ボードに春が来た', '社長、ボーナスの話ですが🎉', 'この調子で毎日投稿!',
+  '登録者様に感謝の舞い', 'やったーーー!!', '泣いていい?😭', 'モチベ全回復した!', '乾杯しよう(お茶で)🍵',
+  '新規さんいらっしゃい!', 'アルゴリズムが微笑んだ…!',
+];
+const DELIVER_LINES = [
+  '📦納品完了しました!', '1本仕上がりました🎉', '講演、出荷でーす📦', '本日分、納めました!',
+  '品質チェックOK、納品!', 'できたてほやほや、納品です', '今日も届けました📮', '納品ラッシュ来てます',
+  'マスター確認済み、出します', '音声チェック3回した、完璧', 'レンダリング完走!納品!', '積み上げ+1です📦',
+];
+const DELIVER_PRAISE = [
+  'よし!今日も届いたな👏', 'ナイス納品!', '品質第一、その調子だ', '視聴者が待ってるぞ、良い仕事だ',
+  '積み上げが会社を作る!', '今夜は祝杯だな(お茶)', '掲示板に貼っておこう', '俺は今、猛烈に感動している',
+];
+const BURN_LINES = [
+  '今日もう{d}使ってる…😅', '{d}突破…API換算こわ', '{d}か…売上はよ', '燃焼率が俺を燃やす…{d}',
+  '{d}…参考値参考値(震え)', 'クレジット無限じゃないんだぞ…{d}', '{d}!?…まあ、投資だ', '経理の俺が泣いてる({d})',
+];
+
+function startCelebration(t, diff, subs) {
+  celebration.until = t + 15000;
+  const folks = employees.filter(e => e.present && !e.inChat && e.action !== 'sleep');
+  folks.forEach((e, i) => {
+    e.happy = true;
+    e.say(t + 400 + i * 900, pickFresh('celebrate', CELEBRATE)
+      .replace('{n}', subs.toLocaleString('ja-JP')).replace('{d}', '+' + diff), 3600);
+  });
+}
+
+function announceDelivery(t) {
+  const ts = employees.find(e => e.id === 'tsukishiro');
+  const who = (ts && ts.present && ts.mode === 'working') ? ts : employees.find(e => e.id === 'ito');
+  if (who && who.present) who.say(t + 500, pickFresh('deliver', DELIVER_LINES), 3800);
+  const boss = employees.find(e => e.def.source === 'boss');
+  if (boss && boss.present && !boss.inChat) boss.say(t + 4600, pickFresh('deliverpraise', DELIVER_PRAISE), 3400);
+}
+
+/* ---- 時間帯の空気(昼メシ・おやつ・深夜・月曜・金曜) ---- */
+const timeFlavor = { fired: {} };
+const LUNCH_LINES = [
+  '🍜昼だ!昼!', 'お腹すいた…', '今日のランチ何?', 'コンビニ行く人ー?', '12時の腹時計、正確',
+  'カレーの気分', '食べたら眠くなるやつ', '昼休憩、権利です', '社食欲しいなあ', '弁当勢、勝ち組',
+  'ラーメンかそばで悩む', 'おにぎり2個で戦う', '昼抜きダメ、絶対', 'いただきます🙏',
+];
+const SNACK_LINES = [
+  '3時のおやつ〜🍪', '糖分補給の時間', 'チョコが俺を呼んでる', 'スナック棚、補充されてる!',
+  'コーヒーおかわり☕', '15時の壁、甘味で越える', 'おやつは正義', '一口だけ…一口だけ…',
+  '疲れた脳に糖を', 'お茶しばこ🍵',
+];
+const NIGHT_LINES = [
+  'もうこんな時間…🌙', '静かだ…集中できる', '深夜テンション来た', '目が冴えてきた(まずい)',
+  '夜型なんで本領発揮です', 'コンビニ行くなら今のうち', '月がきれいですね(窓ない)', 'ラストスパート🔥',
+  'エナドリ2本目はダメって言われてる', 'そろそろ寝る準備…あと1件だけ', '夜のオフィス、ちょっと好き', '明日の俺に任せない',
+];
+const MONDAY_LINES = [
+  '月曜が来てしまった…', '週の始まり!エンジン点火🔥', '土日の記憶がない', '今週も無限労働(社訓)',
+  'まず週次の整理から', 'カレンダー見たくない', '今週こそ定時で…(フラグ)', 'よし、切り替えていこう',
+  '月曜はコーヒー2杯必要', '月曜の自分、いつもえらい',
+];
+const FRIDAY_LINES = [
+  '華の金曜日!🎉', '今夜は打ち上げ?', '週末までもうひと踏ん張り', '金曜の集中力は無敵',
+  '土日の予定考えてニヤけてる', '今週もよく働いた…!', '金曜夜のオフィス、平和', '納品してから帰る!',
+  '週報書かなきゃ', 'TGIF🍻',
+];
+
+function fireFlavor(key, pool, n, t) {
+  if (timeFlavor.fired[key]) return;
+  timeFlavor.fired[key] = true;
+  const folks = employees.filter(e => e.present && !e.inChat && e.action !== 'sleep')
+    .sort(() => Math.random() - 0.5).slice(0, n);
+  folks.forEach((e, i) => e.say(t + 600 + i * 1400, pickFresh(key.replace(/\d+/g, ''), pool), 3400));
+}
+
+function stepTimeFlavor(t, tm) {
+  const wd = (tm.dateStr.match(/\((.)\)/) || [])[1];
+  const hm = tm.h * 60 + tm.m;
+  if (hm >= 720 && hm < 732) fireFlavor('lunch' + tm.dateStr, LUNCH_LINES, 4, t);
+  if (hm >= 900 && hm < 912) fireFlavor('snack' + tm.dateStr, SNACK_LINES, 3, t);
+  if (tm.h === 23) fireFlavor('night' + tm.dateStr, NIGHT_LINES, 3, t);
+  if (wd === '月' && hm >= 540 && hm < 555) fireFlavor('monday' + tm.dateStr, MONDAY_LINES, 3, t);
+  if (wd === '金' && hm >= 1080 && hm < 1095) fireFlavor('friday' + tm.dateStr, FRIDAY_LINES, 3, t);
+}
 
 function onSnapshot() {
   const tm = jstNow();
@@ -2213,6 +2392,37 @@ function onSnapshot() {
   }
   if (newWorkers.length >= 2) standup.pending = newWorkers.slice(0, 3);
   else if (newWorkers.length === 1) directive.queue.push(newWorkers[0]);
+
+  // ---- データ駆動イベント ----
+  const now = performance.now();
+  const subs = s.youtube && s.youtube.subs;
+  if (subs != null) {
+    if (!firstSnap && prevSubs != null && subs > prevSubs) startCelebration(now, subs - prevSubs, subs);
+    prevSubs = subs;
+  }
+  const delivTotal = s.deliveries ? (s.deliveries.koen || 0) + (s.deliveries.daihon || 0) : null;
+  if (delivTotal != null) {
+    if (!firstSnap && prevDeliv != null && delivTotal > prevDeliv) announceDelivery(now);
+    prevDeliv = delivTotal;
+  }
+  const tc = (s.totals && s.totals.todayCost) || 0;
+  const mile = Math.floor(tc / 100);
+  if (!firstSnap && mile > costMilestone) {
+    const bossB = employees.find(e => e.def.source === 'boss');
+    if (bossB && bossB.present && !bossB.inChat) {
+      bossB.say(now + 3000, pickFresh('burn', BURN_LINES).replace(/\{d\}/g, '$' + mile + '00'), 4200);
+    }
+  }
+  costMilestone = Math.max(costMilestone, mile);
+  // Claudeセッション残量15%切り: 伊藤が焦る(1回だけ、回復したらリセット)
+  if (cq2 && cq2.session) {
+    if (cq2.session.pct > 85 && !onSnapshot._quotaPanic) {
+      onSnapshot._quotaPanic = true;
+      const itoQ = employees.find(e => e.id === 'ito');
+      if (itoQ && itoQ.present) itoQ.say(now + 6000, '⚠️セッション残量15%切った…配分考えないと💦', 4600);
+    }
+    if (cq2.session.pct < 70) onSnapshot._quotaPanic = false;
+  }
 }
 
 /* ================================================================
@@ -2407,6 +2617,8 @@ function loop(t) {
   stepStandup(t);
   stepEvent(t);
   stepChimeBreak(t);
+  stepTimeFlavor(t, tm);
+  if (t < celebration.until && Math.random() < 0.5) spawnParticle('confetti', Math.random() * W, Math.random() * 24);
   stepDog(dt, t);
   // 簡易衝突回避(座っていない者同士を押し離す)
   const movers = employees.filter(e => e.present && e.action === 'walk');
@@ -2536,6 +2748,7 @@ function loop(t) {
       cx.fillText('🚨 火災報知器作動中!', 268, 58);
     }
   }
+  if (dog.bubble && t < dog.bubbleUntil) drawBubble(cx, dog.pos.x, dog.pos.y - 14, dog.bubble);
   for (const b of bubbleQ) drawBubble(cx, b.x, b.y, b.text);
   bubbleQ.length = 0;
   if (LIVE) blitLive(t, tm);
