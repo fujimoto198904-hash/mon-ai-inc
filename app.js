@@ -2457,7 +2457,13 @@ function onSnapshot() {
   const cbuckets = {};
   for (const e of codexEmps) cbuckets[e.id] = [];
   for (const a of (s.codex.active || [])) {
-    const owner = codexEmps.find(e => e.match && a.proj && new RegExp(e.match).test(a.proj)) || codexFallback;
+    // 作業フォルダ(proj)だけでなくスレッド名でも担当を判定
+    // (別フォルダでAM38の作業をしているセッションを座間に回さない)
+    const owner = codexEmps.find(e => {
+      if (!e.match) return false;
+      const re = new RegExp(e.match, 'i');
+      return (a.proj && re.test(a.proj)) || (a.thread && re.test(a.thread));
+    }) || codexFallback;
     if (owner) cbuckets[owner.id].push(a);
   }
   const rl = s.codex.rateLimit;
