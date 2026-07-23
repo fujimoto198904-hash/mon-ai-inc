@@ -2581,6 +2581,9 @@ function updateHud() {
     if (CFG.mureka && CFG.mureka.gold != null) {
       rows.push(`<div class="row"><span class="lbl">Mureka Gold</span><span>残り <b>${CFG.mureka.gold}</b> G</span></div>`);
     }
+    if (q && q.cachedAgeMin != null) {
+      rows.push(`<div style="font-size:10px;opacity:.55">※Claude残量は${q.cachedAgeMin}分前の値(APIレート制限中)</div>`);
+    }
     qEl.innerHTML = rows.length ? rows.join('') : '<div style="opacity:.6;font-size:12px">残量データ待ち(次の収集で反映)</div>';
   }
 
