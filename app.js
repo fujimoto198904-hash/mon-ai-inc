@@ -1113,6 +1113,21 @@ class Employee extends Person {
   }
 
   thinkJanitor(t) {
+    if (this.onChimeBreak) return;   // チャイム休憩中はソファでのんびり
+    if (this.janResting) {
+      // ソファ休憩中
+      if (t > this.restUntil) {
+        this.janResting = false;
+        this.resting = false;
+        this.releaseSpot();
+        this.action = 'stand';
+        this.say(t, ['よし、掃除再開!', '休んだぶん磨きます', 'ソファ…いいものですね'][Math.floor(Math.random() * 3)], 2800);
+        this.nextThink = t + 3000;
+      } else if (Math.random() < 0.01) {
+        this.say(t, pickFresh('rest:shirayanagi', REST_TALK.concat(PERSONAL_MUTTER.shirayanagi)), 3400);
+      }
+      return;
+    }
     if (this.action === 'sabori') {
       if (this.saborMid && t > this.saborMid) {
         this.saborMid = null;
@@ -1153,6 +1168,18 @@ class Employee extends Person {
         tgt.action = 'sit';
         tgt.say(t + 3400, ['寝てないです!', 'はっ、寝てた…', '今のは瞑想です'][Math.floor(Math.random() * 3)], 3000);
         tgt.nextThink = t + 30000;
+        return;
+      }
+    }
+    // たまにはソファで正式に休憩(12%)
+    if (Math.random() < 0.12) {
+      const sp = pickRestSpot();
+      if (sp) {
+        this.janResting = true;
+        this.resting = true;
+        this.restUntil = t + 30000 + Math.random() * 30000;
+        this.takeSpot(sp);
+        this.nextThink = t + 3000;
         return;
       }
     }
@@ -1736,6 +1763,9 @@ function stepEvent(t) {
   officeEvent.next = t + 30000;
   if (standup.active || fight.active) return;
   const idle = employees.filter(e => e.present && e.mode === 'idle' && !e.inChat && !e.atMeeting && !e.receptionOn && e.action !== 'walk');
+  // 白柳も誘う(掃除は逃げないので)
+  const jan = employees.find(x => x.def.source === 'janitor');
+  if (jan && jan.present && !jan.inChat && !jan.inEvent && jan.action !== 'walk' && Math.random() < 0.7) idle.push(jan);
   if (idle.length >= 5) startEvent('bbq', idle.slice(0, 7), t);
   else if (idle.length >= 3 && Math.random() < 0.5) startEvent('gym', idle.slice(0, 4), t);
 }
@@ -1806,7 +1836,7 @@ function runEvent(t) {
   const ev = officeEvent.active;
   // 仕事が来た人は離脱
   for (const e of ev.members.slice()) {
-    if (!e.present || e.mode !== 'idle') {
+    if (!e.present || (e.mode !== 'idle' && e.def.source !== 'janitor')) {
       e.inChat = false; e.inEvent = false;
       if (e.mode === 'working') { e.say(t, '仕事きた!離脱!', 2400); e.gotoWork(); }
       ev.members = ev.members.filter(x => x !== e);
@@ -2868,6 +2898,7 @@ function updateHud() {
     if (e.mode === 'idle' && e.resting) [cls, label] = CHIP.break;
     if (e.mode === 'idle' && e.receptionOn) [cls, label] = CHIP.reception;
     if (e.def.source === 'janitor' && e.action === 'sabori') [cls, label] = ['rest', 'サボり中'];
+    if (e.def.source === 'janitor' && (e.janResting || e.onChimeBreak)) [cls, label] = ['rest', '休憩'];
     const row = document.createElement('div');
     row.className = 'emp';
     const sheet = SHEETS[e.spriteId || e.id];
@@ -3188,9 +3219,11 @@ const CHIME_BREAK_END = [
 function startChimeBreak(t) {
   chimeBreak.until = t + 300000;   // 5分
   for (const e of employees) {
-    if (!e.present || e.def.source === 'janitor') continue;
+    if (!e.present) continue;
     if (e.inChat || e.atMeeting || e.receptionOn || e.recording) continue;
-    if (e.mode !== 'working' && !(e.mode === 'idle' && !e.resting)) continue;
+    const isJan = e.def.source === 'janitor';
+    if (!isJan && e.mode !== 'working' && !(e.mode === 'idle' && !e.resting)) continue;
+    if (isJan && e.action === 'walk') continue;
     e.onChimeBreak = true;
     e.say(t + 400 + Math.random() * 2200, pickFresh('chimebrk', CHIME_BREAK_TALK), 3200);
     const sp = pickRestSpot();
