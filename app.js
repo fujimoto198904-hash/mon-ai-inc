@@ -46,6 +46,32 @@ function fitCanvas() {
 window.addEventListener('resize', fitCanvas);
 window.addEventListener('orientationchange', () => setTimeout(fitCanvas, 300));
 
+/* ---------- オフィスのみ全画面表示 ---------- */
+/* Fullscreen APIが使えない環境ではCSS疑似全画面(fakefs)にフォールバック */
+function setFakeFs(on) {
+  document.body.classList.toggle('fakefs', on);
+  setTimeout(fitCanvas, 60);
+}
+const fsBtn = document.getElementById('fsBtn');
+if (fsBtn) fsBtn.addEventListener('click', () => {
+  const st = document.getElementById('stage');
+  if (document.fullscreenElement || document.webkitFullscreenElement) {
+    (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+  } else if (document.body.classList.contains('fakefs')) {
+    setFakeFs(false);
+  } else {
+    let p;
+    try { p = (st.requestFullscreen || st.webkitRequestFullscreen).call(st); } catch { p = Promise.reject(); }
+    Promise.resolve(p).catch(() => setFakeFs(true));
+  }
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.body.classList.contains('fakefs')) setFakeFs(false);
+});
+for (const ev of ['fullscreenchange', 'webkitfullscreenchange']) {
+  document.addEventListener(ev, () => setTimeout(fitCanvas, 120));
+}
+
 /* ---------- データ取得 ---------- */
 let snap = null, snapAt = 0, fetchFail = false;
 async function poll() {
@@ -697,6 +723,7 @@ function outPath(pt, lane) {
   if (y > 262 && x >= 236 && x <= 380) return [{ x, y: 266 }, { x: 374, y: 266 }, { x: 374, y: L }]; // 受付まわり(カウンター上端272の上の帯): 右の通路から
   if (y > 198 && y < 285 && x >= 228 && x <= 368) return [{ x, y: 254 }, { x: 370, y: 254 }, { x: 370, y: L }]; // 総務部: 机の下→右通路
   if (y > 195 && x < 226) return [{ x, y: 256 }, { x: 206, y: 256 }, { x: 206, y: L }];      // 休憩室: 中央通路→右端列
+  if (y >= 240 && y <= 306 && x > 380 && x < 480) return [{ x, y: 318 }, { x: 374, y: 318 }, { x: 374, y: L }]; // 撮影スタジオ内: 南口から入口通路経由
   if (y > 250 && y < 320 && x > 490 && x <= 622) return [{ x, y: 324 }, { x: 480, y: 324 }, { x: 480, y: L }]; // 音声スタジオ: スタジオ間の隙間から出入り
   return [{ x, y: L }];
 }
@@ -859,6 +886,15 @@ const JANITOR_SABORI_SPOTS = [
   { x: 56, y: 306, d: 'down' },   // ロビーのソファ前
   { x: 210, y: 330, d: 'left' },  // 受付脇の柱の影
 ];
+// MON(藤本)が収録アプリを起動したら撮影スタジオへ移動して収録する
+const BOSS_STUDIO_POST = { x: 428, y: 292 };
+const BOSS_RECORD_TALK = [
+  '🎥はい、回った回った', '本日の講演、テイク1', 'カメラ目線…よし', '(咳払い)あー、あー',
+  '照明、いい感じだ', '今日は俺の言葉で語るぞ', 'NGは3回まで(自分ルール)', 'グリーンバック、頼んだぞ',
+  '台本…どこまで話した?', 'いい話しすぎて自分で泣きそうだ', 'この話、絶対バズる', 'みんな、静かに頼むな🙏',
+  '収録中はチャイムも我慢だ', '噛んだ…もう一回', '編集で何とかなる、続けよう', 'サムネ映えする顔してるか、俺?',
+];
+
 // 月城(TSUKI)は稼働中、自席でなく音声スタジオで収録する
 const TSUKI_STUDIO_POST = { x: 560, y: 296 };
 const TSUKI_STUDIO_TALK = [
@@ -1223,6 +1259,9 @@ class Employee extends Person {
         if (this.id === 'tsukishiro' && this.action === 'studio') {
           this.say(t, pickFresh('tsukistudio', TSUKI_STUDIO_TALK), 3800);
           this.nextBubble = t + 36000 + Math.random() * 40000;   // 収録独り言は少し多め
+        } else if (this.recording) {
+          this.say(t, pickFresh('bossrec', BOSS_RECORD_TALK), 3800);
+          this.nextBubble = t + 28000 + Math.random() * 30000;
         } else {
           this.say(t, pickFresh('grumble', WORK_GRUMBLES), 3800);
           this.nextBubble = t + 50000 + Math.random() * 60000;   // 愚痴は控えめに
@@ -1612,7 +1651,7 @@ function runEvent(t) {
   if (ev.members.length < 2) { endEvent(t); return; }
   if (t > ev.until) {
     const boss = employees.find(e => e.def.source === 'boss');
-    if (boss && boss.present && !boss.inChat && !boss.directing && boss.action !== 'walk') {
+    if (boss && boss.present && !boss.inChat && !boss.directing && !boss.recording && boss.action !== 'walk') {
       ev.phase = 'bust'; ev.bustStage = 'walk'; ev.boss = boss;
       boss.releaseSpot(); boss.releaseReception(); boss.resting = false;
       boss.inChat = true;
@@ -1679,7 +1718,7 @@ function stepStandup(t) {
   }
   if (!standup.pending || t < standup.next) return;
   if (chimeBreak.until && t < chimeBreak.until) { standup.next = t + 5000; return; }   // チャイム休憩中は朝会延期
-  if (boss.inChat || boss.atMeeting || boss.action === 'walk' || directive.active) { standup.next = t + 5000; return; }
+  if (boss.inChat || boss.atMeeting || boss.recording || boss.action === 'walk' || directive.active) { standup.next = t + 5000; return; }
   const ids = standup.pending;
   standup.pending = null;
   const members = [boss];
@@ -1735,7 +1774,7 @@ function stepDirective(t) {
   }
   if (t < directive.next || !directive.queue.length) return;
   if (chimeBreak.until && t < chimeBreak.until) return;   // チャイム休憩中は指示しない
-  if (boss.inChat || boss.atMeeting || boss.action === 'walk') return;
+  if (boss.inChat || boss.atMeeting || boss.recording || boss.action === 'walk') return;
   const id = directive.queue.shift();
   const tgt = employees.find(e => e.id === id);
   if (!tgt || !tgt.present || tgt.mode !== 'working') { directive.next = t + 5000; return; }
@@ -1984,7 +2023,7 @@ function stepPatrol(t) {
   }
   if (t < patrol.next) return;
   if (chimeBreak.until && t < chimeBreak.until) return;
-  if (boss.inChat || boss.atMeeting || boss.directing || boss.onChimeBreak || boss.action === 'walk') return;
+  if (boss.inChat || boss.atMeeting || boss.directing || boss.onChimeBreak || boss.recording || boss.action === 'walk') return;
   if (directive.active || standup.active || fight.active) return;
   // 見回り先: 稼働中を優先しつつ、たまに休憩中の社員も
   const cands = employees.filter(e => e !== boss && e.present && !e.inChat && !e.atMeeting && !e.inEvent
@@ -2015,7 +2054,7 @@ function endPatrol(boss, t) {
 
 function startFight(a, b, t) {
   if (fight.active || t < fight.cooldown) return;
-  if (a.inChat || b.inChat || a.atMeeting || b.atMeeting) return;
+  if (a.inChat || b.inChat || a.atMeeting || b.atMeeting || a.recording || b.recording) return;
   if ((a.mode !== 'idle' && a.mode !== 'working') || (b.mode !== 'idle' && b.mode !== 'working')) return;
   a.inChat = b.inChat = true;
   a.action = 'stand'; b.action = 'stand';
@@ -2212,7 +2251,7 @@ function announceDelivery(t) {
   const who = (ts && ts.present && ts.mode === 'working') ? ts : employees.find(e => e.id === 'ito');
   if (who && who.present) who.say(t + 500, pickFresh('deliver', DELIVER_LINES), 3800);
   const boss = employees.find(e => e.def.source === 'boss');
-  if (boss && boss.present && !boss.inChat) boss.say(t + 4600, pickFresh('deliverpraise', DELIVER_PRAISE), 3400);
+  if (boss && boss.present && !boss.inChat && !boss.recording) boss.say(t + 4600, pickFresh('deliverpraise', DELIVER_PRAISE), 3400);
 }
 
 /* ---- 時間帯の空気(昼メシ・おやつ・深夜・月曜・金曜) ---- */
@@ -2361,6 +2400,27 @@ function onSnapshot() {
       e.hp = null;
       const tc = s.tasks && s.tasks.count;
       const idle = s.user && s.user.idleMin != null ? s.user.idleMin : null;
+      const recApp = s.user && s.user.recordingApp;
+      const away = idle != null && idle >= 30;
+      // MONが収録アプリを起動中→撮影スタジオで収録
+      if (recApp && !away) {
+        if (!e.recording) {
+          e.recording = true;
+          e.releaseSpot(); e.releaseReception(); e.resting = false; e.inChat = false;
+          e.mode = 'working'; e._wasWorking = true;
+          e.goto(BOSS_STUDIO_POST, 'studio');
+          e.say(performance.now() + 800, '🎥収録入りまーす!静かに頼む!', 3600);
+        }
+        e.jobText = `収録中(${recApp})`;
+        e.bubbles = [];
+        continue;
+      }
+      if (e.recording) {   // 収録終了→通常運転に戻る
+        e.recording = false;
+        e.nextThink = 0;
+        e.say(performance.now() + 500, '📼収録完了!編集は任せた!', 3200);
+        e.goto(e.seat, 'sit');
+      }
       if (idle != null && idle >= 30) {
         if (tm.h >= 23 || tm.h < 8) {
           e.setMode('sleephome');
@@ -2409,7 +2469,7 @@ function onSnapshot() {
   const mile = Math.floor(tc / 100);
   if (!firstSnap && mile > costMilestone) {
     const bossB = employees.find(e => e.def.source === 'boss');
-    if (bossB && bossB.present && !bossB.inChat) {
+    if (bossB && bossB.present && !bossB.inChat && !bossB.recording) {
       bossB.say(now + 3000, pickFresh('burn', BURN_LINES).replace(/\{d\}/g, '$' + mile + '00'), 4200);
     }
   }
@@ -2650,6 +2710,27 @@ function loop(t) {
     const dd = Math.hypot(dxd, dyd);
     if (dd > 0.1 && dd < 10) { dog.pos.x += dxd / dd * (10 - dd) * 0.5; dog.pos.y += dyd / dd * (10 - dd) * 0.5; }
   }
+  // すり抜け防止: 立っている人・イベント機材には歩行者側が押し出されて回り込む
+  const solid = employees.filter(e => e.present && (
+    ['stand', 'studio', 'sabori', 'cleaning', 'coffee'].includes(e.action) ||
+    (e.action === 'sit' && (e.resting || e.atMeeting))));
+  for (const w of movers) {
+    for (const s2 of solid) {
+      if (s2 === w) continue;
+      const dx2 = w.pos.x - s2.pos.x, dy2 = w.pos.y - s2.pos.y;
+      const d2 = Math.hypot(dx2, dy2);
+      if (d2 > 0.1 && d2 < 10) { const p = (10 - d2) * 0.6; w.pos.x += dx2 / d2 * p; w.pos.y += dy2 / d2 * p; }
+    }
+    if (officeEvent.active) {
+      for (const [k, ox, oy, ow, oh] of EVENT_PROPS[officeEvent.active.kind]) {
+        const pcx = ox + ow / 2, pcy = oy + oh - 4;
+        const dx2 = w.pos.x - pcx, dy2 = w.pos.y - pcy;
+        const d2 = Math.hypot(dx2, dy2);
+        const r = Math.max(ow, 14) / 2 + 5;
+        if (d2 > 0.1 && d2 < r) { const p = (r - d2) * 0.6; w.pos.x += dx2 / d2 * p; w.pos.y += dy2 / d2 * p; }
+      }
+    }
+  }
   stepParticles(dt);
 
   // 環境パーティクル
@@ -2806,7 +2887,7 @@ function startChimeBreak(t) {
   chimeBreak.until = t + 300000;   // 5分
   for (const e of employees) {
     if (!e.present || e.def.source === 'janitor') continue;
-    if (e.inChat || e.atMeeting || e.receptionOn) continue;
+    if (e.inChat || e.atMeeting || e.receptionOn || e.recording) continue;
     if (e.mode !== 'working' && !(e.mode === 'idle' && !e.resting)) continue;
     e.onChimeBreak = true;
     e.say(t + 400 + Math.random() * 2200, pickFresh('chimebrk', CHIME_BREAK_TALK), 3200);

@@ -41,6 +41,23 @@
   #topbar .sub { font-size: 12px; opacity: .7; }
   #clock { margin-left: auto; font-size: 26px; letter-spacing: 2px; }
   #clock small { font-size: 13px; opacity: .7; margin-right: 8px; }
+  #fsBtn {
+    font-family: inherit; margin-left: 14px; align-self: center;
+    background: var(--panel); color: var(--ink);
+    border: 2px solid var(--ink); border-radius: 6px;
+    padding: 3px 10px; font-size: 13px; cursor: pointer;
+    box-shadow: 2px 2px 0 rgba(74,59,42,.18);
+  }
+  #fsBtn:active { transform: translate(1px, 1px); box-shadow: none; }
+  #stage:fullscreen { background: #181410; padding: 0; }
+  #stage:fullscreen #office { border: none; border-radius: 0; box-shadow: none; }
+  body.fakefs #topbar, body.fakefs #hud, body.fakefs #stale { display: none; }
+  body.fakefs #stage { position: fixed; inset: 0; background: #181410; padding: 0; z-index: 50; }
+  body.fakefs #office { border: none; border-radius: 0; box-shadow: none; }
+  body.fakefs::after {
+    content: 'Escで戻る'; position: fixed; right: 12px; bottom: 10px; z-index: 51;
+    color: rgba(255,250,240,.45); font-size: 11px; font-family: inherit;
+  }
   #stale {
     display: none; background: var(--bad); color: #fff;
     padding: 3px 18px; font-size: 13px;
@@ -164,6 +181,7 @@
     <h1>🏢 MON-AI Inc.</h1>
     <span class="sub" id="mission"></span>
     <div id="clock"><small id="date"></small><span id="time">--:--</span></div>
+    <button id="fsBtn" title="オフィスのみ全画面表示(Escで戻る)">⛶ 全画面</button>
   </div>
   <div id="stale">⚠ データが届いていません(コレクター停止の可能性)— 最終受信: <span id="staleAge"></span></div>
   <div id="main">
