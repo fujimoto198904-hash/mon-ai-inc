@@ -1076,6 +1076,7 @@ const PERSONAL_SLEEP = {
   kato: ['あらやだ…寝ちゃって…', 'ふふ…みんな…いい子…'],
   zama: ['ここ…どこ…zzz', 'お昼…3回目…むにゃ'],
   tsukishiro: ['レディは…寝顔も…zzz', '本日の収録は…以上…むにゃ'],
+  shirayanagi: ['床…まだ磨ける…zzz', '規定では…睡眠も…右回り…', 'ワックス…補充…むにゃ'],
 };
 
 
@@ -1114,6 +1115,16 @@ class Employee extends Person {
 
   thinkJanitor(t) {
     if (this.onChimeBreak) return;   // チャイム休憩中はソファでのんびり
+    // 消灯中(22:00-5:00)は左下の隅で朝まで就寝
+    const loJ = jstNow().h >= 22 || jstNow().h < 5;
+    if (loJ) {
+      if (this.action !== 'sleep' && this.action !== 'walk') {
+        this.janResting = false; this.resting = false; this.releaseSpot();
+        this.goto({ x: 24, y: 330 }, 'sleep');
+      }
+      this.nextThink = t + 60000;
+      return;
+    }
     if (this.janResting) {
       // ソファ休憩中
       if (t > this.restUntil) {
@@ -1243,6 +1254,46 @@ class Employee extends Person {
       if (Math.random() < 0.15) { this.releaseReception(); this.goto(this.seat, 'sit'); }
       else if (Math.random() < 0.5) this.say(t + 400, ['いらっしゃいませ〜', 'ご用の方は呼び鈴をどうぞ', '受付、承ります', '(姿勢よく…)'][Math.floor(Math.random() * 4)]);
       this.nextThink = t + 30000 + Math.random() * 40000;
+      return;
+    }
+    // 消灯中(22:00-5:00)の夜間モード
+    const loNow = tm.h >= 22 || tm.h < 5;
+    if (loNow) {
+      const partner = this.id === 'ito' ? employees.find(e => e.id === 'hirose')
+        : this.id === 'hirose' ? employees.find(e => e.id === 'ito') : null;
+      if (this.id === 'tsukishiro') {
+        // 月城はスタジオに逃げる
+        if (this.action !== 'studio') {
+          this.releaseSpot(); this.releaseReception(); this.resting = false;
+          this.goto(TSUKI_STUDIO_POST, 'studio');
+        }
+        this.nextThink = t + 30000 + Math.random() * 20000;
+        return;
+      }
+      if (this.id === 'kato') {
+        // 夜の加藤は寝ない(豹変タイム)。ソファでくつろぐ
+        if (!this.resting) {
+          const sp = pickRestSpot();
+          if (sp) { this.resting = true; this.takeSpot(sp); }
+        }
+        this.nextThink = t + 30000 + Math.random() * 30000;
+        return;
+      }
+      if (partner && partner.present && partner.mode === 'idle' && !partner.inChat) {
+        // 伊藤と廣瀬は寝ずにいちゃつく(stepRomanceが拾う)
+        this.nextThink = t + 8000;
+        return;
+      }
+      // それ以外は好きな場所(基本は自席)で就寝
+      if (this.action !== 'sleep') {
+        this.releaseSpot(); this.releaseReception(); this.resting = false;
+        if (Math.random() < 0.2) {
+          const sp = pickRestSpot();
+          if (sp) { this.takeSpot(sp); this.arrival = 'sleep'; this.nextThink = t + 60000; return; }
+        }
+        this.goto(this.seat, 'sleep');
+      }
+      this.nextThink = t + 60000 + Math.random() * 60000;
       return;
     }
     if (!this.resting) {
@@ -1443,6 +1494,17 @@ class Employee extends Person {
     }
     if (!this.bubbles.length) return;
     if (t > this.nextBubble) {
+      const loB = jstNow().h >= 22 || jstNow().h < 5;
+      if (loB && this.id === 'kato' && this.mode === 'idle') {
+        this.say(t, pickFresh('katonight', KATO_NIGHT), 4200);
+        this.nextBubble = t + 24000 + Math.random() * 24000;
+        return;
+      }
+      if (loB && this.id === 'tsukishiro' && this.action === 'studio' && this.mode === 'idle') {
+        this.say(t, pickFresh('tsukinight', TSUKI_NIGHT), 3800);
+        this.nextBubble = t + 30000 + Math.random() * 30000;
+        return;
+      }
       if (this.mode === 'idle' && this._idleAt && t - this._idleAt > 3600000 && Math.random() < 0.3) {
         this.say(t, pickFresh('lament', IDLE_LAMENT), 3800);   // 1時間以上仕事が来ていない
       } else {
@@ -1759,6 +1821,7 @@ const EVENT_SPOTS = {
 function stepEvent(t) {
   if (officeEvent.active) { runEvent(t); return; }
   if (chimeBreak.until && t < chimeBreak.until) return;   // チャイム休憩中はイベントを始めない
+  { const hLo = jstNow().h; if (hLo >= 22 || hLo < 5) return; }   // 消灯中は宴会禁止
   if (t < officeEvent.next || t < officeEvent.cooldown) return;
   officeEvent.next = t + 30000;
   if (standup.active || fight.active) return;
@@ -1777,7 +1840,10 @@ function startEvent(kind, members, t) {
     const p = EVENT_SPOTS[kind][i % EVENT_SPOTS[kind].length];
     e.goto({ x: p.x, y: p.y }, p.a);
   });
-  officeEvent.active = { kind, members, startT: t, until: t + 160000 + Math.random() * 60000, nextLine: t + 6000, nextReact: t + 9000 };
+  const hEv = jstNow().h;
+  const longBBQ = kind === 'bbq' && hEv >= 17 && hEv < 22;   // 夕方はロング焼肉OK(MON公認)
+  const dur = longBBQ ? 420000 + Math.random() * 240000 : 160000 + Math.random() * 60000;
+  officeEvent.active = { kind, members, startT: t, until: t + dur, alarmDelay: Math.max(90000, dur - 60000), nextLine: t + 6000, nextReact: t + 9000 };
 }
 
 // ララ×焼肉: BBQ中は必ず餌をねだりに来る。あげようとすると怒られる
@@ -1860,7 +1926,7 @@ function runEvent(t) {
       dog.bubbleUntil = t + 6200;
       ev.nextLara = t + 25000 + Math.random() * 20000;
     }
-    if (!ev.alarmed && elapsed > 90000 && ev.members.length) {
+    if (!ev.alarmed && elapsed > (ev.alarmDelay || 90000) && ev.members.length) {
       ev.alarmed = true;
       const near = employees.filter(e => e.present && !e.inChat && e.def.source !== 'janitor').slice(0, 5);
       ev.members.concat(near).forEach((e, i) => e.say(t + 300 + i * 450, pickFresh('alarm', ALARM_REACT), 2800));
@@ -2040,6 +2106,27 @@ function endDirective(boss, t) {
    仕事中の伊藤を応援しに行く / 2人とも暇ならデートに誘う
    ================================================================ */
 const romance = { active: null, nextCheer: 90000, nextDate: 600000 };
+// 消灯後の伊藤×きょうこ(静かないちゃつき)
+const NIGHT_COUPLE = [
+  '消灯後のオフィス、二人占めだね', '星…見えないけど、隣にいるし', '肩、借りるね', '今日もお疲れさま、伊藤くん',
+  '(小声)みんな寝てるから静かにね', '手、あったかい', 'このまま朝まで…はダメかな', '夜のソファは特等席',
+  '寝顔見られるの恥ずかしい…けど見てて', '明日も一緒にがんばろ', 'ちょっとだけ、このままで', '(こつん、と頭を預ける)',
+  '深夜のコーヒー、半分こしよ', '秘密の時間だね', 'ふふ、社長には内緒', 'おやすみは…まだ言わない',
+];
+// 夜の加藤(消灯後に豹変=スナックのママ)
+const KATO_NIGHT = [
+  'いらっしゃい…なんてね、ここスナックじゃないのよ', '夜はね、あたしの時間なのよ', '昼のわたし?あれは営業スマイルよ',
+  'お酒…置いてないのよね、この会社', '若い頃は六本木で鳴らしたのよ', 'その恋、うまくいくわよ(夜の占い)',
+  '明日の朝には優しいおばさんに戻るわ', '社長のネクタイセンス、正直微妙よね', 'フフ…夜は本音が出ちゃうの',
+  '肩もんであげよっか?千円ね', '昼間の飴ちゃんは伏線よ', '眠らない女って呼ばれてたわ', 'ママって呼んでもいいのよ?',
+  '夜のBGMはジャズに限るわ',
+];
+// 消灯後の月城(スタジオに避難)
+const TSUKI_NIGHT = [
+  'スタジオが一番落ち着くの', '消灯後はここが私の城', '機材の灯り、きれい…', '(小声で発声練習)',
+  'みんなの寝顔、ちょっと面白い', '夜更かしはレディの秘密', '防音室は夜も安心', '台本の予習でもしようかな',
+  '3時からの収録に備えないと', 'ここなら物音立てないで済むし',
+];
 const KYOKO_CHEER = [
   'がんばって、伊藤くん!', '応援しに来ちゃった', 'コーヒー置いとくね(気持ち)', '今日もかっこいいよ、その背中',
   '無理しないでね?', '肩もみしてあげよっか', 'きょうこが見守ってるからね', '進捗どう?…って顔が疲れてる!',
@@ -2107,9 +2194,15 @@ function stepRomance(t) {
       } else if (t > r.until) endRomance(t);
       return;
     }
-    // date
+    // date / nightdate
     if (r.phase === 'invite') {
       if (t > r.until) {
+        // 予約時から他の人が座った場合は空席を取り直す(二重着席防止)
+        if (r.spotA.busy || r.spotB.busy) {
+          const free = REST_SPOTS.slice(0, 4).filter(s => !s.busy);
+          if (free.length >= 2) { r.spotA = free[0]; r.spotB = free[1]; }
+          else { endRomance(t); return; }
+        }
         ito.say(t, pickFresh('itodateok', ITO_DATE_OK), 2800);
         r.phase = 'go'; r.until = t + 2000;
         kyoko.takeSpot(r.spotA); ito.takeSpot(r.spotB);
@@ -2118,20 +2211,27 @@ function stepRomance(t) {
       return;
     }
     if (r.phase === 'go') {
-      if (kyoko.action !== 'walk' && ito.action !== 'walk') { r.phase = 'talk'; r.nextLine = t + 1500; r.until = t + 60000 + Math.random() * 40000; }
+      if (kyoko.action !== 'walk' && ito.action !== 'walk') {
+        r.phase = 'talk'; r.nextLine = t + 1500;
+        r.until = r.kind === 'nightdate' ? Infinity : t + 60000 + Math.random() * 40000;
+      }
       return;
     }
     if (r.phase === 'talk') {
-      if (ito.mode === 'working' || t > r.until) {   // 仕事が来たらデート終了
+      const loT = jstNow().h >= 22 || jstNow().h < 5;
+      const nightOver = r.kind === 'nightdate' && !loT;   // 朝が来たら解散
+      if (ito.mode === 'working' || t > r.until || nightOver) {
         if (ito.mode === 'working') ito.say(t, '仕事きた…ごめん、また今度!', 2600);
+        else if (nightOver) kyoko.say(t, 'ふふ、朝だ…おはよ', 3000);
         endRomance(t);
         return;
       }
       if (t > r.nextLine) {
         const who = Math.random() < 0.55 ? kyoko : ito;
-        who.say(t, pickFresh('datetalk', DATE_TALK), 3400);
+        const pool = r.kind === 'nightdate' ? NIGHT_COUPLE : DATE_TALK;
+        who.say(t, pickFresh(r.kind === 'nightdate' ? 'nightcouple' : 'datetalk', pool), 3400);
         if (Math.random() < 0.5) spawnParticle('heart', (kyoko.pos.x + ito.pos.x) / 2, kyoko.pos.y - 30);
-        r.nextLine = t + 5500 + Math.random() * 3500;
+        r.nextLine = t + (r.kind === 'nightdate' ? 8000 + Math.random() * 6000 : 5500 + Math.random() * 3500);
       }
     }
     return;
@@ -2140,6 +2240,19 @@ function stepRomance(t) {
   if (fight.active || standup.active || (officeEvent.active && officeEvent.active.alarmed)) return;
   if (kyoko.inChat || kyoko.atMeeting || kyoko.inEvent || kyoko.onChimeBreak || kyoko.receptionOn) return;
   if (!kyoko.present || kyoko.mode !== 'idle') return;
+  // 消灯中は2人ともお暇ならナイトデート(クールダウン無視・朝まででも)
+  const loR = jstNow().h >= 22 || jstNow().h < 5;
+  if (loR && ito.present && ito.mode === 'idle' && !ito.inChat && !ito.atMeeting && !ito.inEvent) {
+    const spA = !REST_SPOTS[0].busy ? REST_SPOTS[0] : (!REST_SPOTS[2].busy ? REST_SPOTS[2] : null);
+    const spB = !REST_SPOTS[1].busy ? REST_SPOTS[1] : (!REST_SPOTS[3].busy ? REST_SPOTS[3] : null);
+    if (spA && spB) {
+      romance.active = { kind: 'nightdate', phase: 'invite', until: t + 2600, spotA: spA, spotB: spB };
+      kyoko.releaseSpot(); kyoko.resting = false; ito.releaseSpot(); ito.resting = false;
+      kyoko.inChat = true; ito.inChat = true;
+      kyoko.say(t, '(小声)ねえ…みんな寝たよ', 2800);
+    }
+    return;
+  }
   // デート: 2人とも暇+ソファが2席空いている
   if (t > romance.nextDate && ito.present && ito.mode === 'idle' && !ito.inChat && !ito.atMeeting && !ito.inEvent
       && !REST_SPOTS[0].busy && !REST_SPOTS[1].busy) {
