@@ -1194,8 +1194,8 @@ class Employee extends Person {
         return;
       }
     }
-    // たまにはサボる(18%)
-    if (Math.random() < 0.18) {
+    // たまにはサボる(18%)。ただしゴミ箱が溜まっている時は責任感で控える
+    if (Math.random() < ((this.trashItems || 0) >= 10 ? 0.04 : 0.18)) {
       const sp = JANITOR_SABORI_SPOTS[Math.floor(Math.random() * JANITOR_SABORI_SPOTS.length)];
       this.saborDir = sp.d || 'down';
       this.goto({ x: sp.x, y: sp.y }, 'sabori');
@@ -2812,8 +2812,25 @@ function onSnapshot() {
     } else if (e.source === 'janitor') {
       e.hp = null;
       if (e.mode !== 'clean') { e.mode = 'clean'; }
-      e.jobText = '巡回清掃中';
-      e.bubbles = PERSONAL_MUTTER.shirayanagi || [];
+      // 実マシンのゴミ箱・メモリと連動
+      const mac = s.machine || {};
+      const ti = mac.trashItems, mp = mac.memUsedPct;
+      e.trashItems = ti; e.memUsedPct = mp;
+      const extra = [];
+      if (ti != null) {
+        e.jobText = ti > 0 ? `ゴミ箱に${ti}件…回収中` : '巡回清掃中(ゴミ箱は空)';
+        if (ti >= 30) extra.push(`ゴミ箱、${ti}件も溜まってる!社長ー!`, 'これは大掃除案件です', 'ゴミ箱を空にしてください(切実)');
+        else if (ti > 0) extra.push(`ゴミ箱に${ti}件、回収します`, 'ゴミはこまめに捨てましょう');
+        else extra.push('ゴミ箱ピカピカ、気持ちいい', 'ゴミゼロ、いい会社です');
+      } else {
+        e.jobText = '巡回清掃中';
+      }
+      if (mp != null) {
+        if (mp >= 85) extra.push(`メモリ${mp}%…重い、換気だ!`, 'メモリがパンパンです、再起動を…', '空きメモリが足りません!');
+        else if (mp >= 65) extra.push(`メモリ${mp}%、ちょっと重いかも`);
+        else extra.push(`メモリ${mp}%、快適そのもの`);
+      }
+      e.bubbles = extra.concat(PERSONAL_MUTTER.shirayanagi || []);
     } else if (e.source === 'boss') {
       if (e.directing) { e.hp = null; continue; }
       const busy = (s.claude.active || []).length + (s.codex.active || []).length;
