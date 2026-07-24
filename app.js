@@ -440,7 +440,20 @@ function pickFresh(key, pool) {
   return decorate(key, cand);
 }
 
+// 隣接Q→Aペアで書かれたプールから、ペアの先頭indexを非重復で引く
+const _pairHist = {};
+function pickPairIdx(key, pool) {
+  const hist = _pairHist[key] || (_pairHist[key] = []);
+  const nPairs = Math.floor(pool.length / 2);
+  let i, tries = 0;
+  do { i = Math.floor(Math.random() * nPairs) * 2; tries++; } while (hist.includes(i) && tries < 25);
+  hist.push(i);
+  while (hist.length > Math.floor(nPairs / 2)) hist.shift();
+  return i;
+}
+
 const bubbleQ = [];
+let simT = 0;   // ループの現在時刻(goto短絡などフレーム外から参照)
 
 function drawBubble(g, x, y, text) {
   g.font = '6px DotGothic16';
@@ -706,6 +719,50 @@ function drawOffice(g, t, tm) {
 
   // データ同期ステータスはHUD(経営ボード)側に表示(マップ上には出さない)
 
+  // ===== マシン室(サーバーコーナー)= このMacの実況 =====
+  const mc = snap && snap.machine;
+  if (mc) {
+    // CPU熱: 稼働率に応じてラック背後が色づく(緑→橙→赤)
+    if (mc.cpuPct != null) {
+      const heat = mc.cpuPct / 100;
+      const hcol = mc.cpuPct >= 85 ? '224,90,78' : mc.cpuPct >= 60 ? '232,150,60' : '110,180,120';
+      const flicker = 0.10 + heat * 0.22 + Math.sin(t / (600 - heat * 400)) * 0.05;
+      g.fillStyle = `rgba(${hcol},${Math.max(0.06, flicker).toFixed(2)})`;
+      g.fillRect(520, 136, 116, 52);
+      // 高負荷時は陽炎(ゆらゆら上る熱)
+      if (mc.cpuPct >= 80 && Math.random() < 0.12) spawnParticle('bsmoke', 600 + Math.random() * 28, 140);
+    }
+    // 床の稼働ステータスプレート: CPU+いちばん働いている機械
+    rr(g, 498, 192, 132, 22, '#37332c', INK);
+    g.font = '6px DotGothic16';
+    g.fillStyle = '#8ef0b0';
+    const cpuTxt = mc.cpuPct != null ? `⚙ CPU ${mc.cpuPct}%` : '⚙ CPU --';
+    g.fillText(cpuTxt, 503, 200);
+    if (mc.cpuPct != null) {
+      const bw = 56;
+      g.fillStyle = 'rgba(255,255,255,.16)';
+      g.fillRect(566, 195, bw, 4);
+      g.fillStyle = mc.cpuPct >= 85 ? '#ff6a5e' : mc.cpuPct >= 60 ? '#f0b050' : '#5aff8e';
+      g.fillRect(566, 195, Math.round(bw * mc.cpuPct / 100), 4);
+    }
+    g.fillStyle = '#e8e6da';
+    const tp0 = mc.topProcs && mc.topProcs[0];
+    g.fillText(tp0 ? `🏭 ${Array.from(tp0.name).slice(0, 13).join('')} ${tp0.cpu}%` : '🏭 稼働情報待ち', 503, 209);
+    // 倉庫(ストレージ)の段ボール: 使用率に比例して積み上がる
+    if (mc.diskUsedPct != null) {
+      const boxes = Math.max(1, Math.min(8, Math.round(mc.diskUsedPct / 12)));
+      for (let i = 0; i < boxes; i++) {
+        const bx = 480 + (i % 2) * 13, by = 178 - Math.floor(i / 2) * 10;
+        rr(g, bx, by, 12, 9, '#c8a060', '#8a6a3a');
+        g.strokeStyle = '#a88448'; g.lineWidth = 1;
+        g.beginPath(); g.moveTo(bx + 6, by); g.lineTo(bx + 6, by + 9); g.stroke();
+      }
+      g.font = '5px DotGothic16';
+      g.fillStyle = mc.diskUsedPct >= 90 ? '#c03a2e' : 'rgba(74,59,42,.6)';
+      g.fillText(`倉庫${mc.diskUsedPct}%`, 478, 190 - Math.ceil(Math.min(8, Math.round(mc.diskUsedPct / 12)) / 2) * 10);
+    }
+  }
+
   // 応接セット: 絨毯(38,242,132,78)の上にバランスよく配置(ソファ左・アームチェア右、底辺を揃える)
   if (!drawProp(g, 'sofa', 44, 284, 60, 30)) rr(g, 48, 292, 52, 20, '#7a9ac8', INK);
   drawProp(g, 'armchair', 112, 282, 26, 32);
@@ -773,7 +830,7 @@ class Person {
     if (Math.hypot(target.x - this.pos.x, target.y - this.pos.y) < 3) {
       this.pos = { x: target.x, y: target.y };
       this.path = [];
-      this.applyArrival(0);
+      this.applyArrival(simT);   // t=0だとタイマー系(サボり/犬遊び/掃除)が即時失効する
       return;
     }
     this.path = route(this.pos, target, this.lane);
@@ -885,7 +942,7 @@ function pickRestSpot() {
 const REST_TALK = ['コーヒーうまい', 'ソファ最高…', 'ちょっと目を閉じよう', 'お菓子補充されてる', 'のび〜', 'ふぅ…ひと息',
   '5分だけのつもりが…', '充電中です(比喩)', '午後もがんばるか', 'ぼーっとするの大事', '窓の外みてた',
   '小腹すいた', '自販機の新作うまい', 'ここのスナック優秀', '今日がんばったわ', '誰か雑談しよ',
-  'ソファが俺を離さない', 'ジュースおごりじゃんけんしたい', '今日のBGMいいな', '納品ラッシュ乗り切った'];
+  'ソファが離してくれない', 'ジュースおごりじゃんけんしたい', '今日のBGMいいな', '納品ラッシュ乗り切った'];
 
 const CLEAN_SPOTS = [
   // 上辺の壁際(デスク列の後ろの隙間)
@@ -950,7 +1007,7 @@ const JANITOR_SABORI = [
   '…5分だけ', '掃除は逃げない…', '腰が…限界…', '社長来たら掃くフリしよ',
   'ここはさっき掃いたことにしよ', 'ほこりも休憩中だし…', '働き方改革です',
   '自販機の前は空気がうまい', 'モップも乾かさないとね(言い訳)', '…見てないな、よし',
-  '床は明日も汚れる。焦るな俺', 'サボりじゃない、品質点検', '雲でも見るか…窓ないけど',
+  '床は明日も汚れる。焦らない', 'サボりじゃない、品質点検', '上の窓から空でも見るか',
 ];
 
 const IDLE_ANTICS = [
@@ -966,7 +1023,7 @@ const IDLE_ANTICS = [
 
 const SLEEP_TALK = [
   'むにゃ…', 'すやぁ…', 'ぐぅ…', 'zzz…はっ…zzz', 'むにゃむにゃ…',
-  'もう食べられない…', 'うどん…おかわり…', 'ラーメン…替え玉…', 'プリン…俺の…', '焼肉…無限…',
+  'もう食べられない…', 'うどん…おかわり…', 'ラーメン…替え玉…', 'プリン…とらないで…', '焼肉…無限…',
   'デプロイ…完了…', 'バグが…消えていく…', '全テスト…グリーン…', 'ビルド…通った…夢か…', 'マージ…できた…',
   '社長…それは無理です…', '納期…明日…?', '仕様変更…もう4回目…', '会議…出たくない…', '議事録…書いた…はず…',
   '登録者…100万人…', 'バズった…夢か…', '再生数…すごい伸び…', 'チャンネル…金の盾…', 'コメント…全部神…',
@@ -981,7 +1038,7 @@ const SLEEP_TALK = [
   '給料日…まだ…?', 'ボーナス…出た…夢…', '経費…とおった…', '請求書…こわい…', '売上…10億…',
   '月…きれい…', '夜勤…おわらない…', '朝…こないで…', '目覚まし…とめて…', '二度寝…最高…',
   'グリーンバック…緑…', 'ON AIR…消して…', 'マイク…入ってる…?', '収録…かんだ…', 'BGM…いい曲…',
-  'ぼくは…まだやれる…', 'ひつじ…数える…', 'ひつじ1匹…2匹…', '仕事…完了…', '肩の荷…軽い…',
+  'まだ…やれる…', 'ひつじ…数える…', 'ひつじ1匹…2匹…', '仕事…完了…', '肩の荷…軽い…',
   'ロビー…広くなった…', '受付…いらっしゃいませ…', '入口…どっち…', '会議…立ったまま…', 'ソファ…ふかふか…',
   'ぐー…すー…', 'すぴー…', 'んご…', 'はっ…寝てない…zzz', 'もう…朝…?',
   'デスク…片付けた…えらい…', 'メール…ゼロ件…', '通知…こないで…', '寝つき…つよい…', 'おやすみ…なさい…',
@@ -999,8 +1056,8 @@ function idleMutterPool() {
 }
 // 暇すぎる日の自虐(1時間以上仕事が来ていない時に混ざる)
 const IDLE_LAMENT = [
-  '今日、何もしてないなぁ…', '俺、今日まだ呼ばれてない…', '仕事…来ない…', '存在意義を問い始めている',
-  '暇すぎて掃除でも手伝おうかな', '座ってるだけで月給換算が増えていく…', '指名待ちの気分', '社長、仕事ください…',
+  '今日、何もしてないなぁ…', '今日まだ呼ばれてない…', '仕事…来ない…', '存在意義を問い始めている',
+  '暇すぎて掃除でも手伝おうかな', '座ってるだけで時が過ぎていく…', '指名待ちの気分', '社長、仕事ください…',
   '今日の作業ログ、まっさらだ', '暇も極めれば芸のうち', '待機も立派な仕事(と信じたい)', 'デスクの木目、全部覚えた',
 ];
 
@@ -1008,7 +1065,7 @@ const IDLE_LAMENT = [
 const CHIME_WAIT = [
   'チャイムまであと{n}分…', '休憩の鐘、まだかな…', 'あと{n}分がんばれば休める', '鐘の音を待ちわびている',
   '時計ばかり見てしまう', '次の休憩でコーヒー飲むんだ…', '{n}分後の自分へ:よく耐えた', '休憩を糧に生きている',
-  'そろそろ鐘では?(まだ)', '耳が鐘の音を求めている', '休憩後の俺は無敵になる予定', '鐘が鳴ったらソファへ直行する',
+  'そろそろ鐘では?(まだ)', '耳が鐘の音を求めている', '休憩後は無敵になる予定', '鐘が鳴ったらソファへ直行する',
 ];
 
 // キャラ別の性格プール(暇・休憩時のひとりごと)
@@ -1048,7 +1105,7 @@ const PERSONAL_MUTTER = {
     'お昼、2回食べちゃった', '会議室どこでしたっけ(3年目)', 'エンター強く押すと速くなるんですよね?', 'ララに敬語使っちゃう'],
   shirayanagi: ['規定では、通路の掃除は右回りです', '順番は変えられません。順番なので', 'モップは3度がけ。例外なし',
     '掃除中の通行はご遠慮ください(全員)', '今日は全デスクを磨き上げる(誰も頼んでない)', '汚れとの戦いに休戦はない',
-    'ワックスの在庫は俺が守る', 'ゴミの分別が乱れている…緊急事態だ', '掃除計画書、今週も完璧', '床が呼んでいる'],
+    'ワックスの在庫は死守します', 'ゴミの分別が乱れている…緊急事態だ', '掃除計画書、今週も完璧', '床が呼んでいる'],
 };
 
 // キャラ別の作業中つぶやき(共通の愚痴に混ざる)
@@ -1098,6 +1155,7 @@ class Employee extends Person {
 
   // 稼働時の持ち場へ(月城だけは特別に音声スタジオで収録)
   gotoWork() {
+    if (this.recording) { this.goto(BOSS_STUDIO_POST, 'studio'); return; }
     if (this.id === 'tsukishiro') { this.goto(TSUKI_STUDIO_POST, 'studio'); return; }
     this.goto(this.seat, 'sit');
   }
@@ -1289,7 +1347,7 @@ class Employee extends Person {
         this.releaseSpot(); this.releaseReception(); this.resting = false;
         if (Math.random() < 0.2) {
           const sp = pickRestSpot();
-          if (sp) { this.takeSpot(sp); this.arrival = 'sleep'; this.nextThink = t + 60000; return; }
+          if (sp) { this.resting = true; this.takeSpot(sp); this.arrival = 'sleep'; this.nextThink = t + 60000; return; }
         }
         this.goto(this.seat, 'sleep');
       }
@@ -1533,14 +1591,14 @@ const CHAT_SETS = [
   { o: 'コーヒー切れてますよ', r: ['えっ、それは緊急事態', '発注しとくね', '白柳さんに頼もう'] },
   { o: '今日も1日がんばりましょ', r: ['おー!', 'ぼちぼちやりましょ', '定時で帰りたい(願望)'] },
   { o: 'キーボード新調したいな', r: ['社長に言ってみたら?', '静音軸おすすめですよ', '経費で通るかなあ'] },
-  { o: 'この椅子、腰にいいらしい', r: ['腰は大事にしないとね', '俺のはギシギシ言う', '一番いいやつ買お'] },
+  { o: 'この椅子、腰にいいらしい', r: ['腰は大事にしないとね', 'うちのはギシギシ言う', '一番いいやつ買お'] },
   { o: '夜勤つらくないですか', r: ['深夜のほうが集中できるんよ', '正直眠い', 'エナドリでごまかしてる'] },
   { o: '締切って明日でしたっけ', r: ['明後日だよ、落ち着いて', 'えっ…確認してくる', '今日中って聞いたけど!?'] },
   { o: 'サムネのCTR上がったって', r: ['やっぱり赤文字が効いたか', 'デザイン変えた甲斐あったね', '次はタイトルも攻めよう'] },
   { o: 'ショート動画バズらないかな', r: ['冒頭2秒が勝負らしいよ', '毎日出してれば当たるって', '次のネタ、期待してる'] },
   { o: 'BGMのミックス聴きました?', r: ['低音いい感じだったね', 'まだ!あとで聴く', 'サビの入り、鳥肌だった'] },
-  { o: '台本のテンポ良くなったね', r: ['句読点減らしたんですよ', '月城さんも読みやすいって', '次はもっと削る'] },
-  { o: '収録ブースの音、良くなった', r: ['吸音材足したからね', 'ノイズ減ったよね', '月城さん喜んでたよ'] },
+  { who: 'tsukishiro', o: '台本のテンポ良くなったね', r: ['句読点減らしたんですよ', '月城さんも読みやすいって', '次はもっと削る'] },
+  { who: 'tsukishiro', o: '収録ブースの音、良くなった', r: ['吸音材足したからね', 'ノイズ減ったよね', '月城さん喜んでたよ'] },
   { o: '自販機に新作入ってた', r: ['まじ?買ってくる', '当たりだった?', 'エナドリ系?'] },
   { o: 'ララがまた廊下で寝てた', r: ['自由すぎるでしょ', 'かわいいからOK', '踏まないようにしないと'] },
   { o: '観葉植物、育ちすぎでは', r: ['もはやジャングル', '白柳さんの世話がいいのよ', '植え替え必要かもね'] },
@@ -1551,15 +1609,15 @@ const CHAT_SETS = [
   { o: '再生数じわじわ来てる', r: ['伸びてる伸びてる', 'アルゴリズムに好かれてきた', 'この調子この調子'] },
   { o: '寝不足で目がしぱしぱする', r: ['目薬さしな', '今日は早く寝なよ', '5分仮眠おすすめ'] },
   { o: 'コンビニ行くけど何かいる?', r: ['プリンお願いします!', 'エナドリ1本!', '大丈夫、ありがと'] },
-  { o: '掃除当番って誰でしたっけ', r: ['白柳さんが全部やってくれてる', '当番制、なくなったよ', 'せめてゴミは自分で捨てよ'] },
-  { o: '今日の空、きれいでしたよ', r: ['窓ないのになんで知ってるの', '見たかったなあ', '夕焼けの時間に外出よう'] },
+  { who: 'shirayanagi', o: '掃除当番って誰でしたっけ', r: ['白柳さんが全部やってくれてる', '当番制、なくなったよ', 'せめてゴミは自分で捨てよ'] },
+  { o: '今日の空、きれいでしたよ', r: ['上の窓から見えたよ', '見たかったなあ', '夕焼けの時間に外出よう'] },
   { o: '最近ゲームしてます?', r: ['積みゲーが増える一方', '週末にまとめてやる派', 'ドット絵のゲームが落ち着く'] },
   { o: '映画観に行きたいな', r: ['いいね、今度みんなで', '最近いいのやってる?', 'ポップコーン持参で'] },
   { o: '筋トレ始めたんですよ', r: ['どうりで姿勢いいと思った', 'ジムイベントで本領発揮だね', '三日坊主にならないでよ'] },
   { o: 'この業界、動き速すぎでは', r: ['先週の常識がもう古い', 'ついていくだけで精一杯', '勉強し続けないとね'] },
-  { o: '社長また徹夜らしいよ', r: ['体壊さないといいけど', '誰か止めてあげて', '朝コーヒー濃いめにしとこ'] },
+  { who: 'fujimoto', o: '社長また徹夜らしいよ', r: ['体壊さないといいけど', '誰か止めてあげて', '朝コーヒー濃いめにしとこ'] },
   { o: 'モニターもう1枚欲しい', r: ['2枚あると世界変わるよ', '社長に相談してみな', 'デスク広くしないとね'] },
-  { o: 'デスクの配線きれいにした', r: ['見た!プロの仕事', '俺のもお願いしたい', '整理整頓、社訓どおりだ'] },
+  { o: 'デスクの配線きれいにした', r: ['見た!プロの仕事', 'こっちのもお願いしたい', '整理整頓、社訓どおりだ'] },
   { o: '休憩室のソファ最高', r: ['あれは寝ちゃうやつ', '座ったら戻れなくなる', '絨毯も新しくなったしね'] },
   { o: 'たまには外で会議したいね', r: ['公園会議いいね', '天気いい日にやろう', '虫除け持ってこ…'] },
   { o: 'この会社、コーヒーで回ってるよね', r: ['カフェインが燃料だね', 'ならば飲むしかない', '経費で豆買お'] },
@@ -1571,7 +1629,7 @@ const CHAT_SETS = [
   { o: '人間の「ちょっと」は3時間だよね', r: ['「すぐ終わる」も要注意', 'わかりすぎる', '単位換算表ほしい'] },
   { o: '前世は職人だった気がする', r: ['どんな職人よ', '言ったもん勝ちだね', '証拠は?'] },
   { o: '雨の日って気分乗らないよね', r: ['詩人か', 'わかる、眠くなる', '梅雨はつらい季節'] },
-  { o: '俺のミス、笑えるでしょ?', r: ['笑えない、直して', 'ネタにする前に修正', '愛着湧く前に直せ'] },
+  { o: 'このミス、笑えるでしょ?', r: ['笑えない、直して', 'ネタにする前に修正', '愛着湧く前に直せ'] },
   { o: '寝るとき電気は消す派?', r: ['豆電球つけっぱ', '真っ暗じゃないと無理', '朝まで煌々と…'] },
   { o: '作業BGM、何聴いてる?', r: ['ローファイ一択', '無音派です', 'クラシックで集中'] },
   { o: '最近、肩こりひどくてさ', r: ['ストレッチしよ', '湿布常備してる', 'いい枕買いな'] },
@@ -1585,31 +1643,36 @@ const WORK_GRUMBLES = [
   'コンテキストが足りない…', 'またレートリミットか…', '仕様、3回目の変更です…',
   '「ちょっと直して」が2時間経過', 'トークン節約しろと言われても…', 'キャッシュが温まってない…',
   'プロンプト長すぎでは…?', '5h枠って誰が決めたんだ…', 'この変数名、誰がつけた…',
-  'テスト通らない…なんで…', '正規表現が読めない…俺が書いたのに', 'コンフリクト解消中…無心…',
+  'テスト通らない…なんで…', '正規表現が読めない…自分で書いたのに', 'コンフリクト解消中…無心…',
   'ビルド待ち…長い…', '仕様書がない…雰囲気で書いてる…', 'エッジケースの沼にいる…',
   '桁が違う…どこかで…', '再現しないバグこわい…', 'もう一回だけ試す…あと一回だけ…',
 ];
 
 // ペア(質問と返事のセット)の非重複抽選
 const _setHist = [];
-function pickChatSet(sets) {
+function pickChatSet(sets, excludeIds) {
   let s, tries = 0;
-  do { s = sets[Math.floor(Math.random() * sets.length)]; tries++; } while (_setHist.includes(s.o) && tries < 30);
+  do {
+    s = sets[Math.floor(Math.random() * sets.length)];
+    tries++;
+  } while ((_setHist.includes(s.o) || (s.who && excludeIds && excludeIds.includes(s.who))) && tries < 30);
+  if (s.who && excludeIds && excludeIds.includes(s.who)) s = sets.find(x => !x.who && !_setHist.includes(x.o)) || s;
   _setHist.push(s.o);
   while (_setHist.length > Math.floor(sets.length / 2)) _setHist.shift();
   return s;
 }
 
-function makeChatLines() {
+function makeChatLines(pa, pb) {
+  const excludeIds = [pa && pa.id, pb && pb.id].filter(Boolean);
   const sets = [];
   if (snap) {
     const rate = (snap.billing && snap.billing.jpyPerUsd) || 155;
     const cost = snap.totals.todayCost || 0;
-    sets.push({ o: `今日もう${fmtYen(cost * rate)}分働いたって`, r: ['俺らの人件費、安いのにね', '成果で返そう', '電気代くらいは稼がないと'] });
+    sets.push({ o: `今日もう${fmtYen(cost * rate)}分働いたって`, r: ['うちの人件費、安いのにね', '成果で返そう', '電気代くらいは稼がないと'] });
     if (snap.youtube && snap.youtube.subs != null) sets.push({ o: `登録者${snap.youtube.subs}人になったね`, r: ['じわじわ増えてる!', '目標1万人、いけるよ', 'ありがたいねえ'] });
     if (snap.tasks && snap.tasks.count) sets.push({ o: `保留タスク${snap.tasks.count}件だって`, r: ['社長、抱えすぎでは', '手伝えることあるかな', '減る気配がない…'] });
-    if (snap.claude.block && snap.claude.block.remainingMinutes != null && snap.claude.block.remainingMinutes < 90) sets.push({ o: '伊藤さん5h枠もうすぐらしい', r: ['無理しないでほしいね', 'きょうこさんが心配してたよ', '休憩はさませよう'] });
-    if (snap.deliveries && snap.deliveries.daihon) sets.push({ o: `台本もう${snap.deliveries.daihon}本納品って`, r: ['ペース早いね', '月城さん、さすがだわ', '品質も落ちてないのがすごい'] });
+    if (snap.claude.block && snap.claude.block.remainingMinutes != null && snap.claude.block.remainingMinutes < 90) sets.push({ who: 'ito', o: '伊藤さん5h枠もうすぐらしい', r: ['無理しないでほしいね', 'きょうこさんが心配してたよ', '休憩はさませよう'] });
+    if (snap.deliveries && snap.deliveries.daihon) sets.push({ who: 'tsukishiro', o: `台本もう${snap.deliveries.daihon}本納品って`, r: ['ペース早いね', '月城さん、さすがだわ', '品質も落ちてないのがすごい'] });
     if (snap.codex.rateLimit) sets.push({ o: `コデックス週次残り${Math.max(0, Math.round(100 - snap.codex.rateLimit.usedPercent))}%だって`, r: ['ペース配分しないとね', '今週も走ってるなあ', '残量は計画的に'] });
     if (snap.claude.block && snap.claude.block.costPerHour) sets.push({ o: `いま燃焼率${fmtYen(snap.claude.block.costPerHour * rate)}/hらしい`, r: ['社長の顔が青くなるやつ', '景気いいねえ…', '成果物で黒字にしよう'] });
   }
@@ -1617,7 +1680,7 @@ function makeChatLines() {
   const lines = [];
   const rounds = 1 + (Math.random() < 0.5 ? 1 : 0);
   for (let k = 0; k < rounds; k++) {
-    const s = pickChatSet(all);
+    const s = pickChatSet(all, excludeIds);
     lines.push(decorate('opener', s.o));
     lines.push(decorate('reply', s.r[Math.floor(Math.random() * s.r.length)]));
   }
@@ -1661,9 +1724,9 @@ function stepChat(t) {
       e.releaseSpot(); e.resting = false; e.atMeeting = true;
       e.goto({ x: seat.x, y: seat.y }, seat.a);
     }
-    chat.active = { a, b, lines: makeChatLines().concat(makeChatLines()), li: 0, meeting: true, phase: 'go', nextLine: 0 };
+    chat.active = { a, b, lines: makeChatLines(a, b).concat(makeChatLines(a, b)), li: 0, meeting: true, phase: 'go', nextLine: 0 };
   } else {
-    chat.active = { a, b, lines: makeChatLines(), li: 0, nextLine: t + 500 };
+    chat.active = { a, b, lines: makeChatLines(a, b), li: 0, nextLine: t + 500 };
   }
 }
 
@@ -1692,12 +1755,12 @@ const groupChat = { next: 60000, active: null };
 const FIGHT_LINES = [
   ['ぶつかったら、どけよ', 'お前がどけよ'],
   ['ちょ、前見て歩けよ', 'そっちこそ見ろよ'],
-  ['ここ俺の通り道なんだけど', '廊下はみんなのものだが?'],
+  ['ここ、こっちの通り道なんだけど', '廊下はみんなのものだが?'],
   ['道譲るのが礼儀でしょ', '先に居たのはこっちだが?'],
   ['歩幅がでかいんだよ', '関係なくない?'],
   ['わざとだろ今の', '被害妄想やば'],
   ['謝ったら?', 'そっちが謝れば?'],
-  ['俺、急いでるんだけど', '俺も急いでるんだが'],
+  ['こっちは急いでるんだけど', 'こっちだって急いでるんだが'],
   ['社訓読んだ? 品質第一だぞ', '衝突の品質の話じゃない'],
   ['もういい、社長に言うわ', 'どうぞどうぞ'],
   ['はぁ…もういいよ', '最初からそう言え'],
@@ -1709,9 +1772,9 @@ const fight = { active: null, cooldown: 0 };
    社長の指示行脚: 新しい仕事が始まった社員の席へ行き、指示を出す
    ================================================================ */
 const BBQ_TALK = [
-  '火起こしは俺に任せろ', '網の角度がプロい', '肉!肉!肉!', 'まだ焼けてないって',
+  '火起こしは任せて', '網の角度がプロい', '肉!肉!肉!', 'まだ焼けてないって',
   '裏返すの早すぎ', '奉行きた', 'タレ派?塩派?', '両方に決まってる',
-  '野菜も食べなさい', 'ピーマン誰が入れた', '椎茸は俺のもの', 'カルビ天才',
+  '野菜も食べなさい', 'ピーマン誰が入れた', '椎茸は渡さない', 'カルビ天才',
   '煙すご!換気!', '白柳さんごめん…', '床は汚さない誓い', '紙皿どこ?',
   '乾杯しよ乾杯!', '氷足りてる?', 'ノンアルで我慢', '勤務中では?',
   '社長も食べます?', '経費で落ちる?', '落ちるわけない', '領収書切っといて',
@@ -1732,11 +1795,11 @@ const BBQ_TALK = [
   'ヨガマット気持ちいい', 'そのポーズ何?', '戦士のポーズ', '戦士は無理な体勢',
   '腹筋ローラーある?', 'ないから床で', '床は白柳さんの聖域', '汗は拭いてから',
   '筋肉は裏切らない', '締切は裏切る', '名言やめて', '刺さるからやめて',
-  'バランスボール乗れる?', '3秒が限界', '俺は5秒', 'レベル低い争い',
+  'バランスボール乗れる?', '3秒が限界', '私は5秒いけた', 'レベル低い争い',
   '明日筋肉痛だな', '明後日に来るタイプ', '歳の話やめよ', '心は永遠に20代',
   'ジム部作らない?', '部費は経費?', 'また経費の話…', '却下されるまでがオチ',
 ], EVENT_REACT = [
-  'いい匂いしてきた…', '仕事に集中できない件', '俺も混ざりたい…', 'あとで一口ください',
+  'いい匂いしてきた…', '仕事に集中できない件', 'ずっと混ざっていたい…', 'あとで一口ください',
   '音がもう美味しい', '煙こっち来た(嬉しい)', '休憩取ればよかった', '次は絶対参加する',
   '楽しそうで何より', '声でかいって(笑)', '議事録は取らんでいい', '平和な会社だ…',
   '集中…集中…', 'イヤホンで防御', '腹の音が鳴った', '夕飯どうしよ…',
@@ -1749,25 +1812,25 @@ const BBQ_TALK = [
   '祭りかな?', '文化祭みたい', '青春してるな', 'うちの会社どうなってんの',
   '羨ましくなんか…ある', '正直めっちゃ羨ましい', '心を無にして作業', '無理、匂いが勝つ',
   '網の音ASMR', '作業BGMがジュージュー', '集中力が肉に負ける', '今日は負けを認める',
-  '筋トレ組は偉いな', '俺は座ってるだけ', '見てるだけで疲れた', '応援だけしとく',
+  '筋トレ組は偉いな', '座ってるだけの係です', '見てるだけで疲れた', '応援だけしとく',
   'ファイトー!', 'いっぽーん!', 'あと3回とか鬼', 'コーチ厳しすぎ(笑)',
   'フォームきれい', '腰は大事にね', '労災になるよ(笑)', '安全第一,品質第一',
   '若いなあ…', '気持ちだけは若手', 'それを言っちゃおしまい', '夢のある会社です',
   '平和すぎて泣ける', '明日も頑張れそう', 'この会社好きだわ', '入社してよかった',
-  '誰か仕事して(笑)', '俺がやってるから大丈夫', '頼もしすぎる', '給料上げてあげて',
+  '誰か仕事して(笑)', 'やってる人はやってます', '頼もしすぎる', '給料上げてあげて',
   '社訓「無限労働」とは', '休憩も仕事のうち', 'いい文化になった', 'ミッションは達成される',
   '匂いで日報書けそう', '今日の日報:肉', '承認します', '最高の会社かよ',
 ];
 
 const WORK_TALK = [
   'まず要件を整理しよう', '期限はいつまで?', '今日中にいけます', '仕様書どこでしたっけ',
-  'ブランチ切っときました', 'レビュー誰に振る?', '俺が見ます', 'テスト先に書こう',
+  'ブランチ切っときました', 'レビュー誰に振る?', 'こっちで見ます', 'テスト先に書こう',
   '既存の実装が使えそう', 'ゼロから書いた方が早いかも', '依存関係だけ気をつけて', '互換性は保つ方向で',
   '英語版も出します?', 'まずは日本語だけで', 'サムネどうします?', 'A/Bテストしよう',
   '前回の反省を活かそう', '同じバグ二度と出さない', 'ログ仕込んでおきます', 'エラー処理そこ手厚めで',
   '負荷は大丈夫そう?', 'キャッシュ効かせます', 'コスト意識だけ頼む', 'なるべく安く済ませよう',
   '成果物はどこに置く?', 'いつものフォルダで', '命名規則そろえよう', 'READMEも更新しとく',
-  '誰かペアで入れる?', '俺、手すきです', '助かる、頼んだ', '30分後に進捗共有で',
+  '誰かペアで入れる?', '手すき居ます?はい私!', '助かる、頼んだ', '30分後に進捗共有で',
   '仕様変更の可能性ある?', '一応ある、抽象化しとこ', '了解、差し替え前提で', '本番は夜に流します',
   '検証環境ある?', 'ローカルで再現できます', 'それは助かる', 'まず小さく出そう',
   'リリースノート書く?', '一行でいいよ', 'バックアップ取った?', '取りました、いつでも戻せます',
@@ -1860,14 +1923,14 @@ const LARA_FEED = [
 const LARA_SCOLD = [
   '人の食べ物あげちゃダメ!💢', 'タレも塩もダメ!全部ダメ!', '犬にネギ類は厳禁だよ!?', '社長に怒られるよ!?',
   'ララのごはんはあっち!', 'あーあ、味覚えちゃうじゃん', 'ダメったらダメ!鬼と呼ばれても!', '獣医さんに怒られるやつ!',
-  'その皿しまいなさい!', 'BBQ奉行より犬奉行になりなさい', 'かわいさに負けるな!', '俺が我慢してるのに!?',
+  'その皿しまいなさい!', 'BBQ奉行より犬奉行になりなさい', 'かわいさに負けるな!', 'こっちは我慢してるのに!?',
 ];
 
 // BBQの煙→もくもく→火災報知器
 let hazeLevel = 0;
 const ALARM_REACT = [
-  '警報!!', '煙すごい!!', 'けほけほっ', '窓!窓開けて!(無い)', '火元どこ!?',
-  'スタジオが霞んで見えない', 'スプリンクラー来るぞ!?', '肉は守れ!!', '避難訓練!?', '耳がぁぁ',
+  '警報!!', '煙すごい!!', 'けほけほっ', '窓!窓開けて!(開かないやつ)', '火元どこ!?',
+  'スタジオが霞んで見えない', 'スプリンクラー来るぞ!?', '肉は守って!!', '避難訓練!?', '耳がぁぁ',
   '誰か換気ー!!', 'うちわ持ってこい!', '報知器さん落ち着いて', '焼きすぎだって言った!',
 ];
 
@@ -1969,9 +2032,13 @@ function runEvent(t) {
     const talker = ev.members[Math.floor(Math.random() * ev.members.length)];
     if (talker.action !== 'walk') {
       const pool = ev.kind === 'bbq' ? BBQ_TALK : GYM_TALK;
-      talker.say(t, pickFresh('ev:' + ev.kind, pool), 3400);
+      const pi = pickPairIdx('ev:' + ev.kind, pool);
+      talker.say(t, decorate('ev:' + ev.kind, pool[pi]), 3200);
+      const others = ev.members.filter(m => m !== talker && m.action !== 'walk');
+      const rep2 = others.length ? others[Math.floor(Math.random() * others.length)] : null;
+      if (rep2 && pool[pi + 1]) rep2.say(t + 3300, decorate('ev:' + ev.kind, pool[pi + 1]), 3200);
       if (ev.kind === 'gym') { talker.anticUntil = t + 3500; }
-      ev.nextLine = t + 3600 + Math.random() * 2400;
+      ev.nextLine = t + 7200 + Math.random() * 3000;
     }
   }
   if (t > ev.nextReact) {
@@ -2018,9 +2085,13 @@ function stepStandup(t) {
     }
     if (t > st.nextLine) {
       if (st.li >= st.lineCount) { endStandup(t); return; }
-      alive[st.li % alive.length].say(t, pickFresh('worktalk', WORK_TALK), 3200);
-      st.li++;
-      st.nextLine = t + 3500;
+      const pi = pickPairIdx('worktalk', WORK_TALK);
+      const qer = alive[st.li % alive.length];
+      const aer = alive[(st.li + 1) % alive.length];
+      qer.say(t, decorate('worktalk', WORK_TALK[pi]), 3100);
+      if (WORK_TALK[pi + 1]) aer.say(t + 3200, decorate('worktalk', WORK_TALK[pi + 1]), 3100);
+      st.li += 2;
+      st.nextLine = t + 7000;
     }
     return;
   }
@@ -2088,12 +2159,14 @@ function stepDirective(t) {
   if (!tgt || !tgt.present || tgt.mode !== 'working') { directive.next = t + 5000; return; }
   boss.releaseSpot(); boss.releaseReception(); boss.resting = false;
   boss.inChat = true; boss.directing = true;
+  tgt.inChat = true;   // 対象をロック(話しかけ中に雑談へ拉致されない)
   if (tgt.id === 'tsukishiro') boss.goto({ x: TSUKI_STUDIO_POST.x - 26, y: TSUKI_STUDIO_POST.y + 2 }, 'faceR');
   else boss.goto({ x: tgt.desk.x - 30, y: tgt.desk.y + 20 }, 'faceR');
   directive.active = { target: tgt, phase: 'go' };
 }
 
 function endDirective(boss, t) {
+  if (directive.active && directive.active.target) directive.active.target.inChat = false;
   directive.active = null;
   directive.next = t + 15000;
   boss.inChat = false; boss.directing = false;
@@ -2176,6 +2249,11 @@ function stepRomance(t) {
   if (romance.active) {
     const r = romance.active;
     if (!kyoko.present || !ito.present) { endRomance(t); return; }
+    if (kyoko.mode !== 'idle') {   // きょうこに仕事が来たら即終了(側の状態も監視)
+      if (kyoko.mode === 'working') kyoko.say(t, '仕事きた…続きはまたね!', 2600);
+      endRomance(t);
+      return;
+    }
     if (r.kind === 'cheer') {
       if (r.phase === 'go') {
         if (kyoko.action !== 'walk') {
@@ -2338,7 +2416,7 @@ const BOSS_PATROL_WORK = [
 const BOSS_PATROL_IDLE = [
   '休憩か、いいことだ', 'しっかり休めよ', '次の仕事、頼むかもな', '充電中か', 'コーヒーうまいか?',
   '休むのも仕事のうちだ', 'その調子で英気を養え', 'ソファの座り心地どうだ?', '自販機の新作、試したか?',
-  'たまには外の空気も…窓ないけどな', '暇なら俺の話し相手になるか?', '次のプロジェクトの構想、聞くか?',
+  'たまには外の空気も吸えよ…換気は俺がしとく', '暇なら俺の話し相手になるか?', '次のプロジェクトの構想、聞くか?',
   '休憩中にすまんな、顔見に来ただけだ', '元気そうだな', '顔色いいな', 'よく休むやつはよく働く',
   '罪悪感なく休め、それが指示だ', '休憩の達人だな', 'その堂々とした休みっぷり、嫌いじゃない',
   '月城の収録、聴いたか?', 'ララを見なかったか?', '白柳さんの掃除、丁寧だよなあ', '掲示板のミッション、読んだか?',
@@ -2378,7 +2456,15 @@ function stepPatrol(t) {
         if (!p.saidAt) {
           const stop = p.stops[p.si];
           boss.dir = stop.d || 'down';
-          boss.say(t, pickFresh('security', BOSS_SECURITY).replace('{p}', stop.name), 3000);
+          const mcS = snap && snap.machine;
+          let secLine = null;
+          if (stop.name === 'サーバー' && mcS && mcS.cpuPct != null) {
+            const tpS = mcS.topProcs && mcS.topProcs[0];
+            secLine = mcS.cpuPct >= 85 ? `CPU ${mcS.cpuPct}%!?何をそんなに回してるんだ!`
+              : mcS.cpuPct >= 60 ? `CPU ${mcS.cpuPct}%、${tpS ? tpS.name + 'が' : ''}よく働いてるな`
+              : `CPU ${mcS.cpuPct}%、マシン室は平常運転だ`;
+          }
+          boss.say(t, secLine || pickFresh('security', BOSS_SECURITY).replace('{p}', stop.name), 3000);
           p.saidAt = t;
         } else if (t > p.saidAt + 3400) {
           p.si++;
@@ -2438,10 +2524,12 @@ function stepPatrol(t) {
   } else {
     boss.goto({ x: tgt.pos.x - 20, y: tgt.pos.y + 2 }, 'faceR');
   }
+  tgt.inChat = true;   // 対象をロック
   patrol.active = { target: tgt, phase: 'go' };
 }
 
 function endPatrol(boss, t) {
+  if (patrol.active && patrol.active.target) patrol.active.target.inChat = false;
   patrol.active = null;
   patrol.next = t + 60000 + Math.random() * 80000;   // 見回り・警備は1〜2.3分に1回(社長は現場主義)
   boss.inChat = false;
@@ -2454,6 +2542,9 @@ function startFight(a, b, t) {
   if (a.inChat || b.inChat || a.atMeeting || b.atMeeting || a.recording || b.recording) return;
   if ((a.mode !== 'idle' && a.mode !== 'working') || (b.mode !== 'idle' && b.mode !== 'working')) return;
   a.inChat = b.inChat = true;
+  for (const e of [a, b]) {   // 歩行を打ち切るので、持っていた受付・休憩席も返す
+    e.releaseReception(); e.releaseSpot(); e.resting = false;
+  }
   a.action = 'stand'; b.action = 'stand';
   a.path = []; b.path = [];
   a.dir = b.pos.x >= a.pos.x ? 'right' : 'left';
@@ -2672,14 +2763,14 @@ const LUNCH_LINES = [
   'ラーメンかそばで悩む', 'おにぎり2個で戦う', '昼抜きダメ、絶対', 'いただきます🙏',
 ];
 const SNACK_LINES = [
-  '3時のおやつ〜🍪', '糖分補給の時間', 'チョコが俺を呼んでる', 'スナック棚、補充されてる!',
+  '3時のおやつ〜🍪', '糖分補給の時間', 'チョコが呼んでる', 'スナック棚、補充されてる!',
   'コーヒーおかわり☕', '15時の壁、甘味で越える', 'おやつは正義', '一口だけ…一口だけ…',
   '疲れた脳に糖を', 'お茶しばこ🍵',
 ];
 const NIGHT_LINES = [
   'もうこんな時間…🌙', '静かだ…集中できる', '深夜テンション来た', '目が冴えてきた(まずい)',
-  '夜型なんで本領発揮です', 'コンビニ行くなら今のうち', '月がきれいですね(窓ない)', 'ラストスパート🔥',
-  'エナドリ2本目はダメって言われてる', 'そろそろ寝る準備…あと1件だけ', '夜のオフィス、ちょっと好き', '明日の俺に任せない',
+  '夜型なんで本領発揮です', 'コンビニ行くなら今のうち', '月がきれいですね(上の窓から)', 'ラストスパート🔥',
+  'エナドリ2本目はダメって言われてる', 'そろそろ寝る準備…あと1件だけ', '夜のオフィス、ちょっと好き', '明日の自分に任せない',
 ];
 const MONDAY_LINES = [
   '月曜が来てしまった…', '週の始まり!エンジン点火🔥', '土日の記憶がない', '今週も無限労働(社訓)',
@@ -2729,7 +2820,7 @@ function onSnapshot() {
   const blk = s.claude.block;
   const cq2 = s.quota && s.quota.claude;
   const blockHp = cq2 && cq2.session ? Math.max(0, Math.round(100 - cq2.session.pct))
-    : (blk && blk.remainingMinutes != null ? Math.max(0, Math.min(100, Math.round(blk.remainingMinutes / 3))) : 100);
+    : (blk && blk.remainingMinutes != null ? Math.max(0, Math.min(100, Math.round(blk.remainingMinutes / 3))) : null);   // 不明はnull(満タン扱いしない)
 
   // Codexもプロジェクト(proj=作業ディレクトリ由来)で振り分け
   const codexEmps = employees.filter(e => e.source === 'codex');
@@ -2747,7 +2838,7 @@ function onSnapshot() {
     if (owner) cbuckets[owner.id].push(a);
   }
   const rl = s.codex.rateLimit;
-  const codexHp = rl ? Math.max(0, Math.round(100 - rl.usedPercent)) : 100;
+  const codexHp = rl ? Math.max(0, Math.round(100 - rl.usedPercent)) : null;   // 不明はnull
 
   for (const e of employees) {
     e.bubbles = [];
@@ -2756,7 +2847,7 @@ function onSnapshot() {
     if (e.source === 'claude') {
       const act = buckets[e.id] || [];
       e.hp = e.showHp ? blockHp : null;
-      e.tired = blockHp < 22;
+      e.tired = blockHp != null && blockHp < 22;
       if (act.length) {
         e.setMode('working');
         e.sweat = (blk && blk.costPerHour > 90) || act.reduce((a, b) => a + (b.sessions || 1), 0) >= 2;
@@ -2774,7 +2865,7 @@ function onSnapshot() {
     } else if (e.source === 'codex') {
       const act = cbuckets[e.id] || [];
       e.hp = e.showHp ? codexHp : null;
-      e.tired = codexHp < 22;
+      e.tired = codexHp != null && codexHp < 22;
       if (act.length) {
         e.setMode('working');
         e.sweat = act.length >= 2;
@@ -2843,10 +2934,16 @@ function onSnapshot() {
       if (recApp && !away) {
         if (!e.recording) {
           e.recording = true;
+          // 収録は最優先: 見回り・朝会・イベント参加を全て中断してからスタジオへ
+          if (patrol.active) endPatrol(e, performance.now());
+          if (standup.active && standup.active.members.includes(e)) endStandup(performance.now());
+          if (e.inEvent && officeEvent.active) { officeEvent.active.members = officeEvent.active.members.filter(x => x !== e); e.inEvent = false; }
           e.releaseSpot(); e.releaseReception(); e.resting = false; e.inChat = false;
           e.mode = 'working'; e._wasWorking = true;
           e.goto(BOSS_STUDIO_POST, 'studio');
           e.say(performance.now() + 800, '🎥収録入りまーす!静かに頼む!', 3600);
+        } else if (e.action !== 'studio' && e.action !== 'walk') {
+          e.goto(BOSS_STUDIO_POST, 'studio');   // 何かに連れ出されてもスタジオへ戻る(自己修復)
         }
         e.jobText = `収録中(${recApp})`;
         e.bubbles = [];
@@ -2897,7 +2994,8 @@ function onSnapshot() {
     if (!firstSnap && prevSubs != null && subs > prevSubs) startCelebration(now, subs - prevSubs, subs);
     prevSubs = subs;
   }
-  const delivTotal = s.deliveries ? (s.deliveries.koen || 0) + (s.deliveries.daihon || 0) : null;
+  const delivTotal = s.deliveries && s.deliveries.koen != null && s.deliveries.daihon != null
+    ? s.deliveries.koen + s.deliveries.daihon : null;   // 読めなかった日はnull(0扱いすると誤お祝いが出る)
   if (delivTotal != null) {
     if (!firstSnap && prevDeliv != null && delivTotal > prevDeliv) announceDelivery(now);
     prevDeliv = delivTotal;
@@ -3004,7 +3102,7 @@ function updateHud() {
     if (q && q.session) qrow('Claude セッション(5h)', q.session.pct, fmtReset(q.session.resetsAt));
     if (q && q.week) qrow('Claude 週間(全モデル)', q.week.pct, fmtReset(q.week.resetsAt));
     if (q && q.model) qrow(`Claude 週間(${esc(q.model.name)})`, q.model.pct, fmtReset(q.model.resetsAt));
-    if (rlq) qrow('Codex 週間', rlq.usedPercent, rlq.resetsAt ? fmtReset(new Date(rlq.resetsAt).toISOString()) : '');
+    if (rlq && !(rlq.resetsAt && rlq.resetsAt < Date.now())) qrow('Codex 週間', rlq.usedPercent, rlq.resetsAt ? fmtReset(new Date(rlq.resetsAt).toISOString()) : '');
     if (CFG.mureka && CFG.mureka.gold != null) {
       rows.push(`<div class="row"><span class="lbl">Mureka Gold</span><span>残り <b>${CFG.mureka.gold}</b> G</span></div>`);
     }
@@ -3012,6 +3110,39 @@ function updateHud() {
       rows.push(`<div style="font-size:10px;opacity:.55">※Claude残量は${q.cachedAgeMin}分前の値(APIレート制限中)</div>`);
     }
     qEl.innerHTML = rows.length ? rows.join('') : '<div style="opacity:.6;font-size:12px">残量データ待ち(次の収集で反映)</div>';
+  }
+
+  // マシン室(このMacの実況)
+  const mEl = $('machine');
+  if (mEl) {
+    const mc = s.machine || {};
+    const mrows = [];
+    const mbar = (label, pct, extra) => {
+      if (pct == null) return;
+      const col = pct < 60 ? 'var(--good)' : pct < 85 ? 'var(--warn)' : 'var(--bad)';
+      mrows.push(`<div class="row"><span class="lbl">${label}</span><span>${pct}%${extra ? ` <span style="opacity:.6">${extra}</span>` : ''}</span></div>` +
+        `<div class="bar"><i style="width:${pct}%;background:${col}"></i></div>`);
+    };
+    mbar('CPU(頭脳の稼働率)', mc.cpuPct, mc.loadAvg != null ? `負荷 ${mc.loadAvg}` : '');
+    mbar('メモリ(作業台の混み具合)', mc.memUsedPct, null);
+    mbar('ストレージ(倉庫)', mc.diskUsedPct, mc.diskFreeGB != null ? `残り${mc.diskFreeGB}GB` : '');
+    if (mc.topProcs && mc.topProcs.length) {
+      const tp = mc.topProcs[0];
+      mrows.push(`<div class="row"><span class="lbl">いちばん働いてる機械</span><span>🏭 <b>${esc(tp.name)}</b> (${tp.cpu}%)</span></div>`);
+    }
+    if (mc.netRxMB != null) {
+      mrows.push(`<div class="row"><span class="lbl">通信(直近5分)</span><span>⬇${mc.netRxMB}MB ⬆${mc.netTxMB}MB</span></div>`);
+    }
+    if (mc.battPct != null) {
+      mrows.push(`<div class="row"><span class="lbl">電源</span><span>${mc.battCharging ? '🔌 コンセント' : '🔋 バッテリー'} ${mc.battPct}%${!mc.battCharging && mc.battPct < 30 ? ' 🚨' : ''}</span></div>`);
+    }
+    if (mc.uptimeDays != null) {
+      mrows.push(`<div class="row"><span class="lbl">連続稼働</span><span>${mc.uptimeDays}日${mc.uptimeDays >= 7 ? '(そろそろ再起動を…)' : ''}</span></div>`);
+    }
+    if (mc.trashItems != null) {
+      mrows.push(`<div class="row"><span class="lbl">ゴミ箱(白柳の戦場)</span><span>${mc.trashItems}件</span></div>`);
+    }
+    mEl.innerHTML = mrows.length ? mrows.join('') : '<div style="opacity:.6;font-size:12px">マシンデータ待ち(次の収集で反映)</div>';
   }
 
   const roster = $('roster');
@@ -3122,6 +3253,7 @@ function updateHud() {
    ================================================================ */
 let last = 0, lastAmbient = 0;
 function loop(t) {
+  simT = t;
   cx.setTransform(4, 0, 0, 4, 0, 0);   // 4xスケールを毎フレーム保証
   const dt = Math.min(100, t - last);
   last = t;
@@ -3137,6 +3269,7 @@ function loop(t) {
   stepStandup(t);
   stepEvent(t);
   stepChimeBreak(t);
+  stepMachineTalk(t);
   stepTimeFlavor(t, tm);
   if (t < celebration.until && Math.random() < 0.5) spawnParticle('confetti', Math.random() * W, Math.random() * 24);
   stepDog(dt, t);
@@ -3320,12 +3453,14 @@ function liveTarget(t) {
   if (officeEvent.active) return 310 - CAM_W / 2;
   if (standup.active) return 414 - CAM_W / 2;
   const bossE = employees.find(e => e.def.source === 'boss');
-  if (bossE && bossE.directing) return bossE.x - CAM_W / 2;
+  if (bossE && bossE.directing) return bossE.pos.x - CAM_W / 2;
   return (W - CAM_W) / 2 * (1 + Math.sin(t / 60000 * Math.PI * 2));
 }
 function blitLive(t, tm) {
   if (!camCx) return;
-  const tgt = Math.max(0, Math.min(W - CAM_W, liveTarget(t)));
+  if (!Number.isFinite(camX)) camX = (W - CAM_W) / 2;   // NaN汚染からの自己回復
+  let tgt = Math.max(0, Math.min(W - CAM_W, liveTarget(t)));
+  if (!Number.isFinite(tgt)) tgt = (W - CAM_W) / 2;
   camX += (tgt - camX) * 0.012;
   camCx.drawImage(cv, Math.round(camX * 4), 0, CAM_W * 4, 1440, 0, 0, CAM_W * 4, 1440);
   if (t - lastLiveDom > 1000) {
@@ -3341,12 +3476,64 @@ function blitLive(t, tm) {
 }
 
 /* ================================================================
+   マシン実況: このMacで起きていることを社員が実際の数字で語る
+   ================================================================ */
+const machineTalk = { next: 45000 };
+const M_CPU_HOT = [
+  'マシン室のファン、離陸しそうなんだけど', 'CPU {n}%!機材が本気出してる', '機材室、ほぼサウナです',
+  'サーバーが唸ってる…がんばれ', '扇風機、マシン室に持ってく?', 'マシンが熱い!氷まくら いる?',
+];
+const M_TOP = [
+  'いま一番働いてるの、{p}らしいよ', '{p}がフル回転中。えらい', '{p}、今日も残業かあ',
+  'マシン室で{p}が汗かいてる', '{p}が本気モードだ', 'MVPは{p}で決まりだね',
+];
+const M_DISK = [
+  '倉庫、もう{n}%埋まってるって', '残り{g}GB…棚卸しの時期では', '倉庫パンパン。断捨離しよう',
+  '古い素材、外の倉庫に移さない?', '段ボール、積み上がってきたなあ',
+];
+const M_NET_UP = ['どでかい荷物を発送中みたい(⬆{n}MB)', '回線がうんうん言ってる', 'アップロード中か、道が混んでる'];
+const M_NET_DOWN = ['大口の荷物が届いてる(⬇{n}MB)', '搬入ラッシュだ、受付がんばれ', 'でかい荷物の受け取り中'];
+const M_UPTIME = ['このマシン、{n}日連続勤務らしい', 'たまには休ませて(再起動して)あげて…', '{n}日無休はさすがに社畜すぎる'];
+const M_MEM = ['作業台がもう物でいっぱい({n}%)', '机の上、少し片付けよ?', '作業台が渋滞中…'];
+const M_BATT = ['電源ケーブル抜けてない!?', 'バッテリー駆動中!残り{n}%!', 'コンセント!コンセントどこ!'];
+const M_CALM = ['マシン室、今日も静かで平和', '倉庫も回線も異常なし。良い日だ', '機材の調子、絶好調みたい'];
+
+function stepMachineTalk(t) {
+  if (t < machineTalk.next) return;
+  const mc = snap && snap.machine;
+  if (!mc) { machineTalk.next = t + 60000; return; }
+  const folks = employees.filter(e => e.present && !e.inChat && !e.atMeeting && !e.recording
+    && e.def.source !== 'boss' && ['sit', 'stand', 'studio'].includes(e.action));
+  if (!folks.length) { machineTalk.next = t + 30000; return; }
+  const who = folks[Math.floor(Math.random() * folks.length)];
+  const tp = mc.topProcs && mc.topProcs[0];
+  let line = null;
+  // 目立つ状況を優先順で1つ選ぶ(意味のある実況にする)
+  if (mc.cpuPct != null && mc.cpuPct >= 85) line = pickFresh('mcpu', M_CPU_HOT).replace('{n}', mc.cpuPct);
+  else if (!mc.battCharging && mc.battPct != null) line = pickFresh('mbatt', M_BATT).replace('{n}', mc.battPct);
+  else if (mc.diskUsedPct != null && mc.diskUsedPct >= 90) line = pickFresh('mdisk', M_DISK).replace('{n}', mc.diskUsedPct).replace('{g}', mc.diskFreeGB ?? '?');
+  else if (tp && tp.cpu >= 80) line = pickFresh('mtop', M_TOP).replace(/\{p\}/g, tp.name);
+  else if (mc.netTxMB != null && mc.netTxMB >= 300) line = pickFresh('mnetu', M_NET_UP).replace('{n}', Math.round(mc.netTxMB));
+  else if (mc.netRxMB != null && mc.netRxMB >= 300) line = pickFresh('mnetd', M_NET_DOWN).replace('{n}', Math.round(mc.netRxMB));
+  else if (mc.memUsedPct != null && mc.memUsedPct >= 80) line = pickFresh('mmem', M_MEM).replace('{n}', mc.memUsedPct);
+  else if (mc.uptimeDays != null && mc.uptimeDays >= 7) line = pickFresh('mupt', M_UPTIME).replace(/\{n\}/g, Math.round(mc.uptimeDays));
+  else if (mc.cpuPct != null && mc.cpuPct >= 60 && tp) line = pickFresh('mtop', M_TOP).replace(/\{p\}/g, tp.name);
+  else if (Math.random() < 0.25) line = pickFresh('mcalm', M_CALM);
+  if (line) {
+    who.say(t, line, 4200);
+    machineTalk.next = t + 70000 + Math.random() * 60000;
+  } else {
+    machineTalk.next = t + 40000;
+  }
+}
+
+/* ================================================================
    チャイム休憩: 鐘が鳴ったら全員5分休憩
    ================================================================ */
 const chimeBreak = { until: 0 };
 const CHIME_BREAK_TALK = [
   '鐘だ!休憩!', '5分だけ肩の力抜こ', 'コーヒー淹れよ', '目薬タイム', '立つの久しぶりかも',
-  'あ〜〜〜(伸び)', 'チャイム最高', '5分後の俺、頼んだ', '肩がバキバキ', '水分水分',
+  'あ〜〜〜(伸び)', 'チャイム最高', '5分後の自分、頼んだ', '肩がバキバキ', '水分水分',
   '窓の外見たい(遠い)', '糖分補給', '正座で作業してた足が…', 'まばたきの練習しよ',
 ];
 const CHIME_BREAK_END = [
