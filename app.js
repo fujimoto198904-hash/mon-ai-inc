@@ -2656,49 +2656,213 @@ function endChat(t, wait) {
   chat.next = t + wait;
 }
 
-const dog = { pos: { x: 90, y: 150 }, target: null, next: 4000, napUntil: 0, dir: 1 };
+const dog = {
+  pos: { x: 90, y: 150 }, target: null, path: [], dir: 1,
+  next: 4000, napUntil: 0, nextLine: 0,
+  act: null, spot: null, follow: null,
+};
+
+/* ---------- ララの行き先(それぞれ目的がある) ---------- */
+const DOG_SPOTS = [
+  { x: 136, y: 226, k: 'water', n: '給水機' },
+  { x: 70, y: 226, k: 'food', n: '自販機の下' },
+  { x: 104, y: 226, k: 'food', n: 'おやつ棚' },
+  { x: 40, y: 226, k: 'food', n: '給湯コーナー' },
+  { x: 160, y: 212, k: 'trash', n: 'ゴミ箱' },
+  { x: 604, y: 214, k: 'trash', n: '奥のゴミ箱' },
+  { x: 300, y: 330, k: 'door', n: '受付', via: { x: 374, y: 306 } },
+  { x: 344, y: 338, k: 'door', n: '入口', via: { x: 374, y: 320 } },
+  { x: 78, y: 318, k: 'sofa', n: 'ソファ' },
+  { x: 224, y: 318, k: 'plant', n: '観葉植物' },
+  { x: 492, y: 202, k: 'boxes', n: '段ボールの山' },
+  { x: 432, y: 318, k: 'studio', n: '撮影スタジオ前', via: { x: 374, y: 312 } },
+  { x: 556, y: 326, k: 'studio', n: '音声スタジオ前', via: { x: 478, y: 322 } },
+  { x: 66, y: 148, k: 'boss', n: '社長席' },
+  { x: 320, y: 192, k: 'hall', n: '廊下のまんなか' },
+  { x: 520, y: 196, k: 'hall', n: 'サーバーの前' },
+  { x: 240, y: 160, k: 'hall', n: 'デスク島の脇' },
+];
+// 到着後にその場でやること(行き先の種別ごと)
+const DOG_ACTS = {
+  water: ['ぺろぺろ…', '(ごくごく飲んでいる)', '(水をこぼした)', '(ひげがびしょ濡れ)'],
+  food: ['(くんくん)', '(落とし物がないか捜索中)', '(じーっと見上げている)', 'クゥーン…', '(前足でちょいちょい)'],
+  trash: ['(鼻を突っ込んでいる)', '(いい匂いがする…)', '(前足でカリカリ)', '(あさろうとしている)'],
+  door: ['(じっと入口を見ている)', 'ワン!', '(耳がぴくっと動いた)', '(誰か来ないかな…)', '(お座りして待機)'],
+  sofa: ['(ソファの横で丸くなった)', '(ふかふか…)', 'スピー…', '(伸びをしてから寝転がった)'],
+  plant: ['(葉っぱをくんくん)', '(かじろうとして怒られる前に離れた)', '(土を掘りかけている)'],
+  boxes: ['(箱のすきまに入った)', '(箱の陰からこっちを見ている)', '(ダンボール、落ち着く)'],
+  studio: ['(ガラス越しにのぞいている)', '(しっぽをぱたぱた)', '(そーっと近づいた)'],
+  boss: ['(社長をじっと見上げている)', '(お手の練習をしている)', 'クーン(おやつ…)', '(社長の椅子の下に潜った)'],
+  hall: ['(のび〜)', '(その場でくるくる回っている)', '(あくび)', '(耳をかいている)', '(ごろん)', '(お座り)'],
+};
+const DOG_ANTICS = [
+  '(しっぽを追ってくるくる)', '(ぶるぶるっと体を震わせた)', '(くしゃみ)', '(首をかしげた)',
+  '(何もない床を掘っている)', '(遠くをじっと見ている)', 'ワンッ!', '(耳をぴこぴこ)',
+  '(ごろんと腹を見せた)', '(自分の影を気にしている)', '(大あくび)', '(伸び〜)',
+];
+const DOG_SLEEP = ['zzz', '(足がぴくぴく動いている)', 'クゥン…(寝言)', '(丸まりが完璧)', 'スピー…'];
+const DOG_ALARM = ['ワンワンワン!!', '(パニックで走り回っている)', '(誰か止めて!)', 'ワオーン!!'];
+const DOG_CHIME = ['ワンワン!(鐘に反応)', 'ワオーン', '(鐘が鳴るたび吠える)'];
+const DOG_FOLLOW = ['(社長についていく)', '(見回りのお供)', '(ぴったり後ろを歩く)', '(点検の補佐)'];
+const DOG_FEET = ['(足元で丸くなった)', '(仕事のじゃまはしません)', '(あったかい)', '(見守っている)'];
+const JANITOR_DOG = [
+  'ララさん、ゴミ箱はダメです', 'そこ、さっき片付けたところです!', '規定では犬の立ち入りは…',
+  'ララさん!分別が乱れます!', '(ゴミ箱の前に立ちはだかる)',
+];
+
+function dogSay(t, text, ms = 3000) { dog.bubble = text; dog.bubbleUntil = t + ms; }
+function dogGoto(spot) {
+  dog.path = spot.via ? [spot.via, { x: spot.x, y: spot.y }] : [{ x: spot.x, y: spot.y }];
+  dog.target = dog.path.shift();
+  dog.spot = spot;
+}
+// 目的地まで動く。最終地点に着いたフレームだけ true
+function moveDog(dt, speed) {
+  if (!dog.target) return false;
+  const dx = dog.target.x - dog.pos.x, dy = dog.target.y - dog.pos.y;
+  const dist = Math.hypot(dx, dy), sp = speed * dt / 1000;
+  if (dist < sp) {
+    dog.pos = { x: dog.target.x, y: dog.target.y };
+    dog.target = dog.path.length ? dog.path.shift() : null;
+    return !dog.target;
+  }
+  dog.pos.x += dx / dist * sp; dog.pos.y += dy / dist * sp;
+  dog.dir = dx > 0 ? 1 : -1;
+  return false;
+}
+
 function stepDog(dt, t) {
-  // 遊んでくれる人がいる間はそばを離れない
+  const tmD = jstNow();
+  const lightsOut = tmD.h >= 22 || tmD.h < 5;
+
+  // ① 火災報知器: パニックで走り回る(最優先)
+  if (officeEvent.active && officeEvent.active.alarmed) {
+    dog.act = 'panic'; dog.napUntil = 0; dog.follow = null;
+    if (!dog.target) { dog.path = []; dog.target = { x: 120 + Math.random() * 380, y: 158 + Math.random() * 56 }; }
+    if (t > dog.nextLine) { dogSay(t, pickFresh('dogalarm', DOG_ALARM), 2400); dog.nextLine = t + 2600; }
+    moveDog(dt, 64);
+    return;
+  }
+
+  // ② 遊んでもらっている間はその人のそばを離れない
   if (dog.playWith) {
     const p = employees.find(e => e.id === dog.playWith);
     if (!p || !p.present || (p.action !== 'playdog' && p.action !== 'walk')) {
       dog.playWith = null;
     } else {
-      dog.napUntil = 0;
+      dog.napUntil = 0; dog.act = null;
       const dpx = p.pos.x - dog.pos.x, dpy = p.pos.y - dog.pos.y;
-      if (!dog.target && Math.hypot(dpx, dpy) > 18) {
-        dog.target = { x: p.pos.x + (dpx > 0 ? -12 : 12), y: p.pos.y + 2 };
-      }
+      if (!dog.target && Math.hypot(dpx, dpy) > 18) { dog.path = []; dog.target = { x: p.pos.x + (dpx > 0 ? -12 : 12), y: p.pos.y + 2 }; }
+      moveDog(dt, 34);
+      return;
     }
   }
-  // BBQ中は必ずグリル前に来て餌をねだる
-  const bbqOn = officeEvent.active && officeEvent.active.kind === 'bbq';
-  if (bbqOn) {
-    dog.napUntil = 0;
+
+  // ③ BBQ中はグリル前で餌をねだる
+  if (officeEvent.active && officeEvent.active.kind === 'bbq') {
+    dog.napUntil = 0; dog.act = 'beg'; dog.follow = null;
     const gx = 292, gy = 198;
-    if (!dog.target && Math.hypot(dog.pos.x - gx, dog.pos.y - gy) > 16) {
-      dog.target = { x: gx + Math.random() * 14 - 7, y: gy + Math.random() * 8 - 4 };
+    if (!dog.target && Math.hypot(dog.pos.x - gx, dog.pos.y - gy) > 16) { dog.path = []; dog.target = { x: gx + Math.random() * 14 - 7, y: gy + Math.random() * 8 - 4 }; }
+    if (t > dog.nextLine) { dogSay(t, pickFresh('larabeg', LARA_BEG), 3000); dog.nextLine = t + 9000 + Math.random() * 9000; }
+    moveDog(dt, 34);
+    return;
+  }
+
+  // ④ 消灯中はソファの横で朝まで就寝
+  if (lightsOut) {
+    const bed = { x: 92, y: 320, k: 'sofa', n: 'ソファの横' };
+    if (dog.act !== 'sleep') {
+      if (Math.hypot(dog.pos.x - bed.x, dog.pos.y - bed.y) <= 8) {
+        dog.act = 'sleep'; dog.napUntil = t + 3600000; dog.target = null; dog.path = [];
+        dogSay(t, '(ソファの横で丸くなった)', 3600);
+        dog.nextLine = t + 40000;
+      } else {
+        if (!dog.target) dogGoto(bed);
+        moveDog(dt, 26);
+      }
+      return;
     }
-    if (t > (dog.nextBeg || 0)) {
-      dog.bubble = pickFresh('larabeg', LARA_BEG);
-      dog.bubbleUntil = t + 3000;
-      dog.nextBeg = t + 9000 + Math.random() * 9000;
+    if (t > dog.nextLine) { dogSay(t, pickFresh('dogsleep', DOG_SLEEP), 3200); dog.nextLine = t + 50000 + Math.random() * 70000; }
+    return;
+  }
+  if (dog.act === 'sleep') { dog.act = null; dog.napUntil = 0; dogSay(t, '(のび〜。おはようございます)', 3200); }
+
+  // ⑤ 社長の警備巡回にはお供する(相棒)
+  const bossD = employees.find(e => e.def.source === 'boss');
+  if (dog.follow === 'boss') {
+    if (!patrol.active || patrol.active.kind !== 'security' || !bossD || !bossD.present) {
+      dog.follow = null; dog.act = null;
+    } else {
+      const bdx = bossD.pos.x - dog.pos.x, bdy = bossD.pos.y - dog.pos.y;
+      if (Math.hypot(bdx, bdy) > 20) { dog.path = []; dog.target = { x: bossD.pos.x + (bdx > 0 ? -14 : 14), y: bossD.pos.y + 3 }; }
+      else dog.target = null;
+      if (t > dog.nextLine) { dogSay(t, pickFresh('dogfollow', DOG_FOLLOW), 3000); dog.nextLine = t + 12000 + Math.random() * 10000; }
+      moveDog(dt, 44);
+      return;
     }
   }
-  if (t < dog.napUntil) return;
-  if (!dog.target) {
-    if (t > dog.next) {
-      if (bbqOn) return;
-      if (Math.random() < 0.35) { dog.napUntil = t + 12000 + Math.random() * 18000; dog.next = dog.napUntil; return; }
-      const spots = [{ x: 250, y: 198 }, { x: 320, y: 200 }, { x: 420, y: 204 }, { x: 500, y: 205 }, { x: 560, y: 202 }, { x: 100, y: 258 }, { x: 60, y: 264 }];
-      dog.target = spots[Math.floor(Math.random() * spots.length)];
+  // 追従するかは巡回ごとに1回だけ決める(毎フレーム抽選だと必ず追従してしまう)
+  if (patrol.active && patrol.active.kind === 'security' && !dog.follow && !patrol.active._dogAsked) {
+    patrol.active._dogAsked = true;
+    if (Math.random() < 0.4) {
+      dog.follow = 'boss'; dog.act = null; dog.napUntil = 0; dog.target = null; dog.path = [];
+      dogSay(t, '(社長についていくことにした)', 3000);
+      return;
+    }
+  }
+
+  // ⑥ 移動中
+  if (dog.target) {
+    if (moveDog(dt, 30)) arriveDog(t);
+    return;
+  }
+
+  // ⑦ 滞在中: その場の小芝居
+  if (t < dog.napUntil) {
+    if (t > dog.nextLine) {
+      const pool = (dog.spot && DOG_ACTS[dog.spot.k]) || DOG_ANTICS;
+      dogSay(t, pickFresh('dogact:' + (dog.spot ? dog.spot.k : 'x'), Math.random() < 0.3 ? DOG_ANTICS : pool), 3200);
+      dog.nextLine = t + 6000 + Math.random() * 7000;
     }
     return;
   }
-  const dx = dog.target.x - dog.pos.x, dy = dog.target.y - dog.pos.y;
-  const dist = Math.hypot(dx, dy), sp = 30 * dt / 1000;
-  if (dist < sp) { dog.pos = dog.target; dog.target = null; dog.next = t + 5000 + Math.random() * 9000; }
-  else { dog.pos.x += dx / dist * sp; dog.pos.y += dy / dist * sp; dog.dir = dx > 0 ? 1 : -1; }
+
+  // ⑧ 次の行き先を決める
+  if (t < dog.next) return;
+  dog.act = null; dog.spot = null;
+  // 稼働中の社員がいれば、たまに足元で丸くなる
+  const workers = employees.filter(e => e.present && e.mode === 'working' && e.action === 'sit');
+  if (workers.length && Math.random() < 0.22) {
+    const w = workers[Math.floor(Math.random() * workers.length)];
+    dogGoto({ x: w.desk.x + 22, y: w.desk.y + 26, k: 'feet', n: w.name + 'の足元' });
+    dog.act = 'feet';
+    return;
+  }
+  const spot = DOG_SPOTS[Math.floor(Math.random() * DOG_SPOTS.length)];
+  dogGoto(spot);
+}
+
+// 目的地に到着: 種別ごとに滞在時間と一言を決める
+function arriveDog(t) {
+  const k = dog.spot ? dog.spot.k : 'hall';
+  const stay = k === 'sofa' ? 22000 + Math.random() * 20000
+    : k === 'feet' ? 20000 + Math.random() * 25000
+    : k === 'door' ? 12000 + Math.random() * 10000
+    : 8000 + Math.random() * 9000;
+  dog.napUntil = t + stay;
+  dog.next = dog.napUntil + 2000;
+  const pool = k === 'feet' ? DOG_FEET : (DOG_ACTS[k] || DOG_ANTICS);
+  dogSay(t + 300, pickFresh('dogact:' + k, pool), 3200);
+  dog.nextLine = t + 5000 + Math.random() * 5000;
+  // ゴミ箱あさりは白柳が黙っていない
+  if (k === 'trash') {
+    const jan = employees.find(e => e.def.source === 'janitor');
+    if (jan && jan.present && !jan.inChat && Math.hypot(jan.pos.x - dog.pos.x, jan.pos.y - dog.pos.y) < 150) {
+      jan.say(t + 1800, pickFresh('jandog', JANITOR_DOG), 3400);
+      dogSay(t + 4200, '(そーっと離れた)', 2800);
+      dog.napUntil = t + 6000; dog.next = t + 8000;
+    }
+  }
 }
 function drawDog(g, t) {
   const { x, y } = dog.pos;
@@ -2757,6 +2921,8 @@ const BURN_LINES = [
 
 function startCelebration(t, diff, subs) {
   celebration.until = t + 15000;
+  dogSay(t + 1200, ['(みんなと一緒に跳ねている)', 'ワン!ワン!', '(しっぽ高速回転)'][Math.floor(Math.random() * 3)], 4000);
+  dog.napUntil = Math.min(dog.napUntil, t + 1000);
   const folks = employees.filter(e => e.present && !e.inChat && e.action !== 'sleep');
   folks.forEach((e, i) => {
     e.happy = true;
@@ -3564,6 +3730,9 @@ const CHIME_BREAK_END = [
 
 function startChimeBreak(t) {
   chimeBreak.until = t + 300000;   // 5分
+  // 犬は鐘に反応して吠える
+  dogSay(t + 200, pickFresh('dogchime', DOG_CHIME), 3000);
+  dog.napUntil = Math.min(dog.napUntil, t + 1500);
   for (const e of employees) {
     if (!e.present) continue;
     if (e.inChat || e.atMeeting || e.receptionOn || e.recording) continue;
