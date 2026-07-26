@@ -722,44 +722,62 @@ function drawOffice(g, t, tm) {
   // ===== マシン室(サーバーコーナー)= このMacの実況 =====
   const mc = snap && snap.machine;
   if (mc) {
-    // CPU熱: 稼働率に応じてラック背後が色づく(緑→橙→赤)
+    // CPU熱: 機材の奥がぼんやり熱をもつ(矩形だと角が見えるので放射グラデ)
     if (mc.cpuPct != null) {
       const heat = mc.cpuPct / 100;
       const hcol = mc.cpuPct >= 85 ? '224,90,78' : mc.cpuPct >= 60 ? '232,150,60' : '110,180,120';
-      const flicker = 0.10 + heat * 0.22 + Math.sin(t / (600 - heat * 400)) * 0.05;
-      g.fillStyle = `rgba(${hcol},${Math.max(0.06, flicker).toFixed(2)})`;
-      g.fillRect(520, 136, 116, 52);
+      const a = Math.max(0.05, 0.09 + heat * 0.20 + Math.sin(t / (600 - heat * 400)) * 0.04);
+      const hg = g.createRadialGradient(578, 166, 4, 578, 166, 62);
+      hg.addColorStop(0, `rgba(${hcol},${a.toFixed(2)})`);
+      hg.addColorStop(0.65, `rgba(${hcol},${(a * 0.45).toFixed(2)})`);
+      hg.addColorStop(1, `rgba(${hcol},0)`);
+      g.fillStyle = hg;
+      g.fillRect(514, 126, 128, 80);
       // 高負荷時は陽炎(ゆらゆら上る熱)
       if (mc.cpuPct >= 80 && Math.random() < 0.12) spawnParticle('bsmoke', 600 + Math.random() * 28, 140);
     }
-    // 床の稼働ステータスプレート: CPU+いちばん働いている機械
-    rr(g, 498, 192, 132, 22, '#37332c', INK);
+    // 稼働ステータス板(ゴミ箱・段ボールとは重ねない: x502〜590の枠に収める)
+    const PX = 502, PY = 190, PW = 88, PH = 22;
+    rr(g, PX, PY, PW, PH, '#37332c', INK);
     g.font = '6px DotGothic16';
+    const cpuTxt = mc.cpuPct != null ? `⚙CPU ${mc.cpuPct}%` : '⚙CPU --';
     g.fillStyle = '#8ef0b0';
-    const cpuTxt = mc.cpuPct != null ? `⚙ CPU ${mc.cpuPct}%` : '⚙ CPU --';
-    g.fillText(cpuTxt, 503, 200);
+    g.fillText(cpuTxt, PX + 4, PY + 8);
     if (mc.cpuPct != null) {
-      const bw = 56;
+      const bx0 = PX + 7 + g.measureText(cpuTxt).width;      // 文字幅を測って残りにバーを収める
+      const bw = Math.max(14, PX + PW - 5 - bx0);
       g.fillStyle = 'rgba(255,255,255,.16)';
-      g.fillRect(566, 195, bw, 4);
+      g.fillRect(bx0, PY + 3.5, bw, 3.5);
       g.fillStyle = mc.cpuPct >= 85 ? '#ff6a5e' : mc.cpuPct >= 60 ? '#f0b050' : '#5aff8e';
-      g.fillRect(566, 195, Math.round(bw * mc.cpuPct / 100), 4);
+      g.fillRect(bx0, PY + 3.5, Math.round(bw * mc.cpuPct / 100), 3.5);
     }
-    g.fillStyle = '#e8e6da';
+    // いちばん働いているアプリ: psの%は「1コア=100%」なので、マシン全体比に直してCPU%と揃える
     const tp0 = mc.topProcs && mc.topProcs[0];
-    g.fillText(tp0 ? `🏭 ${Array.from(tp0.name).slice(0, 13).join('')} ${tp0.cpu}%` : '🏭 稼働情報待ち', 503, 209);
-    // 倉庫(ストレージ)の段ボール: 使用率に比例して積み上がる
+    g.fillStyle = '#e8e6da';
+    let tpTxt = '🏭 稼働情報待ち';
+    if (tp0) {
+      const share = mc.cores ? Math.min(100, Math.round(tp0.cpu / mc.cores)) : null;
+      const suffix = share != null ? ` ${share}%` : '';
+      // 語中でぶつ切りにしないよう、板の内幅に収まるところまでを実測で削る
+      const cps = Array.from(tp0.name);
+      let nm = tp0.name;
+      while (cps.length && g.measureText(`🏭${nm}${suffix}`).width > PW - 9) { cps.pop(); nm = cps.join(''); }
+      tpTxt = `🏭${nm}${suffix}`;
+    }
+    g.fillText(tpTxt, PX + 4, PY + 17);
+    // 倉庫(ストレージ)の段ボール: 使用率に比例して積み上がる。ラベルは山の下に置く
     if (mc.diskUsedPct != null) {
       const boxes = Math.max(1, Math.min(8, Math.round(mc.diskUsedPct / 12)));
+      const BX = 476, BBASE = 182;
       for (let i = 0; i < boxes; i++) {
-        const bx = 480 + (i % 2) * 13, by = 178 - Math.floor(i / 2) * 10;
+        const bx = BX + (i % 2) * 13, by = BBASE - Math.floor(i / 2) * 10;
         rr(g, bx, by, 12, 9, '#c8a060', '#8a6a3a');
         g.strokeStyle = '#a88448'; g.lineWidth = 1;
         g.beginPath(); g.moveTo(bx + 6, by); g.lineTo(bx + 6, by + 9); g.stroke();
       }
       g.font = '5px DotGothic16';
-      g.fillStyle = mc.diskUsedPct >= 90 ? '#c03a2e' : 'rgba(74,59,42,.6)';
-      g.fillText(`倉庫${mc.diskUsedPct}%`, 478, 190 - Math.ceil(Math.min(8, Math.round(mc.diskUsedPct / 12)) / 2) * 10);
+      g.fillStyle = mc.diskUsedPct >= 90 ? '#c03a2e' : 'rgba(74,59,42,.62)';
+      g.fillText(`倉庫 ${mc.diskUsedPct}%`, BX, BBASE + 16);
     }
   }
 
@@ -3128,7 +3146,10 @@ function updateHud() {
     mbar('ストレージ(倉庫)', mc.diskUsedPct, mc.diskFreeGB != null ? `残り${mc.diskFreeGB}GB` : '');
     if (mc.topProcs && mc.topProcs.length) {
       const tp = mc.topProcs[0];
-      mrows.push(`<div class="row"><span class="lbl">いちばん働いてる機械</span><span>🏭 <b>${esc(tp.name)}</b> (${tp.cpu}%)</span></div>`);
+      // psの%は1コア=100%基準。マシン全体比に直し、コア換算を併記する
+      const share = mc.cores ? Math.min(100, Math.round(tp.cpu / mc.cores)) : null;
+      const cores = (tp.cpu / 100).toFixed(1);
+      mrows.push(`<div class="row"><span class="lbl">いちばん働いてる機械</span><span>🏭 <b>${esc(tp.name)}</b> ${share != null ? `${share}%` : ''} <span style="opacity:.6">${cores}コア</span></span></div>`);
     }
     if (mc.netRxMB != null) {
       mrows.push(`<div class="row"><span class="lbl">通信(直近5分)</span><span>⬇${mc.netRxMB}MB ⬆${mc.netTxMB}MB</span></div>`);
