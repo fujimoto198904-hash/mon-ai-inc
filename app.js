@@ -1412,7 +1412,7 @@ class Employee extends Person {
 
   step(dt, t) {
     const base = this.mode === 'working' ? 42 : 30;
-    this.speed = base * (this.tired ? 0.7 : 1);
+    this.speed = this.panicking ? 74 : base * (this.tired ? 0.7 : 1);
     this.stepMove(dt, t);
   }
 
@@ -1966,6 +1966,133 @@ const GYM_AFTER = [
   '成長期かもしれない', '握力が終わってる', '心なしか姿勢がいい',
 ];
 
+/* ================================================================
+   全社パニック: 焼肉の火災報知器が鳴ったら、座っている人も全員が慌てる
+   役割を配って動かす(全員ランダムだと同じ動きに見えて退屈になるため)
+   ================================================================ */
+const panic = { until: 0, evac: [] };
+const PANIC_SPOT = {
+  exting: { x: 46, y: 92 },      // 消火器(左上の壁)
+  grill: { x: 296, y: 204 },     // グリル
+  window: [{ x: 210, y: 96 }, { x: 420, y: 96 }],
+  door: { x: 374, y: 346 },      // 入口(外へ)
+};
+const PANIC_RUN = [
+  'うわああああ!', '警報!警報!', 'どこ!?どこが燃えてる!?', '落ち着け!誰か落ち着け!',
+  '(意味もなく走っている)', 'ぎゃー!', '書類!書類だけは!', '(3周目)',
+  '避難マニュアルどこ!?', '誰かー!', '(逆方向に走り出した)', 'パニックです!以上!',
+  '心臓が!心臓が!', '(一周して元の位置に戻った)', 'これ訓練じゃないやつ!',
+];
+const PANIC_EXT = [
+  '消火器!消火器どこ!', '(消火器を抱えて走ってきた)', 'ピン!ピン抜くんだよね!?',
+  '訓練の成果、見せます!', '(消火器が重すぎる)', '任せろ!任せてくれ!',
+];
+const PANIC_GRILL = [
+  '火を消せー!', '(グリルの電源を探している)', '肉!肉だけは助ける!',
+  'まだ焼けてない!もったいない!', '(タレをかけて余計に燃えた)', '網!網が真っ赤!',
+];
+const PANIC_WINDOW = [
+  '窓!窓開けて!', '(窓を開けようと必死)', '換気!換気だー!',
+  'この窓、開かないやつだ!', '(うちわで扇いでいる)', '煙が!煙が来る!',
+];
+const PANIC_EVAC = [
+  '避難します!外!外!', '(入口に向かって全力疾走)', '押さない走らない!(走ってる)',
+  '外で点呼とります!', 'お先に失礼します!!', '(いちばんに逃げた)',
+];
+const PANIC_BACK = [
+  '(こわごわ戻ってきた)', '外、暑かった…', '誤報…でしたか…', '(気まずそうに席へ)',
+  'ただいま戻りました', '避難訓練、成功ということで',
+];
+const PANIC_BOSS = [
+  'なんだ!?何が起きた!', '会社が!会社が燃える!', '保険!保険入ってたよな!?',
+  '(慌てて立ち上がった)', '誰か状況を説明しろ!', '落ち着け…俺が落ち着け…',
+];
+const PANIC_JAN = [
+  '床が!床が焦げます!', '(モップを構えて突撃)', '規定では火気厳禁です!',
+  'ワックスが!ワックスが燃える!', '掃除計画が!計画が狂う!',
+];
+const PANIC_POOL = {
+  run: PANIC_RUN, exting: PANIC_EXT, grill: PANIC_GRILL,
+  window: PANIC_WINDOW, evac: PANIC_EVAC, boss: PANIC_BOSS, janitor: PANIC_JAN,
+};
+
+function startPanic(t) {
+  panic.until = t + 13000;
+  panic.evac = [];
+  // 進行中の他イベントは全部たたむ(同じ人を奪い合って動きが固まるため)
+  const bossP = employees.find(e => e.def.source === 'boss');
+  if (chat.active) endChat(t, 60000);
+  if (standup.active) endStandup(t);
+  if (fight.active) endFight(t);
+  if (romance.active) endRomance(t);
+  if (directive.active && bossP) endDirective(bossP, t);
+  if (patrol.active && bossP) endPatrol(bossP, t);
+  chimeBreak.until = 0;
+  directive.next = t + 40000; patrol.next = t + 40000; chat.next = t + 40000;
+  const folks = employees.filter(e => e.present).sort(() => Math.random() - 0.5);
+  let wi = 0, assigned = { exting: 0, grill: 0, window: 0, evac: 0 };
+  folks.forEach((e, i) => {
+    // 座っていようが会議中だろうが、全員いったん解除して立たせる
+    e.releaseSpot(); e.releaseReception();
+    e.resting = false; e.atMeeting = false; e.inEvent = false;
+    e.janResting = false; e.onChimeBreak = false;
+    e.inChat = true; e.panicking = true;
+    e.nextThink = panic.until + 3000;
+    e.panicLine = t + 200 + i * 260;
+    let role;
+    if (e.def.source === 'boss') role = 'boss';
+    else if (e.def.source === 'janitor') role = 'janitor';
+    else if (!assigned.exting) { role = 'exting'; assigned.exting = 1; }
+    else if (!assigned.grill) { role = 'grill'; assigned.grill = 1; }
+    else if (assigned.window < 1) { role = 'window'; assigned.window++; }
+    else if (assigned.evac < 2) { role = 'evac'; assigned.evac++; }
+    else role = 'run';
+    e.panicRole = role;
+    if (role === 'exting') e.goto(PANIC_SPOT.exting, 'faceU');
+    else if (role === 'grill') e.goto(PANIC_SPOT.grill, 'faceU');
+    else if (role === 'window') e.goto(PANIC_SPOT.window[wi++ % 2], 'faceU');
+    else if (role === 'evac') { panic.evac.push(e.id); e.goto(PANIC_SPOT.door, 'leave'); }
+    else e.goto({ x: 60 + Math.random() * 520, y: 152 + Math.random() * 58 }, 'faceD');
+  });
+}
+
+function stepPanic(t) {
+  if (!panic.until) return;
+  if (t > panic.until) { endPanic(t); return; }
+  for (const e of employees) {
+    if (!e.panicking) continue;
+    // 走り回る役は着いたそばから次の場所へ(止まらない)
+    if (e.panicRole === 'run' && e.present && e.action !== 'walk' && t > (e.panicNext || 0)) {
+      e.goto({ x: 60 + Math.random() * 520, y: 152 + Math.random() * 58 }, 'faceD');
+      e.panicNext = t + 1100 + Math.random() * 800;
+    }
+    if (e.present && t > (e.panicLine || 0)) {
+      e.say(t, pickFresh('panic:' + e.panicRole, PANIC_POOL[e.panicRole] || PANIC_RUN), 2600);
+      e.panicLine = t + 2500 + Math.random() * 2000;
+    }
+  }
+}
+
+function endPanic(t) {
+  panic.until = 0;
+  for (const e of employees) {
+    if (!e.panicking) continue;
+    e.panicking = false; e.inChat = false;
+    e.nextThink = t + 1500;
+    // 全員その場でぴたっと止まる(この静止のあとに社長の怒声が入る)
+    e.path = []; e.target = null;
+    if (e.action === 'walk') e.action = 'stand';
+  }
+  // 外に逃げた人はこわごわ戻ってくる
+  panic.evac.forEach((id, i) => {
+    const e = employees.find(x => x.id === id);
+    if (!e) return;
+    e.gotoWork();
+    e.say(t + 1200 + i * 1800, pickFresh('panicback', PANIC_BACK), 3200);
+  });
+  panic.evac = [];
+}
+
 // イベントの終わり=社長が怒りに来る
 const BOSS_BUST = [
   'おいこら!仕事はどうした!!', '誰が宴会を許可した!?', 'ずいぶん楽しそうだなぁ?????',
@@ -2007,11 +2134,10 @@ function runEvent(t) {
       dog.bubbleUntil = t + 6200;
       ev.nextLara = t + 25000 + Math.random() * 20000;
     }
-    if (!ev.alarmed && elapsed > (ev.alarmDelay || 90000) && ev.members.length) {
+    if (!ev.alarmed && elapsed > (ev.alarmDelay ?? 90000) && ev.members.length) {
       ev.alarmed = true;
-      const near = employees.filter(e => e.present && !e.inChat && e.def.source !== 'janitor').slice(0, 5);
-      ev.members.concat(near).forEach((e, i) => e.say(t + 300 + i * 450, pickFresh('alarm', ALARM_REACT), 2800));
-      ev.until = Math.min(ev.until, t + 6000);   // 警報→まもなく社長が飛んでくる
+      startPanic(t);                 // 座っている人も含めて全社パニック
+      ev.until = t + 13500;          // 騒ぎが収まった直後に社長が怒鳴り込む
     }
   }
   // 社長の解散劇(お叱り)フェーズ
@@ -2046,7 +2172,7 @@ function runEvent(t) {
     }
     return;
   }
-  if (t > ev.nextLine) {
+  if (t > ev.nextLine && !panic.until) {
     const talker = ev.members[Math.floor(Math.random() * ev.members.length)];
     if (talker.action !== 'walk') {
       const pool = ev.kind === 'bbq' ? BBQ_TALK : GYM_TALK;
@@ -2059,7 +2185,7 @@ function runEvent(t) {
       ev.nextLine = t + 7200 + Math.random() * 3000;
     }
   }
-  if (t > ev.nextReact) {
+  if (t > ev.nextReact && !panic.until) {
     const watchers = employees.filter(e => e.present && !e.inEvent && !e.inChat && e.def.source !== 'janitor');
     if (watchers.length) {
       watchers[Math.floor(Math.random() * watchers.length)].say(t, pickFresh('evreact', EVENT_REACT), 3200);
@@ -3455,6 +3581,7 @@ function loop(t) {
   stepPatrol(t);
   stepStandup(t);
   stepEvent(t);
+  stepPanic(t);
   stepChimeBreak(t);
   stepMachineTalk(t);
   stepTimeFlavor(t, tm);
