@@ -3283,13 +3283,13 @@ const DOG_SPOTS = [
   { x: 40, y: 226, k: 'food', n: '給湯コーナー' },
   { x: 160, y: 212, k: 'trash', n: 'ゴミ箱' },
   { x: 604, y: 214, k: 'trash', n: '奥のゴミ箱' },
-  { x: 300, y: 330, k: 'door', n: '受付', via: { x: 374, y: 306 } },
-  { x: 344, y: 338, k: 'door', n: '入口', via: { x: 374, y: 320 } },
-  { x: 78, y: 318, k: 'sofa', n: 'ソファ' },
+  { x: 300, y: 330, k: 'door', n: '受付', via: { x: 374, y: 328 } },
+  { x: 344, y: 338, k: 'door', n: '入口', via: { x: 374, y: 334 } },
+  { x: 70, y: 272, k: 'sofa', n: 'ソファの前' },
   { x: 224, y: 318, k: 'plant', n: '観葉植物' },
   { x: 492, y: 202, k: 'boxes', n: '段ボールの山' },
-  { x: 432, y: 318, k: 'studio', n: '撮影スタジオ前', via: { x: 374, y: 312 } },
-  { x: 556, y: 326, k: 'studio', n: '音声スタジオ前', via: { x: 478, y: 322 } },
+  { x: 432, y: 318, k: 'studio', n: '撮影スタジオ前', via: { x: 372, y: 318 } },
+  { x: 556, y: 326, k: 'studio', n: '音声スタジオ前', via: { x: 478, y: 326 } },
   { x: 66, y: 148, k: 'boss', n: '社長席' },
   { x: 320, y: 192, k: 'hall', n: '廊下のまんなか' },
   { x: 520, y: 196, k: 'hall', n: 'サーバーの前' },
@@ -3298,15 +3298,15 @@ const DOG_SPOTS = [
   { x: 404, y: 198, k: 'hall', n: '廊下の右寄り' },
   { x: 264, y: 258, k: 'desk', n: '総務部の島の前' },
   { x: 344, y: 256, k: 'desk', n: '座間の机のうしろ' },
-  { x: 118, y: 196, k: 'corner', n: '給湯コーナーの角' },
-  { x: 34, y: 196, k: 'corner', n: '左のすみっこ' },
-  { x: 626, y: 244, k: 'corner', n: '右奥のすみっこ' },
+  { x: 150, y: 232, k: 'corner', n: '給湯コーナーの角' },
+  { x: 26, y: 254, k: 'corner', n: '左のすみっこ' },
+  { x: 628, y: 202, k: 'corner', n: '右端の通路' },
   { x: 210, y: 152, k: 'sun', n: '窓の下(日なた)' },
   { x: 420, y: 152, k: 'sun', n: '右の窓の下' },
   { x: 534, y: 196, k: 'copier', n: 'コピー機のそば' },
   { x: 414, y: 214, k: 'meeting', n: '会議スペース' },
-  { x: 150, y: 288, k: 'sofa', n: 'ソファのうら' },
-  { x: 186, y: 300, k: 'corner', n: '休憩室の出口' },
+  { x: 78, y: 258, k: 'sofa', n: 'ラグの上' },
+  { x: 190, y: 264, k: 'corner', n: '休憩室の出口' },
   { x: 96, y: 254, k: 'kitchen', n: 'キッチンの足元' },
   { x: 470, y: 196, k: 'boxes', n: '段ボールの反対側' },
   { x: 288, y: 214, k: 'hall', n: 'フロアのまんなか' },
@@ -3379,8 +3379,21 @@ const JANITOR_DOG = [
 ];
 
 function dogSay(t, text, ms = 3000) { dog.bubble = text; dog.bubbleUntil = t + ms; }
+const DOG_LANE = 204;   // 犬が横移動に使う中央通路
 function dogGoto(spot) {
-  dog.path = spot.via ? [spot.via, { x: spot.x, y: spot.y }] : [{ x: spot.x, y: spot.y }];
+  // 家具を突っ切らないよう、いったん通路に出てから横へ動いて目的地に降りる
+  const p = [];
+  let fx = dog.pos.x, fy = dog.pos.y;
+  const cur = dog.spot;
+  if (cur && cur.via) { p.push({ x: cur.via.x, y: cur.via.y }); fx = cur.via.x; fy = cur.via.y; }   // 出るときも同じ抜け道
+  const ax = spot.via ? spot.via.x : spot.x;
+  if (Math.abs(fy - spot.y) > 30 || Math.abs(fx - spot.x) > 70) {
+    if (Math.abs(fy - DOG_LANE) > 14) p.push({ x: fx, y: DOG_LANE });
+    if (Math.abs(ax - fx) > 8) p.push({ x: ax, y: DOG_LANE });
+  }
+  if (spot.via) p.push({ x: spot.via.x, y: spot.via.y });
+  p.push({ x: spot.x, y: spot.y });
+  dog.path = p;
   dog.target = dog.path.shift();
   dog.spot = spot;
 }
@@ -3395,7 +3408,7 @@ function moveDog(dt, speed) {
     return !dog.target;
   }
   dog.pos.x += dx / dist * sp; dog.pos.y += dy / dist * sp;
-  dog.dir = dx > 0 ? 1 : -1;
+  if (Math.abs(dx) > 1.5) dog.dir = dx > 0 ? 1 : -1;   // 真下・真上に歩くとき左右反転がチカチカするのを防ぐ
   return false;
 }
 
@@ -3438,7 +3451,7 @@ function stepDog(dt, t) {
 
   // ④ 消灯中はソファの横で朝まで就寝
   if (lightsOut) {
-    const bed = { x: 92, y: 320, k: 'sofa', n: 'ソファの横' };
+    const bed = { x: 24, y: 300, k: 'sofa', n: 'ソファの横' };
     if (dog.act !== 'sleep') {
       if (Math.hypot(dog.pos.x - bed.x, dog.pos.y - bed.y) <= 8) {
         dog.act = 'sleep'; dog.napUntil = t + 3600000; dog.target = null; dog.path = [];
@@ -3502,7 +3515,9 @@ function stepDog(dt, t) {
   const workers = employees.filter(e => e.present && e.mode === 'working' && e.action === 'sit');
   if (workers.length && Math.random() < 0.22) {
     const w = workers[Math.floor(Math.random() * workers.length)];
-    dogGoto({ x: w.desk.x + 22, y: w.desk.y + 26, k: 'feet', n: w.name + 'の足元' });
+    let fx = w.desk.x + 24; const fy = w.desk.y + 36;
+    if (fx > 515 && fy < 196) fx = w.desk.x - 22;   // 機材コーナーに重なる席(廣瀬)は反対側の足元へ
+    dogGoto({ x: fx, y: fy, k: 'feet', n: w.name + 'の足元' });
     dog.act = 'feet';
     return;
   }
@@ -3534,17 +3549,18 @@ function arriveDog(t) {
 }
 function drawDog(g, t) {
   const { x, y } = dog.pos;
-  const nap = t < dog.napUntil;
+  const staying = t < dog.napUntil;
+  // 「留まっている」と「寝ている」は別物。寝ているのは消灯中とソファの上だけ
+  const asleep = dog.act === 'sleep' || (staying && dog.spot && dog.spot.k === 'sofa');
   const img = SHEETS.lala;
   if (img) {
     const moving = !!dog.target;
-    const dir = nap || !moving ? 'down' : (dog.dir > 0 ? 'right' : 'left');
-    const fi = 1;
-    drawSheet(g, img, dir, fi, x, y, 16);
+    const dir = (!moving) ? 'down' : (dog.dir > 0 ? 'right' : 'left');
+    drawSheet(g, img, dir, 1, x, y, 16);
   } else {
     g.fillStyle = '#f0e8dc'; g.fillRect(Math.round(x) - 5, Math.round(y) - 6, 10, 6);
   }
-  if (nap) drawZzz(g, x, y - 8, t + 1700);
+  if (asleep) drawZzz(g, x, y - 8, t + 1700);
 }
 
 
