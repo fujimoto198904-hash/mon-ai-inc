@@ -578,6 +578,35 @@ function drawDesk(g, seat, working, t, emp, st) {
   }
 }
 
+// 社名看板の目標カウンター1行(ラベル / 現在値 目標値 / 進捗バー)。
+// 板の内側は x478-628 しかないので、数字は万・億で詰める
+function drawGoalRow(g, label, cur, goal, unit, y) {
+  const L = 480, R = 626;   // 板の内側(はみ出すと枠に食い込む)
+  // 右端から: 達成率 → バー → 左から: ラベル → 数値 の順に詰める
+  g.font = '5px DotGothic16';
+  const pct = fmtGoalPct(cur, goal);
+  const pw = g.measureText(pct).width;
+  g.fillStyle = '#c8a878';
+  g.fillText(pct, R - pw, y);
+  const BW = 46, BH = 4, BX = R - pw - 3 - BW, by = y - 4;
+  rr(g, BX, by, BW, BH, 'rgba(0,0,0,.35)');
+  if (cur != null && goal) {
+    // 1億が目標だと当分は極細。0でなければ必ず1px以上は光らせる
+    const w = Math.min(BW, Math.max(cur > 0 ? 1 : 0, BW * cur / goal));
+    if (w > 0) rr(g, BX, by, w, BH, '#e8b84a');
+  }
+  g.strokeStyle = 'rgba(200,168,120,.5)'; g.lineWidth = 1;
+  g.strokeRect(BX + .5, by + .5, BW - 1, BH - 1);
+  g.font = '7px DotGothic16';
+  g.fillStyle = '#c8a878';
+  g.fillText(label, L, y);
+  const val = `${fmtJa(cur)}${cur == null ? '' : unit} / ${fmtJa(goal)}${unit}`;
+  // 桁が伸びてバーに食い込むようなら字を詰める(看板の外へ出さない)
+  if (L + 24 + g.measureText(val).width > BX - 2) g.font = '6px DotGothic16';
+  g.fillStyle = '#f0d890';
+  g.fillText(val, L + 24, y);
+}
+
 function drawOffice(g, t, tm) {
   const hour = tm.h + tm.m / 60;
   const night = hour >= 19 || hour < 5;   // 5:00には外が明るい
@@ -599,12 +628,13 @@ function drawOffice(g, t, tm) {
       const line = String(m).slice(0, 8);
       g.fillText(line, bcx - g.measureText(line).width / 2, 24 + k * 7.5);
     });
-    // 看板に社名とYT登録者
-    g.font = '13px DotGothic16'; g.fillStyle = '#f0d890';
-    g.fillText('MON-AI Inc.', 489, 24);
-    g.font = '8px DotGothic16'; g.fillStyle = '#e8d0a0';
-    const subs = snap && snap.youtube && snap.youtube.subs != null ? snap.youtube.subs.toLocaleString('ja-JP') + '人' : '---';
-    g.fillText(`YT登録者 ${subs} / 目標${(CFG.youtubeGoal || 0).toLocaleString('ja-JP')}`, 487, 40);
+    // 看板: 社名 + YT目標カウンター2本(登録者・総再生)
+    g.font = '11px DotGothic16'; g.fillStyle = '#f0d890';
+    const cname = 'MON-AI Inc.';
+    g.fillText(cname, 553 - g.measureText(cname).width / 2, 19);
+    const yt0 = snap && snap.youtube;
+    drawGoalRow(g, '登録者', yt0 ? yt0.subs : null, CFG.youtubeGoal, '人', 33);
+    drawGoalRow(g, '総再生', yt0 ? yt0.views : null, CFG.youtubeViewGoal, '回', 45);
     // 窓: 背景の窓を壁色で消し、昼/夜素材の窓だけを描く
     rr(g, 160, 0, 94, 57, '#f0e7d4');
     rr(g, 378, 0, 92, 57, '#f0e7d4');
@@ -702,13 +732,14 @@ function drawOffice(g, t, tm) {
     g.beginPath(); g.moveTo(320, 22); g.lineTo(320 + Math.cos(hA) * 5, 22 + Math.sin(hA) * 5); g.stroke();
     g.beginPath(); g.moveTo(320, 22); g.lineTo(320 + Math.cos(mA) * 8, 22 + Math.sin(mA) * 8); g.stroke();
 
-    // 社名看板 + 登録者カウンター
-    rr(g, 412, 8, 204, 30, '#4a3b2a');
-    g.font = '13px DotGothic16'; g.fillStyle = '#f0d890';
-    g.fillText('MON-AI Inc.', 424, 22);
+    // 社名看板 + YT目標カウンター(背景画が無いときの簡易描画)
+    rr(g, 412, 6, 204, 40, '#4a3b2a');
+    g.font = '11px DotGothic16'; g.fillStyle = '#f0d890';
+    g.fillText('MON-AI Inc.', 424, 19);
+    const ytF = snap && snap.youtube;
     g.font = '6px DotGothic16'; g.fillStyle = '#e8d0a0';
-    const subs = snap && snap.youtube && snap.youtube.subs != null ? snap.youtube.subs.toLocaleString('ja-JP') + '人' : '---';
-    g.fillText(`YT登録者 ${subs} / 目標${(CFG.youtubeGoal || 0).toLocaleString('ja-JP')}`, 424, 33);
+    g.fillText(`登録者 ${fmtJa(ytF ? ytF.subs : null)}人 / ${fmtJa(CFG.youtubeGoal)}人`, 424, 31);
+    g.fillText(`総再生 ${fmtJa(ytF ? ytF.views : null)}回 / ${fmtJa(CFG.youtubeViewGoal)}回`, 424, 41);
 
   }
 
@@ -1786,6 +1817,7 @@ const CHAT_SETS = [
   { o: '経費で椅子買えないかな', r: ['社長は買ってくれそう', '稟議書いてみたら?', 'まず売上を立てよう…'] },
   { o: 'ボーナスって出ます?', r: ['社長「ゼロ円」って言ってた', '夢を見るのは自由', '登録者1万人いったらワンチャン'] },
   { o: '目標1万人、いけますかね', r: ['毎日投稿続ければいける', '今のペースなら来年には', '信じるしかない'] },
+  { o: '総再生1億回って、想像つく?', r: ['日本人が1回ずつ見る計算だよ', '数字がでかすぎて逆に燃える', '一本が10万回いけば1000本だね'] },
   { o: 'コメント欄あったかいよね', r: ['ほんと、励みになる', '全部読んでるよ', '泣けるコメントあった'] },
   { o: '再生数じわじわ来てる', r: ['伸びてる伸びてる', 'アルゴリズムに好かれてきた', 'この調子この調子'] },
   { o: '寝不足で目がしぱしぱする', r: ['目薬さしな', '今日は早く寝なよ', '5分仮眠おすすめ'] },
@@ -1921,6 +1953,11 @@ function makeChatLines(pa, pb) {
     const cost = snap.totals.todayCost || 0;
     sets.push({ o: `今日もう${fmtYen(cost * rate)}分働いたって`, r: ['うちの人件費、安いのにね', '成果で返そう', '電気代くらいは稼がないと'] });
     if (snap.youtube && snap.youtube.subs != null) sets.push({ o: `登録者${snap.youtube.subs}人になったね`, r: ['じわじわ増えてる!', '目標1万人、いけるよ', 'ありがたいねえ'] });
+    if (snap.youtube && snap.youtube.views != null) {
+      sets.push({ o: `総再生${fmtJa(snap.youtube.views)}回まできたよ`, r: ['1億回まであと少し…ではない', '塵も積もればって言うし', '一本ずつ増やすしかないね'] });
+      const left = Math.max(0, (CFG.youtubeViewGoal || 0) - snap.youtube.views);
+      if (left > 0) sets.push({ o: `1億回まであと${fmtJa(left)}回だって`, r: ['気が遠くなる数字だ…', '毎日出せば必ず近づく', '逆算するとやることは見えてる'] });
+    }
     if (snap.tasks && snap.tasks.count) sets.push({ o: `保留タスク${snap.tasks.count}件だって`, r: ['社長、抱えすぎでは', '手伝えることあるかな', '減る気配がない…'] });
     if (snap.claude.block && snap.claude.block.remainingMinutes != null && snap.claude.block.remainingMinutes < 90) sets.push({ who: 'ito', o: '伊藤さん5h枠もうすぐらしい', r: ['無理しないでほしいね', 'きょうこさんが心配してたよ', '休憩はさませよう'] });
     if (snap.deliveries && snap.deliveries.daihon) sets.push({ who: 'tsukishiro', o: `台本もう${snap.deliveries.daihon}本納品って`, r: ['ペース早いね', '月城さん、さすがだわ', '品質も落ちてないのがすごい'] });
@@ -3680,6 +3717,21 @@ function shiftActive(shift, tm) {
 const fmtYen = n => '¥' + Math.round(n).toLocaleString('ja-JP');
 const fmtUsd = n => '$' + (n >= 100 ? Math.round(n) : n.toFixed(1));
 const fmtTok = n => n >= 1e9 ? (n / 1e9).toFixed(1) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'K' : String(n);
+// 日本語の桁(万/億)。看板は幅が狭いので「24,544」より「2.4万」が読みやすい
+const fmtJa = n => {
+  if (n == null) return '---';
+  // 四捨五入だと 999,999→「100万」/ 99,999,999→「10000万」と実績を盛ってしまうので切り捨て
+  const cut = (v, d) => { const p = Math.pow(10, d); return String(Math.floor(v * p) / p); };
+  if (n >= 1e8) return cut(n / 1e8, n >= 1e9 ? 0 : 2) + '億';
+  if (n >= 1e4) return cut(n / 1e4, n >= 1e6 ? 0 : 1) + '万';
+  return Math.round(n).toLocaleString('ja-JP');
+};
+// 目標に対する達成率。1億が目標だと当分0.0%台なので、0にならない桁数まで出す
+const fmtGoalPct = (cur, goal) => {
+  if (cur == null || !goal) return '--';
+  const p = cur / goal * 100;
+  return (p >= 10 ? p.toFixed(0) : p >= 1 ? p.toFixed(1) : p.toFixed(2)) + '%';
+};
 
 /* ================================================================
    データ駆動イベント: 実データの変化を物語にする
@@ -4259,8 +4311,17 @@ function updateHud() {
   const yt = $('youtube');
   if (s.youtube && s.youtube.subs != null) {
     const goal = CFG.youtubeGoal || 0;
-    const pct = goal ? Math.min(100, Math.round(s.youtube.subs / goal * 100)) : 0;
-    yt.innerHTML = `<span>📺 登録者 <b>${s.youtube.subs.toLocaleString('ja-JP')}</b>人</span><span>🎯 目標比 <b>${pct}%</b></span><span>🎬 動画 <b>${s.youtube.videos != null ? s.youtube.videos.toLocaleString('ja-JP') : '-'}</b>本</span>`;
+    const vgoal = CFG.youtubeViewGoal || 0;
+    const bar = (cur, gl) => {
+      const w = gl ? Math.min(100, Math.max(cur > 0 ? 0.6 : 0, cur / gl * 100)) : 0;
+      return `<div class="bar"><i style="width:${w}%;background:var(--good)"></i></div>`;
+    };
+    yt.innerHTML =
+      `<div class="row"><span class="lbl">📺 登録者</span><span><b>${s.youtube.subs.toLocaleString('ja-JP')}</b>人 / 目標 ${fmtJa(goal)}人 (${fmtGoalPct(s.youtube.subs, goal)})</span></div>` +
+      bar(s.youtube.subs, goal) +
+      `<div class="row"><span class="lbl">📈 総再生</span><span><b>${(s.youtube.views ?? 0).toLocaleString('ja-JP')}</b>回 / 目標 ${fmtJa(vgoal)}回 (${fmtGoalPct(s.youtube.views, vgoal)})</span></div>` +
+      bar(s.youtube.views ?? 0, vgoal) +
+      `<div class="row"><span class="lbl">🎬 動画</span><span><b>${s.youtube.videos != null ? s.youtube.videos.toLocaleString('ja-JP') : '-'}</b>本</span></div>`;
   } else {
     yt.innerHTML = `<span style="opacity:.6">未接続 — collector/config.json の youtube に APIキー/チャンネルID を設定すると表示されます</span>`;
   }
@@ -4531,6 +4592,8 @@ function blitLive(t, tm) {
     $('lvMission').textContent = `「${CFG.mission}」`;
     const subs = snap && snap.youtube && snap.youtube.subs != null ? snap.youtube.subs.toLocaleString('ja-JP') + '人' : '---';
     $('lvSubs').textContent = `📺 YT登録者 ${subs}`;
+    const vw = snap && snap.youtube && snap.youtube.views != null ? snap.youtube.views : null;
+    $('lvViews').textContent = `📈 総再生 ${fmtJa(vw)}回 / 目標 ${fmtJa(CFG.youtubeViewGoal)}回`;
     $('lvWork').textContent = `💻 稼働中 ${employees.filter(e => e.present && e.mode === 'working').length}人`;
     // フォルダが読めなかった日(null)を0本と表示しない
     const d = snap && snap.deliveries && snap.deliveries.koen != null && snap.deliveries.daihon != null

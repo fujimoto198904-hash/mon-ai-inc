@@ -8,7 +8,8 @@ window.OFFICE_CONFIG = {
   // 会社の掲げもの
   mission: '物語を、毎日届ける。',
   mottos: ['一、無限労働', '一、社長一筋', '一、品質第一', '一、整理整頓'],
-  youtubeGoal: 10000,
+  youtubeGoal: 10000,          // 登録者の目標
+  youtubeViewGoal: 100000000,  // 総再生回数の目標(1億回・2026-07-28 MON設定)
 
   // 実際の固定費(月額・2026-07-22 MON申告)
   subscriptions: [
