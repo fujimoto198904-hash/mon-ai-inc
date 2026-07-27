@@ -429,12 +429,28 @@ function decorate(key, text) {
   return text + set[Math.floor(Math.random() * set.length)];
 }
 
-function pickFresh(key, pool) {
+// 共用プールの中には特定の人の名前が入った台詞がある。本人に言わせないための対応表
+const NAME_ALIASES = {
+  fujimoto: ['藤本', '社長', 'MON'], tsukishiro: ['月城'], ito: ['伊藤'], sasaki: ['佐々木'],
+  amakawa: ['天川'], ando: ['安藤'], hirose: ['廣瀬', 'きょうこ'], arimoto: ['有本'],
+  kato: ['加藤'], zama: ['座間'], shirayanagi: ['白柳'],
+};
+function namesSelf(line, id) {
+  const al = NAME_ALIASES[id];
+  return !!al && al.some(n => line.includes(n));
+}
+
+function pickFresh(key, pool, selfId) {
   if (!pool || !pool.length) return '';
   const hist = _recentSay[key] || (_recentSay[key] = []);
   const cap = Math.max(1, Math.floor(pool.length * 0.5));
   let cand, tries = 0;
-  do { cand = pool[Math.floor(Math.random() * pool.length)]; tries++; } while (hist.includes(cand) && tries < 25);
+  do { cand = pool[Math.floor(Math.random() * pool.length)]; tries++; }
+  while ((hist.includes(cand) || (selfId && namesSelf(cand, selfId))) && tries < 25);
+  if (selfId && namesSelf(cand, selfId)) {
+    const ok = pool.filter(x => !namesSelf(x, selfId));   // 自分の名前が入っていない行に逃がす
+    if (ok.length) cand = ok[Math.floor(Math.random() * ok.length)];
+  }
   hist.push(cand);
   while (hist.length > cap) hist.shift();
   return decorate(key, cand);
@@ -740,7 +756,7 @@ function drawOffice(g, t, tm) {
     const PX = 502, PY = 190, PW = 88, PH = 22;
     rr(g, PX, PY, PW, PH, '#37332c', INK);
     g.font = '6px DotGothic16';
-    const cpuTxt = mc.cpuPct != null ? `⚙CPU ${mc.cpuPct}%` : '⚙CPU --';
+    const cpuTxt = mc.cpuPct != null ? `CPU ${mc.cpuPct}%` : 'CPU --';   // 歯車記号(U+2699)は絵文字表示にならず豆腐になるので使わない
     g.fillStyle = '#8ef0b0';
     g.fillText(cpuTxt, PX + 4, PY + 8);
     if (mc.cpuPct != null) {
@@ -798,20 +814,26 @@ function drawOffice(g, t, tm) {
 const LANE_Y = 184;
 let _laneSeq = 0;
 function aisleX(seat) { return seat.x - 32; }
+// 上段の机と机のあいだの、実際に人が通れる縦の隙間(x)
+const TOP_AISLES = [199, 261, 328, 394, 476];
 
 // 部屋の中の地点から廊下(LANE_Y)までの退出経路。机・什器を突っ切らない
 function outPath(pt, lane) {
   const L = lane || LANE_Y;
   const { x, y } = pt;
   if (y < 160 && x < 132) return [{ x, y: 168 }, { x: 240, y: 168 }, { x: 240, y: L }];      // 社長室: 休憩室の上の帯を東へ
-  if (y < 160) { const a = x - 31; return [{ x: a, y }, { x: a, y: L }]; }                   // 上段: 机の間の隙間から
+  // 上段: 机の間の実在する隙間だけを縦に降りる(x-31だと掃除スポットが机を突っ切る)
+  if (y < 160) {
+    const a = TOP_AISLES.reduce((p, c) => (Math.abs(c - x) < Math.abs(p - x) ? c : p));
+    return [{ x: a, y }, { x: a, y: L }];
+  }
   if (y > 306 && x > 380 && x < 480) return [{ x, y: 342 }, { x: 374, y: 342 }, { x: 374, y: L }]; // 撮影スタジオ南: 入口通路経由
   if (y > 326 && x >= 236 && x <= 380) return [{ x, y: 342 }, { x: 374, y: 342 }, { x: 374, y: L }]; // 受付の下(ロビー南): 入口通路経由
   if (y > 262 && x >= 236 && x <= 380) return [{ x, y: 266 }, { x: 374, y: 266 }, { x: 374, y: L }]; // 受付まわり(カウンター上端272の上の帯): 右の通路から
   if (y > 198 && y < 285 && x >= 228 && x <= 368) return [{ x, y: 254 }, { x: 370, y: 254 }, { x: 370, y: L }]; // 総務部: 机の下→右通路
   if (y > 195 && x < 226) return [{ x, y: 256 }, { x: 206, y: 256 }, { x: 206, y: L }];      // 休憩室: 中央通路→右端列
   if (y >= 240 && y <= 306 && x > 380 && x < 480) return [{ x, y: 318 }, { x: 374, y: 318 }, { x: 374, y: L }]; // 撮影スタジオ内: 南口から入口通路経由
-  if (y > 250 && y < 320 && x > 490 && x <= 622) return [{ x, y: 324 }, { x: 480, y: 324 }, { x: 480, y: L }]; // 音声スタジオ: スタジオ間の隙間から出入り
+  if (y > 250 && y < 340 && x > 480 && x <= 626) return [{ x, y: 324 }, { x: 480, y: 324 }, { x: 480, y: L }]; // 音声スタジオ: スタジオ間の隙間から出入り(南側の掃除/警備地点も含める)
   return [{ x, y: L }];
 }
 
@@ -843,6 +865,8 @@ class Person {
   goto(target, arrival) {
     this.arrival = arrival;
     this._yielded = false;
+    this._stuckT = 0;   // 前の歩行の計測を持ち越すと、歩き出した瞬間にワープ判定が出る
+    this._propT = 0; this._propFree = false;
     this.arrivalSitY = null;
     if (!this.present) { this.pos = { x: 374, y: 346 }; this.present = true; }
     if (Math.hypot(target.x - this.pos.x, target.y - this.pos.y) < 3) {
@@ -950,6 +974,8 @@ const REST_SPOTS = [
 ];
 const RECEPTION_STAFF = ['tsukishiro', 'kato', 'zama'];
 const RECEPTION_POST = { x: 306, y: 290 };
+// 受付カウンターの当たり枠。OCCLUDERS と名札のレイヤー判定で共有する(ずれると名札が埋まる)
+const COUNTER_RECT = { x: 252, y: 272, w: 112, h: 42 };
 let receptionBy = null;
 
 function pickRestSpot() {
@@ -982,7 +1008,7 @@ const CLEAN_SPOTS = [
   { x: 285, y: 64, k: 'wipe' }, { x: 424, y: 312, k: 'wipe' }, { x: 436, y: 328, k: 'mop' }, { x: 607, y: 214, k: 'bucket' },
   { x: 200, y: 70, k: 'sweep' }, { x: 262, y: 70, k: 'wipe' }, { x: 392, y: 70, k: 'sweep' },
   { x: 560, y: 72, k: 'sweep' }, { x: 610, y: 74, k: 'wipe' },
-  { x: 24, y: 150, k: 'mop' }, { x: 24, y: 200, k: 'sweep' }, { x: 630, y: 160, k: 'sweep' },
+  { x: 24, y: 150, k: 'mop' }, { x: 24, y: 230, k: 'sweep' }, { x: 630, y: 160, k: 'sweep' },   // y200はコーヒーマシンの中だった
   { x: 632, y: 280, k: 'mop' }, { x: 60, y: 336, k: 'sweep' }, { x: 268, y: 336, k: 'wipe' },
   { x: 470, y: 336, k: 'sweep' }, { x: 520, y: 334, k: 'mop' }, { x: 580, y: 332, k: 'sweep' },
   { x: 176, y: 250, k: 'wipe' }, { x: 196, y: 196, k: 'sweep' }, { x: 340, y: 254, k: 'mop' },
@@ -1006,9 +1032,9 @@ const DOG_PLAY_REACT = ['ワン!', '(ゴロン)', '(しっぽ高速回転)', '�
 const JANITOR_SABORI_SPOTS = [
   { x: 66, y: 232, d: 'up' },     // 自販機の前でぼーっと
   { x: 150, y: 256, d: 'left' },  // 休憩室の隅
-  { x: 56, y: 306, d: 'down' },   // ロビーのソファ前
+  { x: 56, y: 326, d: 'up' },     // ロビーのソファ前(y306だとソファの中に立ってしまう)
   { x: 210, y: 330, d: 'left' },  // 受付脇の柱の影,
-  { x: 34, y: 196, d: 'right' },
+  { x: 34, y: 232, d: 'up' },     // コーヒーマシンの前(y196だと機械の裏に隠れる)
   { x: 630, y: 250, d: 'left' },
   { x: 196, y: 300, d: 'up' },
   { x: 470, y: 200, d: 'up' },
@@ -1673,7 +1699,7 @@ class Employee extends Person {
     if (!this.present || this.inChat) return;
     if (this.action === 'sleep' || this.mode === 'sleep') {
       if (t > this.nextBubble) {
-        this.say(t, pickFresh('sleep:' + this.id, SLEEP_TALK.concat(PERSONAL_SLEEP[this.id] || [])), 3600);
+        this.say(t, pickFresh('sleep:' + this.id, SLEEP_TALK.concat(PERSONAL_SLEEP[this.id] || []), this.id), 3600);
         this.nextBubble = t + 40000 + Math.random() * 50000;   // 寝言はたまに
       }
       return;
@@ -1719,7 +1745,7 @@ class Employee extends Person {
         return;
       }
       if (this.mode === 'idle' && this._idleAt && t - this._idleAt > 3600000 && Math.random() < 0.3) {
-        this.say(t, pickFresh('lament', IDLE_LAMENT), 3800);   // 1時間以上仕事が来ていない
+        this.say(t, pickFresh('lament', IDLE_LAMENT, this.id), 3800);   // 1時間以上仕事が来ていない
       } else {
         this.say(t, pickFresh('idle:' + this.id, this.bubbles), 3800);
       }
@@ -1864,13 +1890,24 @@ const WORK_GRUMBLES = [
 
 // ペア(質問と返事のセット)の非重複抽選
 const _setHist = [];
+// 話し手・聞き手本人の話題は外す。who タグに加えて「社長」を含むセットは社長本人がいたら丸ごと除外
+// (本人が自分を第三者みたいに話すのを防ぐ。返事はランダムに選ばれるのでセット単位で弾く)
+function setBanned(s, excludeIds) {
+  if (!excludeIds || !excludeIds.length) return false;
+  if (s.who && excludeIds.includes(s.who)) return true;
+  if (excludeIds.includes('fujimoto') && (/社長/.test(s.o) || s.r.some(x => /社長/.test(x)))) return true;
+  return false;
+}
 function pickChatSet(sets, excludeIds) {
   let s, tries = 0;
   do {
     s = sets[Math.floor(Math.random() * sets.length)];
     tries++;
-  } while ((_setHist.includes(s.o) || (s.who && excludeIds && excludeIds.includes(s.who))) && tries < 30);
-  if (s.who && excludeIds && excludeIds.includes(s.who)) s = sets.find(x => !x.who && !_setHist.includes(x.o)) || s;
+  } while ((_setHist.includes(s.o) || setBanned(s, excludeIds)) && tries < 30);
+  if (setBanned(s, excludeIds)) {
+    const ok = sets.filter(x => !setBanned(x, excludeIds) && !_setHist.includes(x.o));
+    if (ok.length) s = ok[Math.floor(Math.random() * ok.length)];   // 先頭固定だと同じ話題ばかりになる
+  }
   _setHist.push(s.o);
   while (_setHist.length > Math.floor(sets.length / 2)) _setHist.shift();
   return s;
@@ -1887,7 +1924,9 @@ function makeChatLines(pa, pb) {
     if (snap.tasks && snap.tasks.count) sets.push({ o: `保留タスク${snap.tasks.count}件だって`, r: ['社長、抱えすぎでは', '手伝えることあるかな', '減る気配がない…'] });
     if (snap.claude.block && snap.claude.block.remainingMinutes != null && snap.claude.block.remainingMinutes < 90) sets.push({ who: 'ito', o: '伊藤さん5h枠もうすぐらしい', r: ['無理しないでほしいね', 'きょうこさんが心配してたよ', '休憩はさませよう'] });
     if (snap.deliveries && snap.deliveries.daihon) sets.push({ who: 'tsukishiro', o: `台本もう${snap.deliveries.daihon}本納品って`, r: ['ペース早いね', '月城さん、さすがだわ', '品質も落ちてないのがすごい'] });
-    if (snap.codex.rateLimit) sets.push({ o: `コデックス週次残り${Math.max(0, Math.round(100 - snap.codex.rateLimit.usedPercent))}%だって`, r: ['ペース配分しないとね', '今週も走ってるなあ', '残量は計画的に'] });
+    // 3日前の読み取りを「今の話」として喋らせない
+    const rlC = snap.codex.rateLimit;
+    if (rlC && !(rlC.asOf && Date.now() - rlC.asOf > 720 * 60000)) sets.push({ o: `コデックス週次残り${Math.max(0, Math.round(100 - rlC.usedPercent))}%だって`, r: ['ペース配分しないとね', '今週も走ってるなあ', '残量は計画的に'] });
     if (snap.claude.block && snap.claude.block.costPerHour) sets.push({ o: `いま燃焼率${fmtYen(snap.claude.block.costPerHour * rate)}/hらしい`, r: ['社長の顔が青くなるやつ', '景気いいねえ…', '成果物で黒字にしよう'] });
   }
   const all = sets.concat(CHAT_SETS);
@@ -1920,7 +1959,7 @@ function stepChat(t) {
     return;
   }
   if (t < chat.next) return;
-  const idlers = employees.filter(e => e.present && e.mode === 'idle' && e.action !== 'walk' && !e.inChat && !e.atMeeting && !e.receptionOn);
+  const idlers = employees.filter(e => e.present && e.mode === 'idle' && e.action !== 'walk' && e.action !== 'sleep' && !e.inChat && !e.atMeeting && !e.receptionOn);
   if (idlers.length < 2) { chat.next = t + 30000; return; }
   let best = null, bestD = 1e9;
   for (let i = 0; i < idlers.length; i++) for (let j = i + 1; j < idlers.length; j++) {
@@ -1947,7 +1986,7 @@ function stepChat(t) {
 const GROUP_TOPICS = [
   'ねえ、登録者1万人いったら何する?', '今度みんなでラーメン行きません?', '社長のTシャツ、何枚同じの持ってるんだろ',
   'ララに芸を仕込みたいんだけど', '自販機の当たり、出たことある人!', '休憩室に漫画置きたくない?',
-  '深夜テンションで書いた台本、見返した?', '次のバズ動画、何系だと思う?', 'もし1日人間になれたら何する?',
+  '深夜テンションで書いた台本、見返した?', '次のバズ動画、何系だと思う?', 'もし1日だけ他の部署で働けたら何する?',
   '会社の非常食、誰か食べた?', 'オフィスBGM、何がいい?', '大掃除、いつやります?',
   '新しい社訓、考えない?', '忘年会って概念、うちにある?', 'サーバールームって涼しくて良いよね',
   '推しの絵文字、発表会しない?', '月末の数字、どうなると思う?', '撮影スタジオで写真撮らない?',
@@ -1956,7 +1995,7 @@ const GROUP_TOPICS = [
   '宝くじ当たったらどうする?',
   '週末どこか行った?', '最近ハマってるもの教えて', '朝ごはん派?抜く派?',
   'この会社の好きなところ言ってこ', '生まれ変わったら何になりたい?', '一番おいしかった差し入れは?',
-  '無人島に一つだけ持っていくなら', 'もし宝くじ当たったらどうする?', '好きな季節どれ?',
+  '無人島に一つだけ持っていくなら', 'もし1週間休めたらどこ行く?', '好きな季節どれ?',
   '子どものころの夢、覚えてる?', '自分の名前、気に入ってる?', '最近泣いたことある?',
   '一番古い記憶ってなに?', '徹夜と早起き、どっち派?', 'コンビニで必ず買うもの',
   'カラオケの十八番は?', '雨の日の過ごし方', '健康のために何かしてる?',
@@ -1998,7 +2037,7 @@ const FIGHT_LINES = [
   ['前見て歩こうよ', 'それ、そのまま返す'],
   ['譲る気ないでしょ', 'そっちこそ'],
   ['大人げないな', 'そっくりそのままお返しする'],
-  ['もういい、遠回りする', 'どうぞどうぞ'],
+  ['もういい、遠回りする', 'お好きな道で'],
   ['この件、根に持つからね', 'こっちのセリフ'],
   ['謝る気ある?', 'ない、と言ったら?'],
   ['社訓に「整理整頓」ってあるよね', '通行の話はしてない'],
@@ -2087,29 +2126,26 @@ const BBQ_TALK = [
   '肩甲骨が動いてる感じする', 'いいね、それが正解',
   '明日も来る?', '来る…と思う…たぶん',
   '背筋、意識して', '意識したら余計わからなくなった',
-], EVENT_REACT = [
-  'いい匂いしてきた…', '仕事に集中できない件', 'ずっと混ざっていたい…', 'あとで一口ください',
-  '音がもう美味しい', '煙こっち来た(嬉しい)', '休憩取ればよかった', '次は絶対参加する',
-  '楽しそうで何より', '声でかいって(笑)', '議事録は取らんでいい', '平和な会社だ…',
-  '集中…集中…', 'イヤホンで防御', '腹の音が鳴った', '夕飯どうしよ…',
-  '写真だけ撮っとこ', 'SNSに載せたい', '社外秘らしいよ', '残念すぎる',
-  '白柳さんの顔が曇ってる', '床…床が…', '掃除係の苦労よ', 'あとで手伝お',
-  'カロリーは正義', '罪の匂いがする', 'ダイエット中なのに', '明日から本気出す',
-  '月城さん寝てるのに', 'よく寝れるな…', '寝言がBBQに反応してる', '鼻が動いてる(笑)',
-  '社長も楽しそう', '童心に帰ってる', '経費の行方が心配', '税理士に怒られるやつ',
-  '仕事終わったら混ざる', 'あと1タスク…', 'ビルド待ちの間だけ…', 'ちょっとだけ…いや駄目だ',
-  '祭りかな?', '文化祭みたい', '青春してるな', 'うちの会社どうなってんの',
-  '羨ましくなんか…ある', '正直めっちゃ羨ましい', '心を無にして作業', '無理、匂いが勝つ',
-  '網の音ASMR', '作業BGMがジュージュー', '集中力が肉に負ける', '今日は負けを認める',
-  '筋トレ組は偉いな', '座ってるだけの係です', '見てるだけで疲れた', '応援だけしとく',
-  'ファイトー!', 'いっぽーん!', 'あと3回とか鬼', 'コーチ厳しすぎ(笑)',
-  'フォームきれい', '腰は大事にね', '労災になるよ(笑)', '安全第一,品質第一',
-  '若いなあ…', '気持ちだけは若手', 'それを言っちゃおしまい', '夢のある会社です',
-  '平和すぎて泣ける', '明日も頑張れそう', 'この会社好きだわ', '入社してよかった',
-  '誰か仕事して(笑)', 'やってる人はやってます', '頼もしすぎる', '給料上げてあげて',
-  '社訓「無限労働」とは', '休憩も仕事のうち', 'いい文化になった', 'ミッションは達成される',
-  '匂いで日報書けそう', '今日の日報:肉', '承認します', '最高の会社かよ',
 ];
+
+const EVENT_REACT_BBQ = [   // 焼肉のときだけの野次
+  'いい匂いしてきた…', 'ずっと混ざっていたい…', 'あとで一口ください', '音がもう美味しい', '煙こっち来た(嬉しい)', '腹の音が鳴った', '夕飯どうしよ…', 'カロリーは正義',
+  '罪の匂いがする', 'ダイエット中なのに', '寝言がBBQに反応してる', '鼻が動いてる(笑)', '無理、匂いが勝つ', '網の音ASMR', '作業BGMがジュージュー', '集中力が肉に負ける',
+  '匂いで日報書けそう', '今日の日報:肉'
+];
+const EVENT_REACT_GYM = [   // 筋トレのときだけの野次
+  '筋トレ組は偉いな', '見てるだけで疲れた', 'ファイトー!', 'いっぽーん!', 'あと3回とか鬼', 'コーチ厳しすぎ(笑)', 'フォームきれい', '腰は大事にね', '労災になるよ(笑)'
+];
+const EVENT_REACT_ANY = [   // どちらでも成立する野次
+  '仕事に集中できない件', '休憩取ればよかった', '次は絶対参加する', '楽しそうで何より', '声でかいって(笑)', '議事録は取らんでいい', '平和な会社だ…', '集中…集中…', 'イヤホンで防御',
+  '写真だけ撮っとこ', 'SNSに載せたい', '社外秘らしいよ', '残念すぎる', '白柳さんの顔が曇ってる', '床…床が…', '掃除係の苦労よ', 'あとで手伝お', '明日から本気出す',
+  '月城さん寝てるのに', 'よく寝れるな…', '社長も楽しそう', '童心に帰ってる', '経費の行方が心配', '税理士に怒られるやつ', '仕事終わったら混ざる', 'あと1タスク…',
+  'ビルド待ちの間だけ…', 'ちょっとだけ…いや駄目だ', '祭りかな?', '文化祭みたい', '青春してるな', 'うちの会社どうなってんの', '羨ましくなんか…ある', '正直めっちゃ羨ましい',
+  '心を無にして作業', '今日は負けを認める', '座ってるだけの係です', '応援だけしとく', '安全第一,品質第一', '若いなあ…', '気持ちだけは若手', 'それを言っちゃおしまい',
+  '夢のある会社です', '平和すぎて泣ける', '明日も頑張れそう', 'この会社好きだわ', '入社してよかった', '誰か仕事して(笑)', 'やってる人はやってます', '頼もしすぎる', '給料上げてあげて',
+  '社訓「無限労働」とは', '休憩も仕事のうち', 'いい文化になった', 'ミッションは達成される', '承認します', '最高の会社かよ'
+];
+const EVENT_REACT_POOL = { bbq: EVENT_REACT_BBQ.concat(EVENT_REACT_ANY), gym: EVENT_REACT_GYM.concat(EVENT_REACT_ANY) };
 
 const WORK_TALK = [
   'まず要件を整理しよう', '期限はいつまで?', '今日中にいけます', '仕様書どこでしたっけ',
@@ -2182,7 +2218,7 @@ function stepEvent(t) {
   if (t < officeEvent.next || t < officeEvent.cooldown) return;
   officeEvent.next = t + 30000;
   if (standup.active || fight.active) return;
-  const idle = employees.filter(e => e.present && e.mode === 'idle' && !e.inChat && !e.atMeeting && !e.receptionOn && e.action !== 'walk');
+  const idle = employees.filter(e => e.present && e.mode === 'idle' && !e.inChat && !e.atMeeting && !e.receptionOn && e.action !== 'walk' && e.action !== 'sleep');
   // 白柳も誘う(掃除は逃げないので)
   const jan = employees.find(x => x.def.source === 'janitor');
   if (jan && jan.present && !jan.inChat && !jan.inEvent && jan.action !== 'walk' && Math.random() < 0.7) idle.push(jan);
@@ -2233,11 +2269,6 @@ const LARA_SCOLD = [
 
 // BBQの煙→もくもく→火災報知器
 let hazeLevel = 0;
-const ALARM_REACT = [
-  '警報!!', '煙すごい!!', 'けほけほっ', '窓!窓開けて!(開かないやつ)', '火元どこ!?',
-  'スタジオが霞んで見えない', 'スプリンクラー来るぞ!?', '肉は守って!!', '避難訓練!?', '耳がぁぁ',
-  '誰か換気ー!!', 'うちわ持ってこい!', '報知器さん落ち着いて', '焼きすぎだって言った!',
-];
 
 // 解散後の余韻(それぞれ持ち場に戻りながらの独り言)
 const BBQ_AFTER = [
@@ -2406,9 +2437,15 @@ function startPanic(t) {
   if (romance.active) endRomance(t);
   if (directive.active && bossP) endDirective(bossP, t);
   if (patrol.active && bossP) endPatrol(bossP, t);
+  if (groupChat.active) endGroupChat(t, 40000);
+  fight.cooldown = Math.max(fight.cooldown, panic.until + 3000);
+  // chimeBreak.until を0にするときは、不在の人も含めて全員のフラグを落とす(でないと巡回/恋愛が永久に止まる)
   chimeBreak.until = 0;
-  directive.next = t + 40000; patrol.next = t + 40000; chat.next = t + 40000;
-  const folks = employees.filter(e => e.present).sort(() => Math.random() - 0.5);
+  for (const e of employees) { if (e.onChimeBreak) { e.onChimeBreak = false; e.releaseSpot(); e.resting = false; } }
+  directive.next = t + 40000; patrol.next = t + 40000; chat.next = t + 40000; groupChat.next = t + 40000;
+  // 帰り支度中(まだ present だが mode は out/退勤)の人を巻き込むと、そのまま社内に居座ってしまう
+  const folks = employees.filter(e => e.present && e.mode !== 'out' && e.mode !== 'sleephome' && e.mode !== 'off')
+    .sort(() => Math.random() - 0.5);
   let wi = 0;
   const deck = PANIC_DECK.slice().sort(() => Math.random() - 0.5);   // 役札を毎回シャッフル
   folks.forEach((e, i) => {
@@ -2468,11 +2505,20 @@ function endPanic(t) {
     // 全員その場でぴたっと止まる(この静止のあとに社長の怒声が入る)
     e.path = []; e.target = null;
     if (e.action === 'walk') e.action = 'stand';
+    if (panic.evac.includes(e.id)) continue;        // 下の逃走組ループで戻す
+    if (e.def.source === 'boss' && officeEvent.active) continue;   // 社長はこのあと怒鳴り込みがあるので動かさない
+    if (e.mode === 'idle') continue;                // idle は think() が1.5秒後に自分で動き出す
+    // 持ち場に戻す。放っておくと mode==='working' の人は think() が回らず立ちっぱなしになる
+    if (e.mode === 'sleep') e.goto(e.seat, 'sleep');
+    else if (e.mode === 'off' || e.mode === 'out' || e.mode === 'sleephome') e.goto({ x: 374, y: 346 }, 'leave');
+    else e.gotoWork();
   }
   // 外に逃げた人はこわごわ戻ってくる
   panic.evac.forEach((id, i) => {
     const e = employees.find(x => x.id === id);
     if (!e) return;
+    if (e.mode === 'off' || e.mode === 'out' || e.mode === 'sleephome') return;   // 帰った人は連れ戻さない
+    if (e.mode === 'sleep') { e.goto(e.seat, 'sleep'); return; }
     e.gotoWork();
     e.say(t + 1200 + i * 1800, pickFresh('panicback', PANIC_BACK), 3200);
   });
@@ -2480,25 +2526,31 @@ function endPanic(t) {
 }
 
 // イベントの終わり=社長が怒りに来る
-const BOSS_BUST = [
-  'おいこら!仕事はどうした!!', '誰が宴会を許可した!?', 'ずいぶん楽しそうだなぁ?????',
-  'はい解散!解散!!', '経費で肉焼くなーー!!', 'ダンベルより納期を持てー!!',
-  '全員、席に戻れ〜!!', '俺も混ぜ…じゃなくて、解散だ!!', '煙で火災報知器鳴ったらどうする!!',
-  '筋肉は裏切らないが納期は裏切るぞ!!', 'いい匂いさせやがって…解散!!', '会社をジムにするな!!',
-  '匂いで気づいたぞ!!', 'なぜ社内で網を出す!!', '報知器が泣いてるぞ!!',
-  '業務時間だぞ、業務!!', '楽しそうで何より…じゃない!!', '片付け!いますぐ!!',
-  '次やったら経費で落とさんぞ!!', '煙が!煙が!!', '会議室でやれ…いや、どこでもダメだ!!',
-  '誰の許可だ!俺は聞いてない!!', 'この匂いで仕事ができるか!!', '解散!以上!!',
+const BOSS_BUST_BBQ = [   // 焼肉のときだけの怒声
+  '誰が宴会を許可した!?', '経費で肉焼くなーー!!', '煙で火災報知器鳴ったらどうする!!', 'いい匂いさせやがって…解散!!', '匂いで気づいたぞ!!', 'なぜ社内で網を出す!!', '煙が!煙が!!',
+  'この匂いで仕事ができるか!!'
 ];
-const EVENT_SORRY = [
-  'すみません社長!', '片付けます!', '解散ー!', '戻ります戻ります', 'あと一本だけ…だめですよね',
-  '社長もどうぞ…すみません', 'はい、ただいま!', '見てました?…見てましたか…', '火は消しておきます!',
-  'ストレッチは仕事のうち…はい、違います', '証拠隠滅!', 'プロテインしまいます!',
-  'ごめんなさい社長!', '(全力で片付け始めた)', 'つい、盛り上がってしまって',
-  '一口だけでしたので…', '(証拠を背中に隠した)', '反省してます、たぶん',
-  '次は屋上でやります(屋上はない)', 'におい、消しておきます!', '(気配を消そうとしている)',
-  '社長のぶんも取ってあります', '(そっと網を下ろした)', '解散します!ただちに!',
+const BOSS_BUST_GYM = [   // 筋トレのときだけの怒声
+  'ダンベルより納期を持てー!!', '筋肉は裏切らないが納期は裏切るぞ!!', '会社をジムにするな!!'
 ];
+const BOSS_BUST_ANY = [   // どちらでも成立する怒声
+  'おいこら!仕事はどうした!!', 'ずいぶん楽しそうだなぁ?????', 'はい解散!解散!!', '全員、席に戻れ〜!!', '俺も混ぜ…じゃなくて、解散だ!!', '報知器が泣いてるぞ!!',
+  '業務時間だぞ、業務!!', '楽しそうで何より…じゃない!!', '片付け!いますぐ!!', '次やったら経費で落とさんぞ!!', '会議室でやれ…いや、どこでもダメだ!!', '誰の許可だ!俺は聞いてない!!',
+  '解散!以上!!'
+];
+const BOSS_BUST_POOL = { bbq: BOSS_BUST_BBQ.concat(BOSS_BUST_ANY), gym: BOSS_BUST_GYM.concat(BOSS_BUST_ANY) };
+const EVENT_SORRY_BBQ = [   // 焼肉のときだけの言い訳
+  'あと一本だけ…だめですよね', '社長もどうぞ…すみません', '火は消しておきます!', '一口だけでしたので…', '次は屋上でやります(屋上はない)', 'におい、消しておきます!',
+  '社長のぶんも取ってあります', '(そっと網を下ろした)'
+];
+const EVENT_SORRY_GYM = [   // 筋トレのときだけの言い訳
+  'ストレッチは仕事のうち…はい、違います', 'プロテインしまいます!'
+];
+const EVENT_SORRY_ANY = [   // どちらでも成立する言い訳
+  'すみません社長!', '片付けます!', '解散ー!', '戻ります戻ります', 'はい、ただいま!', '見てました?…見てましたか…', '証拠隠滅!', 'ごめんなさい社長!', '(全力で片付け始めた)',
+  'つい、盛り上がってしまって', '(証拠を背中に隠した)', '反省してます、たぶん', '(気配を消そうとしている)', '解散します!ただちに!'
+];
+const EVENT_SORRY_POOL = { bbq: EVENT_SORRY_BBQ.concat(EVENT_SORRY_ANY), gym: EVENT_SORRY_GYM.concat(EVENT_SORRY_ANY) };
 
 function runEvent(t) {
   const ev = officeEvent.active;
@@ -2542,10 +2594,10 @@ function runEvent(t) {
       if (boss.action !== 'walk') {
         ev.bustStage = 'scold';
         ev.bustAt = t;
-        boss.say(t, pickFresh('bossbust', BOSS_BUST), 3800);
+        boss.say(t, pickFresh('bossbust:' + ev.kind, BOSS_BUST_POOL[ev.kind]), 3800);
         ev.members.forEach((e, i) => {
           e.dir = e.pos.x > boss.pos.x ? 'left' : 'right';
-          e.say(t + 1400 + i * 750, pickFresh('evsorry', EVENT_SORRY), 2600);
+          e.say(t + 1400 + i * 750, pickFresh('evsorry:' + ev.kind, EVENT_SORRY_POOL[ev.kind], e.id), 2600);
         });
       }
       return;
@@ -2567,12 +2619,15 @@ function runEvent(t) {
     return;
   }
   if (t > ev.nextLine && !panic.until) {
-    const talker = ev.members[Math.floor(Math.random() * ev.members.length)];
-    if (talker.action !== 'walk') {
-      const pool = ev.kind === 'bbq' ? BBQ_TALK : GYM_TALK;
-      const pi = pickPairIdx('ev:' + ev.kind, pool);
+    const pool = ev.kind === 'bbq' ? BBQ_TALK : GYM_TALK;
+    const pi = pickPairIdx('ev:' + ev.kind, pool);
+    // Q→Aのペアなので行は消せない。代わりに「その名前が出てくる本人」以外を話し手に選ぶ
+    const cands = ev.members.filter(m => m.action !== 'walk' && !namesSelf(pool[pi], m.id));
+    const talker = cands.length ? cands[Math.floor(Math.random() * cands.length)] : null;
+    if (talker) {
       talker.say(t, decorate('ev:' + ev.kind, pool[pi]), 3200);
-      const others = ev.members.filter(m => m !== talker && m.action !== 'walk');
+      const others = ev.members.filter(m => m !== talker && m.action !== 'walk'
+        && !(pool[pi + 1] && namesSelf(pool[pi + 1], m.id)));
       const rep2 = others.length ? others[Math.floor(Math.random() * others.length)] : null;
       if (rep2 && pool[pi + 1]) rep2.say(t + 3300, decorate('ev:' + ev.kind, pool[pi + 1]), 3200);
       if (ev.kind === 'gym') { talker.anticUntil = t + 3500; }
@@ -2582,7 +2637,8 @@ function runEvent(t) {
   if (t > ev.nextReact && !panic.until) {
     const watchers = employees.filter(e => e.present && !e.inEvent && !e.inChat && e.def.source !== 'janitor');
     if (watchers.length) {
-      watchers[Math.floor(Math.random() * watchers.length)].say(t, pickFresh('evreact', EVENT_REACT), 3200);
+      const wt = watchers[Math.floor(Math.random() * watchers.length)];
+      wt.say(t, pickFresh('evreact:' + ev.kind, EVENT_REACT_POOL[ev.kind], wt.id), 3200);
     }
     ev.nextReact = t + 8000 + Math.random() * 8000;
   }
@@ -2597,13 +2653,20 @@ function endEvent(t) {
       if (e.mode === 'working') e.gotoWork();
       else if (e.mode === 'sleep') e.goto(e.seat, 'sleep');
       // 持ち場に戻りながらの余韻独り言
-      e.say(t + 2500 + i * 1600 + Math.random() * 1200, pickFresh('evafter', afterPool), 3400);
+      e.say(t + 2500 + i * 1600 + Math.random() * 1200, pickFresh('evafter', afterPool, e.id), 3400);
     });
     if (ev.boss) {
       ev.boss.inChat = false;
       ev.boss.nextThink = 0;
-      if (ev.boss.mode === 'working') ev.boss.goto(ev.boss.seat, 'sit');
+      if (ev.boss.mode === 'working') ev.boss.gotoWork();
       if (Math.random() < 0.5) ev.boss.say(t + 4000, ['まったく…楽しそうで何よりだ', '次は俺も呼べよ…じゃなくて!', 'はぁ…若いっていいな', '床、白柳さんに謝っておけよ'][Math.floor(Math.random() * 4)], 3200);
+    } else {
+      // 怒鳴り込みが不発だった場合、パニックで持ち場を離れたままの社長を戻す(endPanicは社長を触らない)
+      const bossE = employees.find(x => x.def.source === 'boss');
+      if (bossE && bossE.present && bossE.mode === 'working'
+        && !bossE.recording && !bossE.inChat && bossE.action !== 'walk' && bossE.action !== 'sit') {
+        bossE.gotoWork();
+      }
     }
   }
   officeEvent.active = null;
@@ -2612,7 +2675,8 @@ function endEvent(t) {
 
 function stepStandup(t) {
   const boss = employees.find(e => e.def.source === 'boss');
-  if (!boss || !boss.present) return;
+  // 途中で社長が退社したら朝会を畳む。畳まないと参加者の inChat が立ちっぱなしになる
+  if (!boss || !boss.present) { if (standup.active) endStandup(t); return; }
   if (standup.active) {
     const st = standup.active;
     const alive = st.members.filter(e => e.present);
@@ -2657,25 +2721,39 @@ function endStandup(t) {
   const st = standup.active;
   if (st) {
     for (const e of st.members) {
-      e.inChat = false;
+      if (!e.panicking) e.inChat = false;
       e.nextThink = 0;
-      if (e.mode === 'working') e.gotoWork();
+      if (e.present && e.mode === 'working') e.gotoWork();
     }
   }
   standup.active = null;
   standup.next = t + 60000;
 }
 
+// 机に話しかけに行く立ち位置。総務部の島は机が隙間なく並ぶので、左が塞がっていたら右→正面に回り込む
+function deskApproach(tgt) {
+  const d = tgt.desk;
+  const blocked = x => employees.some(e => e !== tgt && e.desk && e.desk.y === d.y
+    && x > e.desk.x - 25 && x < e.desk.x + 25);
+  if (!blocked(d.x - 30)) return [{ x: d.x - 30, y: d.y + 20 }, 'faceR'];
+  if (!blocked(d.x + 30)) return [{ x: d.x + 30, y: d.y + 20 }, 'faceL'];
+  return [{ x: d.x, y: d.y + 46 }, 'faceU'];
+}
+
 function stepDirective(t) {
   const boss = employees.find(e => e.def.source === 'boss');
-  if (!boss || !boss.present) return;
+  if (!boss || !boss.present) { if (directive.active) endDirective(boss, t); return; }
+  if (boss.mode === 'out' || boss.mode === 'sleephome' || boss.mode === 'off') { if (directive.active) endDirective(boss, t); return; }
   if (directive.active) {
     const d = directive.active;
     const tgt = d.target;
     if (!tgt.present) { endDirective(boss, t); return; }
     if (d.phase === 'go') {
       if (boss.action !== 'walk') {
-        boss.dir = 'right';
+        // 回り込む向きが左右どちらにもなるので、相手のほうを向かせる
+        boss.dir = Math.abs(tgt.pos.y - boss.pos.y) > Math.abs(tgt.pos.x - boss.pos.x)
+          ? (tgt.pos.y > boss.pos.y ? 'down' : 'up')
+          : (tgt.pos.x >= boss.pos.x ? 'right' : 'left');
         boss.say(t, pickFresh('order', BOSS_ORDERS), 3200);
         d.phase = 'talk'; d.until = t + 3400;
       }
@@ -2699,7 +2777,7 @@ function stepDirective(t) {
   boss.inChat = true; boss.directing = true;
   tgt.inChat = true;   // 対象をロック(話しかけ中に雑談へ拉致されない)
   if (tgt.id === 'tsukishiro') boss.goto({ x: TSUKI_STUDIO_POST.x - 26, y: TSUKI_STUDIO_POST.y + 2 }, 'faceR');
-  else boss.goto({ x: tgt.desk.x - 30, y: tgt.desk.y + 20 }, 'faceR');
+  else { const [sp, fc] = deskApproach(tgt); boss.goto(sp, fc); }
   directive.active = { target: tgt, phase: 'go' };
 }
 
@@ -2707,9 +2785,10 @@ function endDirective(boss, t) {
   if (directive.active && directive.active.target) directive.active.target.inChat = false;
   directive.active = null;
   directive.next = t + 15000;
+  if (!boss) return;
   boss.inChat = false; boss.directing = false;
   boss.nextThink = 0;
-  if (boss.mode === 'working') boss.goto(boss.seat, 'sit');
+  if (boss.present && boss.mode === 'working') boss.gotoWork();
 }
 
 /* ================================================================
@@ -2754,7 +2833,7 @@ const TSUKI_NIGHT = [
 const KYOKO_CHEER = [
   'がんばって、伊藤くん!', '応援しに来ちゃった', 'コーヒー置いとくね(気持ち)', '今日もかっこいいよ、その背中',
   '無理しないでね?', '肩もみしてあげよっか', 'きょうこが見守ってるからね', '進捗どう?…って顔が疲れてる!',
-  '夜食、何がいい?', 'タイピング音、好きなんだよね', 'その調子その調子!', '終わったらお茶しよ?',
+  'タイピング音、好きなんだよね', 'その調子その調子!', '終わったらお茶しよ?',
   '差し入れはわたしの笑顔です', '深呼吸して?はい、すーはー', '伊藤くんのコード、きれいだよね',
   '目、しょぼしょぼしてない?', 'ファイト!超ファイト!', '休憩も仕事のうちだよ?', '世界一がんばってる',
   '今日の伊藤くんも優勝', 'あとちょっとだね、ラストスパート!', 'エラー出ても、わたしは味方',
@@ -2764,7 +2843,7 @@ const KYOKO_CHEER = [
   'yorutoolより伊藤くん優先で来た', '手、冷えてない?', 'デバッグの神が降りますように',
   '伊藤くんの集中顔、いいね', '水分とった?', '姿勢!猫背になってる!', '疲れたら呼んでね、飛んでくる',
   '今夜は早く寝てね?', 'わたしの分までがんばらなくていいよ', '応援団長きょうこ、参上',
-  'できるできる絶対できる', '天才って言っていい?', '終電…あ、家この会社だった', 'しゅきしゅき(小声)',
+  'できるできる絶対できる', '天才って言っていい?', 'しゅきしゅき(小声)',
   '差し入れ、机に置いとくね', 'その集中力、尊敬してる', '休憩、ちゃんと取ってる?',
   '無理しないでね、本当に', '今日も一番かっこいいよ', '手、止まってないね、えらい',
   'コーヒー淹れてこようか?', '肩、こってるでしょ', 'ちょっとだけ顔見に来た',
@@ -2782,6 +2861,15 @@ const KYOKO_CHEER = [
   'ここにいるからね', '肩の力、抜いていいんだよ',
   '今日もそばで見てるからね', '(そっと親指を立てた)',
 ];
+// 夜だけの応援(昼に「終電」と言わせないための分離プール・IDLE_MUTTER_NIGHTと同じ方式)
+const KYOKO_CHEER_NIGHT = [
+  '終電…あ、家この会社だった', '夜食、何がいい?', 'こんな時間までえらいね', '夜のオフィス、ふたりだけだね',
+  'そろそろ休も?ね?', '静かな夜、集中できる?', '夜更かしは肌に悪いよ?', '毛布、持ってこようか',
+];
+function kyokoCheerPool() {
+  const h = jstNow().h;
+  return (h >= 19 || h < 5) ? KYOKO_CHEER.concat(KYOKO_CHEER_NIGHT) : KYOKO_CHEER;
+}
 const ITO_CHEER_REPLY = [
   'お、おう…仕事中だぞ(嬉しい)', 'きょうこか…力出るわ', '見られてると緊張するな…', 'あとでな、いま良いとこ',
   'サンキュ…がんばれる', '肩もみは…あとで頼む', '(タイピングが速くなる)', '照れるからやめれ(照れ)',
@@ -2847,7 +2935,7 @@ function stepRomance(t) {
         if (kyoko.action !== 'walk') {
           r.phase = 'talk'; r.until = t + 3600;
           kyoko.dir = 'left';
-          kyoko.say(t, pickFresh('kyokocheer', KYOKO_CHEER), 3400);
+          kyoko.say(t, pickFresh('kyokocheer', kyokoCheerPool()), 3400);
           spawnParticle('heart', ito.pos.x + 6, ito.pos.y - 26);
           spawnParticle('heart', kyoko.pos.x - 4, kyoko.pos.y - 28);
         }
@@ -2962,11 +3050,11 @@ const SECURITY_STOPS = [
   { x: 306, y: 268, d: 'down', name: '受付' },
   { x: 96, y: 232, d: 'up', name: '給湯コーナー' },
   { x: 336, y: 336, d: 'down', name: '入口' },
-  { x: 96, y: 232, d: 'up', name: '自販機まわり' },
+  { x: 68, y: 232, d: 'up', name: '自販機まわり' },
   { x: 470, y: 198, d: 'up', name: '倉庫の段ボール' },
-  { x: 24, y: 150, d: 'left', name: '消火器' },
+  { x: 26, y: 92, d: 'left', name: '消火器' },
   { x: 560, y: 322, d: 'up', name: '音声スタジオ' },
-  { x: 150, y: 300, d: 'down', name: '休憩室' },
+  { x: 150, y: 324, d: 'up', name: '休憩室' },
 ];
 const BOSS_SECURITY = [
   '{p}、異常なし', '{p}よし!', '{p}…問題ないな', '戸締まりよし(閉まる戸はないが)', '消火器の位置、よし',
@@ -3058,10 +3146,10 @@ const PATROL_REPLY_WORK = [
   'いけます、いけます!', 'ちょうど乗ってきたところです', 'ご心配なく!',
   'その言葉で3時間戦えます', '社長も無理しないでくださいね', 'あと少しで形になります',
   '順調です、たぶん', '声かけ、ありがたいです', 'このあと一気に仕上げます',
-  '期待、重いですけど嬉しいです', 'ちょっと詰まってたので助かりました', '押忍!',
+  '期待、重いですけど嬉しいです', 'ちょっと詰まってたので助かりました', 'ここが踏ん張りどころです',
   '休憩は…終わってからにします', '任されるの、好きなんです', '品質は落としません',
   'コーヒーいただけると加速します', '見守っててください', 'いい感じです!',
-  'あとは仕上げだけです', '見ててください', '自分のためにもやってます',
+  'あとは仕上げだけです', '結果でお返しします', '自分のためにもやってます',
   'あと少しです!', '手応えあります', 'いい流れきてます', '任せてください!',
 ];
 const PATROL_REPLY_IDLE = [
@@ -3078,7 +3166,9 @@ const PATROL_REPLY_IDLE = [
 
 function stepPatrol(t) {
   const boss = employees.find(e => e.def.source === 'boss');
-  if (!boss || !boss.present) return;
+  // 途中で社長が退社したら見回りを畳む。畳まないと相手が inChat のまま固まる
+  if (!boss || !boss.present) { if (patrol.active) endPatrol(boss, t); return; }
+  if (boss.mode === 'out' || boss.mode === 'sleephome' || boss.mode === 'off') { if (patrol.active) endPatrol(boss, t); return; }
   if (patrol.active) {
     const p = patrol.active;
     if (p.kind === 'security') {
@@ -3112,13 +3202,13 @@ function stepPatrol(t) {
       if (boss.action !== 'walk') {
         boss.dir = tgt.pos.x >= boss.pos.x ? 'right' : 'left';
         const pool = tgt.mode === 'working' ? BOSS_PATROL_WORK : BOSS_PATROL_IDLE;
-        boss.say(t, pickFresh('patrol', pool), 3400);
+        boss.say(t, pickFresh('patrol', pool, tgt.id), 3400);   // 相手の名前が入った行を本人の目の前で言わない
         p.phase = 'talk'; p.until = t + 3600;
       }
     } else if (p.phase === 'talk') {
       if (t > p.until) {
         const rpool = tgt.mode === 'working' ? PATROL_REPLY_WORK : PATROL_REPLY_IDLE;
-        if (tgt.action !== 'sleep') tgt.say(t, pickFresh('patrolreply', rpool), 3000);
+        if (tgt.action !== 'sleep') tgt.say(t, pickFresh('patrolreply', rpool, tgt.id), 3000);
         else tgt.say(t, '……zzz(返事なし)', 2400);
         p.phase = 'back'; p.until = t + 3000;
       }
@@ -3151,7 +3241,7 @@ function stepPatrol(t) {
   if (tgt.id === 'tsukishiro' && tgt.action === 'studio') {
     boss.goto({ x: TSUKI_STUDIO_POST.x - 26, y: TSUKI_STUDIO_POST.y + 2 }, 'faceR');
   } else if (tgt.action === 'sit' && !tgt.resting) {
-    boss.goto({ x: tgt.desk.x - 30, y: tgt.desk.y + 20 }, 'faceR');
+    const [sp, fc] = deskApproach(tgt); boss.goto(sp, fc);
   } else {
     boss.goto({ x: tgt.pos.x - 20, y: tgt.pos.y + 2 }, 'faceR');
   }
@@ -3163,9 +3253,11 @@ function endPatrol(boss, t) {
   if (patrol.active && patrol.active.target) patrol.active.target.inChat = false;
   patrol.active = null;
   patrol.next = t + 60000 + Math.random() * 80000;   // 見回り・警備は1〜2.3分に1回(社長は現場主義)
+  // 社長が退社してしまったあとでも呼ばれる。不在の人に goto すると入口から復活してしまうので触らない
+  if (!boss) return;
   boss.inChat = false;
   boss.nextThink = 0;
-  if (boss.mode === 'working') boss.goto(boss.seat, 'sit');
+  if (boss.present && boss.mode === 'working') boss.gotoWork();
 }
 
 function startFight(a, b, t) {
@@ -3197,6 +3289,7 @@ function stepFight(t) {
   if (!fight.active) return;
   const f = fight.active;
   if (!f.a.present || !f.b.present || f.a.mode === 'panic' || f.b.mode === 'panic') { endFight(t); return; }
+  if (f.a.panicking || f.b.panicking) { endFight(t); return; }
   if (t > f.nextLine) {
     const line = f.lines[f.li];
     if (line == null) { endFight(t); return; }
@@ -3210,7 +3303,7 @@ function endFight(t) {
   const f = fight.active;
   if (f) {
     for (const e of [f.a, f.b]) {
-      e.inChat = false;
+      if (!e.panicking) e.inChat = false;
       e.nextThink = 0;
       if (e.mode === 'working') e.gotoWork();
       else if (e.mode === 'sleep') e.goto(e.seat, 'sleep');
@@ -3222,23 +3315,22 @@ function endFight(t) {
 }
 
 
+function endGroupChat(t, wait) {
+  const ga = groupChat.active;
+  if (ga) for (const e of ga.members) { if (!e.panicking) e.inChat = false; }
+  groupChat.active = null;
+  groupChat.next = t + wait;
+}
+
 function stepGroupChat(t) {
-  if (chat.active) return;
+  if (chat.active || panic.until) return;
   if (groupChat.active) {
     const ga = groupChat.active;
     const alive = ga.members.filter(e => e.present && e.mode === 'idle');
-    if (alive.length < 2) {
-      for (const e of ga.members) e.inChat = false;
-      groupChat.active = null; groupChat.next = t + 60000;
-      return;
-    }
+    if (alive.length < 2) { endGroupChat(t, 60000); return; }
     if (t > ga.nextLine) {
       const line = ga.lines[ga.li];
-      if (line == null) {
-        for (const e of ga.members) e.inChat = false;
-        groupChat.active = null; groupChat.next = t + 90000 + Math.random() * 120000;
-        return;
-      }
+      if (line == null) { endGroupChat(t, 90000 + Math.random() * 120000); return; }
       alive[ga.li % alive.length].say(t, line, 3400);
       ga.li++;
       ga.nextLine = t + 3700;
@@ -3246,13 +3338,19 @@ function stepGroupChat(t) {
     return;
   }
   if (t < groupChat.next) return;
-  const rest = employees.filter(e => e.present && e.mode === 'idle' && e.resting && e.action !== 'walk' && !e.inChat && !e.atMeeting && !e.receptionOn);
+  const rest = employees.filter(e => e.present && e.mode === 'idle' && e.resting && e.action !== 'walk' && e.action !== 'sleep' && !e.inChat && !e.atMeeting && !e.receptionOn);
   if (rest.length < 3) { groupChat.next = t + 40000; return; }
   const members = rest.slice(0, 5);
   for (const e of members) e.inChat = true;
-  const lines = [pickFresh('gtopic', GROUP_TOPICS)];
+  // 社長本人が輪にいるとき、社長を第三者として話す話題は外す
+  const hasBoss = members.some(e => e.def.source === 'boss');
+  const topics = hasBoss ? GROUP_TOPICS.filter(s => !s.includes('社長')) : GROUP_TOPICS;
+  const reacts = hasBoss ? GROUP_REACTS.filter(s => !s.includes('社長')) : GROUP_REACTS;
+  const tkey = hasBoss ? 'gtopic:noboss' : 'gtopic';
+  const rkey = hasBoss ? 'greact:noboss' : 'greact';
+  const lines = [pickFresh(tkey, topics)];
   const rn = 2 + Math.floor(Math.random() * Math.min(3, members.length));
-  for (let k = 0; k < rn; k++) lines.push(pickFresh('greact', GROUP_REACTS));
+  for (let k = 0; k < rn; k++) lines.push(pickFresh(rkey, reacts));
   groupChat.active = { members, lines, li: 0, nextLine: t + 500 };
 }
 
@@ -3260,7 +3358,7 @@ function endChat(t, wait) {
   const c = chat.active;
   if (c) {
     for (const e of [c.a, c.b]) {
-      e.inChat = false;
+      if (!e.panicking) e.inChat = false;
       if (e.atMeeting) { e.atMeeting = false; e.nextThink = 0; }
     }
     if (c.meeting) meetBusy = false;
@@ -3378,14 +3476,19 @@ const JANITOR_DOG = [
   'ララさんの担当区域ではありません', '(そっとゴミ箱を移動させた)',
 ];
 
-function dogSay(t, text, ms = 3000) { dog.bubble = text; dog.bubbleUntil = t + ms; }
+function dogSay(t, text, ms = 3000) { dog.pending = null; dog.bubble = text; dog.bubbleFrom = t; dog.bubbleUntil = t + ms; }
+// 同じフレームで2回 dogSay すると先の台詞が消えるので、後続はキューに積む
+function dogSayLater(at, text, ms = 3000) { dog.pending = { at, text, ms }; }
 const DOG_LANE = 204;   // 犬が横移動に使う中央通路
 function dogGoto(spot) {
   // 家具を突っ切らないよう、いったん通路に出てから横へ動いて目的地に降りる
   const p = [];
   let fx = dog.pos.x, fy = dog.pos.y;
   const cur = dog.spot;
-  if (cur && cur.via) { p.push({ x: cur.via.x, y: cur.via.y }); fx = cur.via.x; fy = cur.via.y; }   // 出るときも同じ抜け道
+  // 出るときも同じ抜け道。ただし本当にそのスポットに立っているときだけ(離れた場所からだと遠回りになる)
+  if (cur && cur.via && Math.hypot(dog.pos.x - cur.x, dog.pos.y - cur.y) < 12) {
+    p.push({ x: cur.via.x, y: cur.via.y }); fx = cur.via.x; fy = cur.via.y;
+  }
   const ax = spot.via ? spot.via.x : spot.x;
   if (Math.abs(fy - spot.y) > 30 || Math.abs(fx - spot.x) > 70) {
     if (Math.abs(fy - DOG_LANE) > 14) p.push({ x: fx, y: DOG_LANE });
@@ -3415,10 +3518,12 @@ function moveDog(dt, speed) {
 function stepDog(dt, t) {
   const tmD = jstNow();
   const lightsOut = tmD.h >= 22 || tmD.h < 5;
+  // 予約した台詞の消化(どの早期returnより先に)
+  if (dog.pending && t >= dog.pending.at) { const pd = dog.pending; dog.pending = null; dogSay(t, pd.text, pd.ms); }
 
   // ① 火災報知器: パニックで走り回る(最優先)
   if (officeEvent.active && officeEvent.active.alarmed) {
-    dog.act = 'panic'; dog.napUntil = 0; dog.follow = null;
+    dog.act = 'panic'; dog.napUntil = 0; dog.follow = null; dog.pending = null;
     if (!dog.target) { dog.path = []; dog.target = { x: 120 + Math.random() * 380, y: 158 + Math.random() * 56 }; }
     if (t > dog.nextLine) { dogSay(t, pickFresh('dogalarm', DOG_ALARM), 2400); dog.nextLine = t + 2600; }
     moveDog(dt, 64);
@@ -3510,7 +3615,7 @@ function stepDog(dt, t) {
 
   // ⑧ 次の行き先を決める
   if (t < dog.next) return;
-  dog.act = null; dog.spot = null;
+  dog.act = null;   // dog.spot は dogGoto が「出るときの抜け道」に使うので消さない(dogGotoが上書きする)
   // 稼働中の社員がいれば、たまに足元で丸くなる
   const workers = employees.filter(e => e.present && e.mode === 'working' && e.action === 'sit');
   if (workers.length && Math.random() < 0.22) {
@@ -3542,7 +3647,7 @@ function arriveDog(t) {
     const jan = employees.find(e => e.def.source === 'janitor');
     if (jan && jan.present && !jan.inChat && Math.hypot(jan.pos.x - dog.pos.x, jan.pos.y - dog.pos.y) < 150) {
       jan.say(t + 1800, pickFresh('jandog', JANITOR_DOG), 3400);
-      dogSay(t + 4200, '(そーっと離れた)', 2800);
+      dogSayLater(t + 4200, '(そーっと離れた)', 2800);
       dog.napUntil = t + 6000; dog.next = t + 8000;
     }
   }
@@ -3720,7 +3825,12 @@ function onSnapshot() {
   }
   const blk = s.claude.block;
   const cq2 = s.quota && s.quota.claude;
-  const blockHp = cq2 && cq2.session ? Math.max(0, Math.round(100 - cq2.session.pct))
+  // 5h枠はキャッシュが5時間より古い/リセット時刻を過ぎていたら「もう別の枠」なので使わない。
+  // (resetsAtはISO文字列なので Date.parse で比較すること。数値比較だとNaNで常にfalseになる)
+  const sessLive = !!(cq2 && cq2.session)
+    && !(cq2.session.resetsAt && Date.parse(cq2.session.resetsAt) < Date.now())
+    && !(cq2.cachedAgeMin != null && cq2.cachedAgeMin > 300);
+  const blockHp = sessLive ? Math.max(0, Math.round(100 - cq2.session.pct))
     : (blk && blk.remainingMinutes != null ? Math.max(0, Math.min(100, Math.round(blk.remainingMinutes / 3))) : null);   // 不明はnull(満タン扱いしない)
 
   // Codexもプロジェクト(proj=作業ディレクトリ由来)で振り分け
@@ -3739,7 +3849,10 @@ function onSnapshot() {
     if (owner) cbuckets[owner.id].push(a);
   }
   const rl = s.codex.rateLimit;
-  const codexHp = rl ? Math.max(0, Math.round(100 - rl.usedPercent)) : null;   // 不明はnull
+  // Codexはターンが走ったときしか rate_limits を書かないので、asOf(ログのmtime)で鮮度を見る
+  const rlAge = rl && rl.asOf ? (Date.now() - rl.asOf) / 60000 : null;
+  const rlStale = rlAge != null && rlAge > 720;   // Claudeキャッシュと同じ12時間基準
+  const codexHp = (rl && !rlStale) ? Math.max(0, Math.round(100 - rl.usedPercent)) : null;   // 不明はnull
 
   for (const e of employees) {
     e.bubbles = [];
@@ -3759,7 +3872,9 @@ function onSnapshot() {
         if (e.showHp && s.claude.today) e.bubbles.push(`本日 ${fmtTok(s.claude.today.tokensOut)}tok 出力`);
         if (e.tired) e.bubbles.push('5h枠がもうすぐ…');
       } else {
-        e.setMode(tm.h >= 1 && tm.h < 7 ? 'sleep' : 'idle');
+        // 消灯帯(22:00-05:00)は mode を idle のままにして think() の夜behaviorに任せる。
+        // ここで 'sleep' を被せると加藤の豹変・伊藤×廣瀬の夜デート・月城のスタジオ逃亡が全部死ぬ
+        e.setMode(tm.h >= 5 && tm.h < 7 ? 'sleep' : 'idle');
         e.jobText = '待機中';
         e.bubbles = idleMutterPool().concat(PERSONAL_MUTTER[e.id] || []);
       }
@@ -3774,13 +3889,17 @@ function onSnapshot() {
         e.jobDetail = act.map(a => `${a.proj || 'その他'}: ${a.thread}`).join(' / ');
         e.bubbles = act.map(a => `「${Array.from(a.thread || '').slice(0, 30).join('')}」進行中`);
       } else {
-        e.setMode(tm.h >= 1 && tm.h < 7 ? 'sleep' : 'idle');
+        // 消灯帯(22:00-05:00)は mode を idle のままにして think() の夜behaviorに任せる。
+        // ここで 'sleep' を被せると加藤の豹変・伊藤×廣瀬の夜デート・月城のスタジオ逃亡が全部死ぬ
+        e.setMode(tm.h >= 5 && tm.h < 7 ? 'sleep' : 'idle');
         e.jobText = '待機中';
         e.bubbles = idleMutterPool().concat(PERSONAL_MUTTER[e.id] || []);
       }
-      if (e.showHp && rl) e.bubbles.push(`週次残量 ${codexHp}%`);
+      if (e.showHp && rl && !rlStale) e.bubbles.push(`週次残量 ${codexHp}%${rlAge > 120 ? `(${Math.round(rlAge / 60)}時間前)` : ''}`);
     } else if (e.source === 'schedule') {
-      const del = s.deliveries ? (e.deliveryKeys || [e.deliveryKey]).reduce((acc, k) => acc + (s.deliveries[k] || 0), 0) : null;
+      // フォルダが読めなかった場合 countTodayEntries は null を返す。0本と混同しない
+      const dvals = s.deliveries ? (e.deliveryKeys || [e.deliveryKey]).map(k => s.deliveries[k]) : null;
+      const del = dvals ? (dvals.some(v => v == null) ? null : dvals.reduce((a, v) => a + v, 0)) : null;
       e.hp = null;
       const wj = e.watcherKey && s.launchd && s.launchd[e.watcherKey];
       if (e.watcherKey && !(wj && wj.running)) {
@@ -3792,14 +3911,19 @@ function onSnapshot() {
         e.setMode('working');
         e.jobText = '日次ルーチン稼働中';
         e.bubbles = ['ただいま製造中…!', '(講演/台本/ショート仕込み中)'];
-      } else if (tm.h >= 21 || tm.h < 3) {
+      } else if (tm.h >= 21 && tm.h < 22) {
         e.setMode('sleep');
+        e.jobText = `次の出社 ${e.shift[0]}:${String(e.shift[1]).padStart(2, '0')}`;
+      } else if (tm.h >= 22 || tm.h < 3) {
+        // 消灯中は idle にしておく(think()がスタジオへ逃がす。sleepだと夜の台詞が全部出ない)
+        e.setMode('idle');
         e.jobText = `次の出社 ${e.shift[0]}:${String(e.shift[1]).padStart(2, '0')}`;
       } else {
         e.setMode('idle');
         e.happy = del > 0;
-        e.jobText = del != null ? `本日 ${del}本 納品` : '本日実績なし';
-        e.bubbles = del > 0 ? [`今日は${del}本納品!`, 'また明日も作ります'] : ['今日はまだ実績なし'];
+        e.jobText = del == null ? '納品数 集計できず' : (del > 0 ? `本日 ${del}本 納品` : '本日実績なし');
+        e.bubbles = del == null ? ['納品フォルダが開けなくて、まだ数えられていません']
+          : (del > 0 ? [`今日は${del}本納品!`, 'また明日も作ります'] : ['今日はまだ実績なし']);
       }
     } else if (e.source === 'janitor') {
       e.hp = null;
@@ -3911,7 +4035,7 @@ function onSnapshot() {
   }
   costMilestone = Math.max(costMilestone, mile);
   // Claudeセッション残量15%切り: 伊藤が焦る(1回だけ、回復したらリセット)
-  if (cq2 && cq2.session) {
+  if (sessLive) {
     if (cq2.session.pct > 85 && !onSnapshot._quotaPanic) {
       onSnapshot._quotaPanic = true;
       const itoQ = employees.find(e => e.id === 'ito');
@@ -3937,7 +4061,15 @@ function updateHud() {
   $('time').textContent = tm.hm;
   $('date').textContent = tm.dateStr;
   if (!snap) {
-    if (fetchFail) { $('stale').style.display = 'block'; $('staleAge').textContent = '未受信'; }
+    // 「通信は成功したが0件」も未受信として出す。でないと全ボードが '--' のまま正常に見えてしまう
+    if (viewToken) {
+      const msg = fetchFail ? '未受信(通信エラー)' : '未受信(データ0件・表示トークンを確認)';
+      $('stale').style.display = 'block';
+      $('staleAge').textContent = msg;
+      const sh = $('syncHud');
+      if (sh) { sh.textContent = `🚨 ${msg}`; sh.style.color = 'var(--bad)'; }
+      $('lastTs').textContent = msg;
+    }
     return;
   }
   const s = snap, rate = (s.billing && s.billing.jpyPerUsd) || 155;
@@ -4000,10 +4132,19 @@ function updateHud() {
         `<div class="bar"><i style="width:${remain}%;background:${col}"></i></div>` +
         (resetTxt ? `<div style="font-size:10px;opacity:.55;text-align:right;margin:-3px 0 4px">リセット ${resetTxt}</div>` : ''));
     };
-    if (q && q.session) qrow('Claude セッション(5h)', q.session.pct, fmtReset(q.session.resetsAt));
-    if (q && q.week) qrow('Claude 週間(全モデル)', q.week.pct, fmtReset(q.week.resetsAt));
-    if (q && q.model) qrow(`Claude 週間(${esc(q.model.name)})`, q.model.pct, fmtReset(q.model.resetsAt));
-    if (rlq && !(rlq.resetsAt && rlq.resetsAt < Date.now())) qrow('Codex 週間', rlq.usedPercent, rlq.resetsAt ? fmtReset(new Date(rlq.resetsAt).toISOString()) : '');
+    // Claude の resetsAt は ISO文字列。Date.parse で比較しないと常に false になる
+    const qLive = (x, maxAgeMin) => !!x && !(x.resetsAt && Date.parse(x.resetsAt) < Date.now())
+      && !(maxAgeMin != null && q.cachedAgeMin != null && q.cachedAgeMin > maxAgeMin);
+    if (q && qLive(q.session, 300)) qrow('Claude セッション(5h)', q.session.pct, fmtReset(q.session.resetsAt));
+    if (q && qLive(q.week)) qrow('Claude 週間(全モデル)', q.week.pct, fmtReset(q.week.resetsAt));
+    if (q && qLive(q.model)) qrow(`Claude 週間(${esc(q.model.name)})`, q.model.pct, fmtReset(q.model.resetsAt));
+    const rlqAge = rlq && rlq.asOf ? Math.round((Date.now() - rlq.asOf) / 60000) : null;
+    if (rlq && !(rlq.resetsAt && rlq.resetsAt < Date.now())) {
+      qrow('Codex 週間', rlq.usedPercent, rlq.resetsAt ? fmtReset(new Date(rlq.resetsAt).toISOString()) : '');
+      if (rlqAge != null && rlqAge >= 30) {
+        rows.push(`<div style="font-size:10px;opacity:.55">※Codex残量は${rlqAge >= 120 ? Math.round(rlqAge / 60) + '時間' : rlqAge + '分'}前の値(最後にCodexが動いた時点)</div>`);
+      }
+    }
     if (CFG.mureka && CFG.mureka.gold != null) {
       rows.push(`<div class="row"><span class="lbl">Mureka Gold</span><span>残り <b>${CFG.mureka.gold}</b> G</span></div>`);
     }
@@ -4222,14 +4363,27 @@ function loop(t) {
       const d2 = Math.hypot(dx2, dy2);
       if (d2 > 0.1 && d2 < 10) { const p = (10 - d2) * 0.6; w.pos.x += dx2 / d2 * p; w.pos.y += dy2 / d2 * p; }
     }
+    // イベント什器は「円」ではなく描画どおりの「矩形」で押す。
+    // 円だと中心が廊下(y=184/192)に乗った什器が東西の通路を完全に塞ぎ、
+    // 通ろうとした人が振動したまま20秒ワープしていた(矩形なら一番浅い面=縦にずれて回り込める)
     if (officeEvent.active) {
+      const dest = w.path.length ? w.path[w.path.length - 1] : null;
+      let touched = false;
       for (const [k, ox, oy, ow, oh] of EVENT_PROPS[officeEvent.active.kind]) {
-        const pcx = ox + ow / 2, pcy = oy + oh - 4;
-        const dx2 = w.pos.x - pcx, dy2 = w.pos.y - pcy;
-        const d2 = Math.hypot(dx2, dy2);
-        const r = Math.max(ow, 14) / 2 + 5;
-        if (d2 > 0.1 && d2 < r) { const p = (r - d2) * 0.6; w.pos.x += dx2 / d2 * p; w.pos.y += dy2 / d2 * p; }
+        const x0 = ox - 3, x1 = ox + ow + 3, y0 = oy - 3, y1 = oy + oh + 3;
+        if (w.pos.x <= x0 || w.pos.x >= x1 || w.pos.y <= y0 || w.pos.y >= y1) continue;
+        if (dest && dest.x > x0 && dest.x < x1 && dest.y > y0 && dest.y < y1) continue;   // 目的地そのものなら押さない
+        touched = true;
+        if (w._propFree) continue;
+        const pl = w.pos.x - x0, pr = x1 - w.pos.x, pu = w.pos.y - y0, pd = y1 - w.pos.y;
+        const m = Math.min(pl, pr, pu, pd);
+        const st = Math.min(m, 1.2);
+        if (m === pl) w.pos.x -= st; else if (m === pr) w.pos.x += st;
+        else if (m === pu) w.pos.y -= st; else w.pos.y += st;
       }
+      if (!touched) { w._propT = 0; w._propFree = false; }
+      else if (!w._propT) w._propT = t;
+      else if (t - w._propT > 1500) w._propFree = true;   // 押し合いが続いたら通す(20秒ワープよりは自然)
     }
   }
   stepParticles(dt);
@@ -4254,7 +4408,7 @@ function loop(t) {
 
     ['copier', 524, 154, 26, 32], ['tower', 554, 148, 20, 38], ['netcab', 578, 150, 22, 36], ['rack', 604, 140, 26, 46],
     ['bin_g', 600, 192, 10, 15], ['bin_r', 613, 192, 10, 15], ['exting', 11, 66, 8, 17],
-    ['reception', 252, 272, 112, 42], ['sanitizer', 242, 280, 10, 24],
+    ['reception', COUNTER_RECT.x, COUNTER_RECT.y, COUNTER_RECT.w, COUNTER_RECT.h], ['sanitizer', 242, 280, 10, 24],
   ];
 
 
@@ -4283,7 +4437,10 @@ function loop(t) {
     if (!e.present) continue;
     const seatedL = e.action === 'sit' || e.action === 'sleep';
     if (seatedL && !e.resting && !e.atMeeting) continue;   // 自席は机の前板名札に任せる
-    items.push({ y: e.pos.y - 0.5, draw: g => {
+    // 受付カウンターの内側に立っている人は、名札をカウンターより手前に出さないと完全に埋まる
+    const inCounter = e.pos.x >= COUNTER_RECT.x && e.pos.x <= COUNTER_RECT.x + COUNTER_RECT.w
+      && e.pos.y >= COUNTER_RECT.y && e.pos.y <= COUNTER_RECT.y + COUNTER_RECT.h;
+    items.push({ y: inCounter ? 308.5 : e.pos.y - 0.5, draw: g => {
       g.font = '5px DotGothic16';
       const nw = g.measureText(e.name).width;
       const cbL = seatedL && (e.resting || e.atMeeting) ? 0.30 : 0;
@@ -4338,7 +4495,7 @@ function loop(t) {
       cx.fillText('🚨 火災報知器作動中!', 268, 58);
     }
   }
-  if (dog.bubble && t < dog.bubbleUntil) drawBubble(cx, dog.pos.x, dog.pos.y - 14, dog.bubble);
+  if (dog.bubble && t >= (dog.bubbleFrom || 0) && t < dog.bubbleUntil) drawBubble(cx, dog.pos.x, dog.pos.y - 14, dog.bubble);
   for (const b of bubbleQ) drawBubble(cx, b.x, b.y, b.text);
   bubbleQ.length = 0;
   if (LIVE) blitLive(t, tm);
@@ -4375,7 +4532,9 @@ function blitLive(t, tm) {
     const subs = snap && snap.youtube && snap.youtube.subs != null ? snap.youtube.subs.toLocaleString('ja-JP') + '人' : '---';
     $('lvSubs').textContent = `📺 YT登録者 ${subs}`;
     $('lvWork').textContent = `💻 稼働中 ${employees.filter(e => e.present && e.mode === 'working').length}人`;
-    const d = snap && snap.deliveries ? (snap.deliveries.koen || 0) + (snap.deliveries.daihon || 0) : null;
+    // フォルダが読めなかった日(null)を0本と表示しない
+    const d = snap && snap.deliveries && snap.deliveries.koen != null && snap.deliveries.daihon != null
+      ? snap.deliveries.koen + snap.deliveries.daihon : null;
     $('lvDel').textContent = `📦 本日の納品 ${d == null ? '-' : d}本`;
   }
 }
@@ -4418,13 +4577,17 @@ const M_MEM = ['作業台がもう物でいっぱい({n}%)', '机の上、少し
 const M_BATT = ['電源ケーブル抜けてない!?', 'バッテリー駆動中!残り{n}%!', 'コンセント!コンセントどこ!',
   'ケーブル!ケーブル刺さってる?', '残り{n}%で作業する勇気', '充電しないと途中で終わる',
 ];
+// 残量に余裕があるときの穏やかな版(20%未満だけ上のM_BATTで慌てる)
+const M_BATT_LOW = ['バッテリー残り{n}%、そろそろ挿しとこ', 'ケーブル、近くにあります?', '{n}%か…充電しながらやろう',
+  '電源、まだ余裕あるけど念のため', 'コンセント空いてるうちに挿しとこう', '{n}%…切れる前に一回挿そう',
+];
 const M_CALM = ['マシン室、今日も静かで平和', '倉庫も回線も異常なし。良い日だ', '機材の調子、絶好調みたい',
   '今日はマシンも平和だね', '数字が全部おとなしい', '機材の調子がいいと気分もいい',
   'こういう日は仕事がはかどる', 'マシン室が静かなのはいいこと',
 ];
 
 function stepMachineTalk(t) {
-  if (t < machineTalk.next) return;
+  if (t < machineTalk.next || panic.until) return;   // 火災報知器の最中にマシン室の実況をしない
   const mc = snap && snap.machine;
   if (!mc) { machineTalk.next = t + 60000; return; }
   const folks = employees.filter(e => e.present && !e.inChat && !e.atMeeting && !e.recording
@@ -4432,12 +4595,15 @@ function stepMachineTalk(t) {
   if (!folks.length) { machineTalk.next = t + 30000; return; }
   const who = folks[Math.floor(Math.random() * folks.length)];
   const tp = mc.topProcs && mc.topProcs[0];
+  // psの%は「1コア=100%」なので、板(759/4033)と同じくマシン全体比に直してから比べる
+  const tpShare = (tp && mc.cores) ? tp.cpu / mc.cores : null;
   let line = null;
   // 目立つ状況を優先順で1つ選ぶ(意味のある実況にする)
   if (mc.cpuPct != null && mc.cpuPct >= 85) line = pickFresh('mcpu', M_CPU_HOT).replace('{n}', mc.cpuPct);
-  else if (!mc.battCharging && mc.battPct != null) line = pickFresh('mbatt', M_BATT).replace('{n}', mc.battPct);
+  else if (!mc.battCharging && mc.battPct != null && mc.battPct < 20) line = pickFresh('mbatt', M_BATT).replace('{n}', mc.battPct);
+  else if (!mc.battCharging && mc.battPct != null && mc.battPct < 40) line = pickFresh('mbattlow', M_BATT_LOW).replace('{n}', mc.battPct);
   else if (mc.diskUsedPct != null && mc.diskUsedPct >= 90) line = pickFresh('mdisk', M_DISK).replace('{n}', mc.diskUsedPct).replace('{g}', mc.diskFreeGB ?? '?');
-  else if (tp && tp.cpu >= 80) line = pickFresh('mtop', M_TOP).replace(/\{p\}/g, tp.name);
+  else if (tpShare != null && tpShare >= 50) line = pickFresh('mtop', M_TOP).replace(/\{p\}/g, tp.name);
   else if (mc.netTxMB != null && mc.netTxMB >= 300) line = pickFresh('mnetu', M_NET_UP).replace('{n}', Math.round(mc.netTxMB));
   else if (mc.netRxMB != null && mc.netRxMB >= 300) line = pickFresh('mnetd', M_NET_DOWN).replace('{n}', Math.round(mc.netRxMB));
   else if (mc.memUsedPct != null && mc.memUsedPct >= 80) line = pickFresh('mmem', M_MEM).replace('{n}', mc.memUsedPct);
@@ -4482,6 +4648,7 @@ function startChimeBreak(t) {
   for (const e of employees) {
     if (!e.present) continue;
     if (e.inChat || e.atMeeting || e.receptionOn || e.recording) continue;
+    if (e.action === 'sleep' || e.panicking) continue;   // 寝ている人・避難中の人は起こさない
     const isJan = e.def.source === 'janitor';
     if (!isJan && e.mode !== 'working' && !(e.mode === 'idle' && !e.resting)) continue;
     if (isJan && e.action === 'walk') continue;
@@ -4527,7 +4694,7 @@ document.addEventListener('click', () => {
 setInterval(() => {
   const tm = jstNow();
   if (tm.m !== 0) return;
-  if (tm.h < 6 || tm.h > 22 || tm.h % 2 !== 0) return;
+  if (tm.h < 6 || tm.h >= 22 || tm.h % 2 !== 0) return;   // 22:00は消灯なので鳴らさない
   const key = `${tm.h}`;
   if (lastChimeKey === key) return;
   lastChimeKey = key;

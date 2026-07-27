@@ -29,7 +29,7 @@ window.OFFICE_CONFIG = {
   //         codex=Codexセッション(match=proj正規表現、無しはfallbackその他) / schedule=日次ルーチン
   // 体型フラグ: fat / tall / slim / bald
   employees: [
-    { id: 'fujimoto', wage: 0, name: '藤本', dept: '社長室', role: '社長',
+    { id: 'fujimoto', wage: 0, name: 'MON', dept: '社長室', role: '社長',
       hair: '#2a2220', shirt: '#2a2a30', fat: true, desk: { x: 64, y: 112 }, tag: '社長', source: 'boss', pc: 'mon2' },
 
     { id: 'ito', wage: 5000, name: '伊藤', dept: 'プロジェクト-T', role: 'クロード作業',
