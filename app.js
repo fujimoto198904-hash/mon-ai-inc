@@ -1976,6 +1976,10 @@ const PANIC_SPOT = {
   grill: { x: 296, y: 204 },     // グリル
   window: [{ x: 210, y: 96 }, { x: 420, y: 96 }],
   door: { x: 374, y: 346 },      // 入口(外へ)
+  guide: { x: 350, y: 322 },     // 入口の内側(誘導係)
+  phone: { x: 306, y: 300 },     // 受付(通報)
+  water: { x: 136, y: 226 },     // 給水機
+  snack: { x: 104, y: 226 },     // おやつ棚
 };
 const PANIC_RUN = [
   'うわああああ!', '警報!警報!', 'どこ!?どこが燃えてる!?', '落ち着け!誰か落ち着け!',
@@ -2011,10 +2015,51 @@ const PANIC_JAN = [
   '床が!床が焦げます!', '(モップを構えて突撃)', '規定では火気厳禁です!',
   'ワックスが!ワックスが燃える!', '掃除計画が!計画が狂う!',
 ];
+/* ---- ここから増設した役割 ---- */
+const PANIC_HIDE = [
+  '(机の下に潜った)', 'ここが一番安全…', '(丸まって震えている)',
+  '呼ばれるまで出ません', '(机の脚をぎゅっと掴んでいる)', '地震じゃないのは分かってる',
+];
+const PANIC_RESCUE = [
+  '(パソコンを抱えて逃げようとしている)', 'データ!データだけは!',
+  '(バックアップ…とってたっけ)', 'このマシンは会社の宝だ!', '(ケーブルが抜けない!)',
+  '納品前の素材が中に!',
+];
+const PANIC_PHONE = [
+  '(受話器を握りしめている)', '119!119番!', 'もしもし!あの!えっと!',
+  '住所!住所なんだっけ!', '(緊張で番号を押し間違えた)', '通報しました!たぶん!',
+];
+const PANIC_FREEZE = [
+  '(完全に固まっている)', '……', '(足が動かない)', '(目だけが泳いでいる)',
+  'あ…あ…', '(石像と化した)',
+];
+const PANIC_GUIDE = [
+  'こちらでーす!順番に!', '(両手を広げて誘導している)', '押さないで!押さないで!',
+  '残ってる人いませんかー!', '点呼とります!番号!', '落ち着いて!走らないで!(自分は走った)',
+];
+const PANIC_DOGSAVE = [
+  'ララ!ララどこ!', '(ララを抱きかかえた)', 'ララだけは絶対守る!',
+  '(ララの方が落ち着いている)', 'よしよし、大丈夫だからね!', 'ララ、こっち!こっち!',
+];
+const PANIC_WATER = [
+  '(コップに水を汲んでいる)', '水!水をかければ!', '(コップ1杯で消せると思っている)',
+  '油に水はダメって聞いたような…', '(給水機が空だった)', 'バケツ!バケツはどこ!',
+];
+const PANIC_SNACK = [
+  '(お菓子を抱えて避難)', 'おやつは死守します!', '(スナック棚を両手で抱えている)',
+  'これがないと生きていけない', '(避難より補給を優先した)', 'プリン!プリンは無事!',
+];
 const PANIC_POOL = {
-  run: PANIC_RUN, exting: PANIC_EXT, grill: PANIC_GRILL,
-  window: PANIC_WINDOW, evac: PANIC_EVAC, boss: PANIC_BOSS, janitor: PANIC_JAN,
+  run: PANIC_RUN, exting: PANIC_EXT, grill: PANIC_GRILL, window: PANIC_WINDOW,
+  evac: PANIC_EVAC, boss: PANIC_BOSS, janitor: PANIC_JAN,
+  hide: PANIC_HIDE, rescue: PANIC_RESCUE, phone: PANIC_PHONE, freeze: PANIC_FREEZE,
+  guide: PANIC_GUIDE, dogsave: PANIC_DOGSAVE, water: PANIC_WATER, snack: PANIC_SNACK,
 };
+// 社長・白柳以外に配る役札(毎回シャッフルして配るので同じ光景にならない)
+const PANIC_DECK = [
+  'exting', 'grill', 'window', 'evac', 'evac', 'run', 'run',
+  'hide', 'rescue', 'phone', 'freeze', 'guide', 'dogsave', 'water', 'snack',
+];
 
 function startPanic(t) {
   panic.until = t + 13000;
@@ -2030,7 +2075,8 @@ function startPanic(t) {
   chimeBreak.until = 0;
   directive.next = t + 40000; patrol.next = t + 40000; chat.next = t + 40000;
   const folks = employees.filter(e => e.present).sort(() => Math.random() - 0.5);
-  let wi = 0, assigned = { exting: 0, grill: 0, window: 0, evac: 0 };
+  let wi = 0;
+  const deck = PANIC_DECK.slice().sort(() => Math.random() - 0.5);   // 役札を毎回シャッフル
   folks.forEach((e, i) => {
     // 座っていようが会議中だろうが、全員いったん解除して立たせる
     e.releaseSpot(); e.releaseReception();
@@ -2042,17 +2088,23 @@ function startPanic(t) {
     let role;
     if (e.def.source === 'boss') role = 'boss';
     else if (e.def.source === 'janitor') role = 'janitor';
-    else if (!assigned.exting) { role = 'exting'; assigned.exting = 1; }
-    else if (!assigned.grill) { role = 'grill'; assigned.grill = 1; }
-    else if (assigned.window < 1) { role = 'window'; assigned.window++; }
-    else if (assigned.evac < 2) { role = 'evac'; assigned.evac++; }
-    else role = 'run';
+    else role = deck.length ? deck.pop() : 'run';
     e.panicRole = role;
-    if (role === 'exting') e.goto(PANIC_SPOT.exting, 'faceU');
-    else if (role === 'grill') e.goto(PANIC_SPOT.grill, 'faceU');
-    else if (role === 'window') e.goto(PANIC_SPOT.window[wi++ % 2], 'faceU');
-    else if (role === 'evac') { panic.evac.push(e.id); e.goto(PANIC_SPOT.door, 'leave'); }
-    else e.goto({ x: 60 + Math.random() * 520, y: 152 + Math.random() * 58 }, 'faceD');
+    switch (role) {
+      case 'exting': e.goto(PANIC_SPOT.exting, 'faceU'); break;
+      case 'grill': e.goto(PANIC_SPOT.grill, 'faceU'); break;
+      case 'window': e.goto(PANIC_SPOT.window[wi++ % 2], 'faceU'); break;
+      case 'evac': panic.evac.push(e.id); e.goto(PANIC_SPOT.door, 'leave'); break;
+      case 'guide': e.goto(PANIC_SPOT.guide, 'faceU'); break;
+      case 'phone': e.goto(PANIC_SPOT.phone, 'faceD'); break;
+      case 'water': e.goto(PANIC_SPOT.water, 'faceU'); break;
+      case 'snack': e.goto(PANIC_SPOT.snack, 'faceU'); break;
+      case 'hide': e.goto(e.seat, 'sit'); e.anticUntil = panic.until; break;   // 机の下に潜って震える
+      case 'rescue': e.goto({ x: e.seat.x + 18, y: e.seat.y + 6 }, 'faceL'); break;
+      case 'dogsave': e.goto({ x: dog.pos.x + 14, y: dog.pos.y + 2 }, 'faceL'); break;
+      case 'freeze': e.path = []; e.target = null; e.action = 'stand'; e.anticUntil = panic.until; break;  // その場で硬直(小刻みに震える)
+      default: e.goto({ x: 60 + Math.random() * 520, y: 152 + Math.random() * 58 }, 'faceD');
+    }
   });
 }
 
