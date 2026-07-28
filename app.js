@@ -99,6 +99,57 @@ async function poll() {
 
 let lastArrivalT = -1;
 
+/* ---------- 履歴(Supabaseに7日分貯まっているのに今まで使っていなかった) ----------
+   本日の伸び・24時間の推移・延べ稼働に使う。通常のpoll()とは完全に独立させ、
+   ここが落ちても「受信断」バナーは絶対に出さない(いちばん誤報してはいけない表示なので) */
+let hist = null, histFail = false;
+async function pollHistory() {
+  if (!viewToken) return;
+  try {
+    const sel = 'created_at,yt:data->youtube,tt:data->totals,dv:data->deliveries,cl:data->claude->active,cx:data->codex->active';
+    const r = await fetch(`${CFG.supabaseUrl}/rest/v1/ai_office_snapshots?select=${sel}&order=created_at.desc&limit=300`, {
+      headers: { apikey: CFG.anonKey, Authorization: `Bearer ${CFG.anonKey}`, 'x-office-view': viewToken },
+    });
+    if (!r.ok) throw new Error(r.status);
+    const rows = await r.json();
+    hist = rows.reverse().map(x => ({ ...x, t: new Date(x.created_at).getTime() }));
+    histFail = false;
+  } catch { histFail = true; }
+}
+
+// JSTの今日0時(ミリ秒)。日跨ぎで前日の値を基準にしてしまわないため
+function jstMidnight() {
+  const n = jstNow();
+  return Date.now() - ((n.h * 60 + n.m) * 60000) - (new Date().getSeconds() * 1000);
+}
+
+// 本日の伸び。今日の最初の観測値と今の差。今日の観測が無ければ null(0とは違う)
+function todayDelta(pick) {
+  if (!hist || !hist.length) return null;
+  const from = jstMidnight();
+  const today = hist.filter(x => x.t >= from);
+  const first = today.map(pick).find(v => v != null);
+  const last = [...today].reverse().map(pick).find(v => v != null);
+  if (first == null || last == null) return null;
+  return last - first;
+}
+
+// 本日の延べ稼働(人時)。5分間隔の観測からの推定。実測ではないので表示側でそう書く
+function todayWorkedHours() {
+  if (!hist || hist.length < 2) return null;
+  const from = jstMidnight();
+  const today = hist.filter(x => x.t >= from);
+  if (today.length < 2) return null;
+  let ms = 0;
+  for (let i = 1; i < today.length; i++) {
+    const gap = today[i].t - today[i - 1].t;
+    if (gap > 20 * 60000) continue;            // 欠測区間は積まない(埋めると捏造になる)
+    const n = (today[i - 1].cl || []).length + (today[i - 1].cx || []).length;
+    ms += gap * n;
+  }
+  return ms / 3600000;
+}
+
 /* ---------- 歩行スプライトシート(assets/sheets/<id>.png 3列x4行) ----------
    行: 0=正面 1=左向き 3=後ろ姿(右向きは左を反転)。列: 歩行3コマ(中央=立ち) */
 const SHEETS = {};
@@ -580,7 +631,7 @@ function drawDesk(g, seat, working, t, emp, st) {
 
 // 社名看板の目標カウンター1行(ラベル / 現在値 目標値 / 進捗バー)。
 // 板の内側は x478-628 しかないので、数字は万・億で詰める
-function drawGoalRow(g, label, cur, goal, unit, y) {
+function drawGoalRow(g, label, cur, goal, unit, y, delta) {
   const L = 480, R = 626;   // 板の内側(はみ出すと枠に食い込む)
   // 右端から: 達成率 → バー → 左から: ラベル → 数値 の順に詰める
   g.font = '5px DotGothic16';
@@ -588,7 +639,7 @@ function drawGoalRow(g, label, cur, goal, unit, y) {
   const pw = g.measureText(pct).width;
   g.fillStyle = '#c8a878';
   g.fillText(pct, R - pw, y);
-  const BW = 46, BH = 4, BX = R - pw - 3 - BW, by = y - 4;
+  const BW = 34, BH = 4, BX = R - pw - 3 - BW, by = y - 4;
   rr(g, BX, by, BW, BH, 'rgba(0,0,0,.35)');
   if (cur != null && goal) {
     // 1億が目標だと当分は極細。0でなければ必ず1px以上は光らせる
@@ -600,11 +651,19 @@ function drawGoalRow(g, label, cur, goal, unit, y) {
   g.font = '7px DotGothic16';
   g.fillStyle = '#c8a878';
   g.fillText(label, L, y);
-  const val = `${fmtJa(cur)}${cur == null ? '' : unit} / ${fmtJa(goal)}${unit}`;
-  // 桁が伸びてバーに食い込むようなら字を詰める(看板の外へ出さない)
+  const base = `${fmtJa(cur)}${cur == null ? '' : unit} / ${fmtJa(goal)}${unit}`;
+  // 本日の伸び。入らないなら諦める(看板の外へ出すくらいなら出さない)
+  const d = delta != null && delta > 0 ? ` +${delta < 10000 ? delta : fmtJa(delta)}` : '';
+  let val = base + d;
+  if (L + 24 + g.measureText(val).width > BX - 2) g.font = '6px DotGothic16';
+  if (L + 24 + g.measureText(val).width > BX - 2) { val = base; g.font = '7px DotGothic16'; }
   if (L + 24 + g.measureText(val).width > BX - 2) g.font = '6px DotGothic16';
   g.fillStyle = '#f0d890';
   g.fillText(val, L + 24, y);
+  if (d && val === base + d) {   // 伸びだけ色を変えて目立たせる
+    g.fillStyle = '#8ad07a';
+    g.fillText(d, L + 24 + g.measureText(base).width, y);
+  }
 }
 
 function drawOffice(g, t, tm) {
@@ -633,8 +692,8 @@ function drawOffice(g, t, tm) {
     const cname = 'MON-AI Inc.';
     g.fillText(cname, 553 - g.measureText(cname).width / 2, 19);
     const yt0 = snap && snap.youtube;
-    drawGoalRow(g, '登録者', yt0 ? yt0.subs : null, CFG.youtubeGoal, '人', 33);
-    drawGoalRow(g, '総再生', yt0 ? yt0.views : null, CFG.youtubeViewGoal, '回', 45);
+    drawGoalRow(g, '登録者', yt0 ? yt0.subs : null, CFG.youtubeGoal, '人', 33, todayDelta(x => x.yt && x.yt.subs));
+    drawGoalRow(g, '総再生', yt0 ? yt0.views : null, CFG.youtubeViewGoal, '回', 45, todayDelta(x => x.yt && x.yt.views));
     // 窓: 背景の窓を壁色で消し、昼/夜素材の窓だけを描く
     rr(g, 160, 0, 94, 57, '#f0e7d4');
     rr(g, 378, 0, 92, 57, '#f0e7d4');
@@ -4226,6 +4285,10 @@ function updateHud() {
     if (q && q.cachedAgeMin != null) {
       rows.push(`<div style="font-size:10px;opacity:.55">※Claude残量は${q.cachedAgeMin}分前の値(APIレート制限中)</div>`);
     }
+    // Claudeの行が1本も出せなかったことを黙って隠さない(消えたのか0なのか分からなくなる)
+    if (!q || !['session', 'week', 'model'].some(k => qLive(q[k], k === 'session' ? 300 : null))) {
+      rows.push('<div class="row"><span class="lbl" style="opacity:.6">Claude 残量</span><span style="opacity:.6">取得できず(枠のリセット済み / APIレート制限)</span></div>');
+    }
     qEl.innerHTML = rows.length ? rows.join('') : '<div style="opacity:.6;font-size:12px">残量データ待ち(次の収集で反映)</div>';
   }
 
@@ -4339,12 +4402,19 @@ function updateHud() {
       const w = gl ? Math.min(100, Math.max(cur > 0 ? 0.6 : 0, cur / gl * 100)) : 0;
       return `<div class="bar"><i style="width:${w}%;background:var(--good)"></i></div>`;
     };
+    const dSubs = todayDelta(x => x.yt && x.yt.subs);
+    const dViews = todayDelta(x => x.yt && x.yt.views);
+    const up = d => (d == null ? '' : d > 0 ? ` <span style="color:var(--good)">本日 +${d.toLocaleString('ja-JP')}</span>` : d < 0 ? ` <span style="color:var(--warn)">本日 ${d.toLocaleString('ja-JP')}</span>` : ' <span style="opacity:.5">本日 ±0</span>');
     yt.innerHTML =
-      `<div class="row"><span class="lbl">📺 登録者</span><span><b>${s.youtube.subs.toLocaleString('ja-JP')}</b>人 / 目標 ${fmtJa(goal)}人 (${fmtGoalPct(s.youtube.subs, goal)})</span></div>` +
+      `<div class="row"><span class="lbl">📺 登録者</span><span><b>${s.youtube.subs.toLocaleString('ja-JP')}</b>人 / 目標 ${fmtJa(goal)}人 (${fmtGoalPct(s.youtube.subs, goal)})${up(dSubs)}</span></div>` +
       bar(s.youtube.subs, goal) +
-      `<div class="row"><span class="lbl">📈 総再生</span><span><b>${(s.youtube.views ?? 0).toLocaleString('ja-JP')}</b>回 / 目標 ${fmtJa(vgoal)}回 (${fmtGoalPct(s.youtube.views, vgoal)})</span></div>` +
+      `<canvas class="spark" id="sparkSubs" width="560" height="48"></canvas>` +
+      `<div class="row"><span class="lbl">📈 総再生</span><span><b>${(s.youtube.views ?? 0).toLocaleString('ja-JP')}</b>回 / 目標 ${fmtJa(vgoal)}回 (${fmtGoalPct(s.youtube.views, vgoal)})${up(dViews)}</span></div>` +
       bar(s.youtube.views ?? 0, vgoal) +
+      `<canvas class="spark" id="sparkViews" width="560" height="48"></canvas>` +
       `<div class="row"><span class="lbl">🎬 動画</span><span><b>${s.youtube.videos != null ? s.youtube.videos.toLocaleString('ja-JP') : '-'}</b>本</span></div>`;
+    drawSpark('sparkSubs', x => x.yt && x.yt.subs);
+    drawSpark('sparkViews', x => x.yt && x.yt.views);
   } else {
     yt.innerHTML = `<span style="opacity:.6">未接続 — collector/config.json の youtube に APIキー/チャンネルID を設定すると表示されます</span>`;
   }
@@ -4355,7 +4425,9 @@ function updateHud() {
     : '未設定(config.jsのsalesに記入)';
 
   const del = $('deliveries');
-  del.innerHTML = `<span>🎤 講演 <b>${s.deliveries.koen ?? '-'}</b>本</span><span>📜 台本 <b>${s.deliveries.daihon ?? '-'}</b>本</span><span>🔤 出力 <b>${fmtTok(s.totals.todayTokens || 0)}</b>tok</span>`;
+  const wh = todayWorkedHours();
+  del.innerHTML = `<span>🎤 講演 <b>${s.deliveries.koen ?? '-'}</b>本</span><span>📜 台本 <b>${s.deliveries.daihon ?? '-'}</b>本</span><span>🔤 出力 <b>${fmtTok(s.totals.todayTokens || 0)}</b>tok</span>`
+    + (wh != null ? `<span title="5分毎の観測からの推定値">⏱ 本日の延べ稼働 <b>${wh.toFixed(1)}</b>人時<span style="opacity:.5;font-size:10px">(推定)</span></span>` : '');
 
   const ul = $('tasks');
   ul.innerHTML = '';
@@ -4793,6 +4865,32 @@ setInterval(() => {
   startChimeBreak(performance.now());   // 鐘が鳴ったら全員5分休憩
 }, 5000);
 
+// 直近24時間のミニ折れ線。欠測は線を切る(0で埋めると増減を捏造することになる)
+function drawSpark(id, pick) {
+  const c = document.getElementById(id);
+  if (!c) return;
+  const g = c.getContext('2d');
+  g.clearRect(0, 0, c.width, c.height);
+  if (!hist || !hist.length) return;
+  const from = Date.now() - 24 * 3600000;
+  const pts = hist.filter(x => x.t >= from).map(x => ({ t: x.t, v: pick(x) }));
+  const vals = pts.map(p => p.v).filter(v => v != null);
+  if (vals.length < 2) return;
+  const lo = Math.min(...vals), hi = Math.max(...vals);
+  const span = hi - lo || 1;
+  const x0 = pts[0].t, xs = (Date.now() - x0) || 1;
+  g.strokeStyle = '#6fae5f'; g.lineWidth = 2; g.lineJoin = 'round';
+  g.beginPath();
+  let drawing = false;
+  for (const p of pts) {
+    if (p.v == null) { drawing = false; continue; }
+    const px = (p.t - x0) / xs * (c.width - 4) + 2;
+    const py = c.height - 4 - (p.v - lo) / span * (c.height - 8);
+    if (!drawing) { g.moveTo(px, py); drawing = true; } else g.lineTo(px, py);
+  }
+  g.stroke();
+}
+
 /* ---------- 新しいデプロイの取り込み ----------
    24時間つけっぱなしのモニターは一度読み込んだきりなので、deploy.sh を打っても
    誰かが手でリロードするまで永久に古いコードが動き続ける。
@@ -4823,5 +4921,7 @@ async function checkDeploy() {
   setInterval(updateHud, 10000);
   checkDeploy();
   setInterval(checkDeploy, 120000);
+  pollHistory();
+  setInterval(pollHistory, 900000);   // 15分毎。1回124KBなので頻繁に引かない
   requestAnimationFrame(t => { last = t; loop(t); });
 })();
