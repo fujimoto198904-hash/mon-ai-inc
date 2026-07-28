@@ -3937,9 +3937,17 @@ function onSnapshot() {
       if (act.length) {
         e.setMode('working');
         e.sweat = act.length >= 2;
-        e.jobText = act.map(a => a.thread).join(' / ');
-        e.jobDetail = act.map(a => `${a.proj || 'その他'}: ${a.thread}`).join(' / ');
-        e.bubbles = act.map(a => `「${Array.from(a.thread || '').slice(0, 30).join('')}」進行中`);
+        // 同名スレッド(名前なしの'セッション'が並ぶ等)は「×N」にまとめる。
+        // 「セッション / セッション / セッション」は頭上タグとして何の情報でもない
+        const tally = ts => {
+          const c = new Map();
+          for (const x of ts) c.set(x, (c.get(x) || 0) + 1);
+          return [...c].map(([k, n]) => (n > 1 ? `${k}×${n}` : k));
+        };
+        const thOf = a => a.thread || a.proj || 'セッション';   // 名無しスレッドは案件名で呼ぶ
+        e.jobText = tally(act.map(thOf)).join(' / ');
+        e.jobDetail = tally(act.map(a => (a.thread && a.proj && a.thread !== a.proj) ? `${a.proj}: ${a.thread}` : thOf(a))).join(' / ');
+        e.bubbles = [...new Set(act.map(thOf))].map(th => `「${Array.from(th).slice(0, 30).join('')}」進行中`);
       } else {
         // 消灯帯(22:00-05:00)は mode を idle のままにして think() の夜behaviorに任せる。
         // ここで 'sleep' を被せると加藤の豹変・伊藤×廣瀬の夜デート・月城のスタジオ逃亡が全部死ぬ
