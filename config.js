@@ -8,6 +8,20 @@ window.OFFICE_CONFIG = {
   // 会社の掲げもの
   mission: '物語を、毎日届ける。',
   mottos: ['一、無限労働', '一、社長一筋', '一、品質第一', '一、整理整頓'],
+  // 公開向けの汎化タスク辞書。**ここが正典**で、collector.mjs は config.js を読んで同じ関数を使う
+  // (LP出勤板とライブ配信の両方でこれを通す。未知の案件は「制作作業」にfail-closed)
+  publicTask: function (proj) {
+    if (!proj) return '制作作業';
+    if (/koen/i.test(proj)) return '講演コンテンツの制作';
+    if (/youtubesozai|Project-T/i.test(proj)) return '動画コンテンツの制作';
+    if (/AM38|bottle/i.test(proj)) return 'アプリ開発';
+    if (/yorutool/i.test(proj)) return '店舗システムの開発';
+    if (/Irodori/i.test(proj)) return '音声エンジンの保守';
+    if (/BGM/i.test(proj)) return '楽曲制作';
+    if (/mon-ai/i.test(proj)) return 'サイト制作';
+    return '制作作業';
+  },
+
   youtubeGoal: 10000,          // 登録者の目標
   youtubeViewGoal: 100000000,  // 総再生回数の目標(1億回・2026-07-28 MON設定)
 

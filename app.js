@@ -3715,6 +3715,8 @@ function shiftActive(shift, tm) {
   return a <= b ? (x >= a && x < b) : (x >= a || x < b);
 }
 const fmtYen = n => '¥' + Math.round(n).toLocaleString('ja-JP');
+// 公開向けの汎化タスク。辞書の正典は config.js(collector.mjsも同じ関数を読む)
+const PUB = proj => (typeof CFG.publicTask === 'function' ? CFG.publicTask(proj) : '制作作業');
 const fmtUsd = n => '$' + (n >= 100 ? Math.round(n) : n.toFixed(1));
 const fmtTok = n => n >= 1e9 ? (n / 1e9).toFixed(1) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'K' : String(n);
 // 日本語の桁(万/億)。看板は幅が狭いので「24,544」より「2.4万」が読みやすい
@@ -3917,10 +3919,17 @@ function onSnapshot() {
       if (act.length) {
         e.setMode('working');
         e.sweat = (blk && blk.costPerHour > 90) || act.reduce((a, b) => a + (b.sessions || 1), 0) >= 2;
-        // 頭上タグ=いま実際にやっている作業(最後の指示)。名簿にはプロジェクト名込みの詳細
-        e.jobText = act.map(a => a.task ? a.task : a.project + (a.sessions > 1 ? `×${a.sessions}` : '')).join(' / ');
-        e.jobDetail = act.map(a => `${a.project}${a.sessions > 1 ? `×${a.sessions}` : ''}${a.task ? `: ${a.task}` : ''}`).join(' / ');
-        e.bubbles = act.map(a => a.task ? `いま「${Array.from(a.task).slice(0, 34).join('')}」を進めてます` : `「${a.project}」作業中`);
+        // 頭上タグ=いま実際にやっている作業(最後の指示)。名簿にはプロジェクト名込みの詳細。
+        // ただしライブ配信(9:16)はcanvasをそのまま切り出すので、指示原文が映らないよう汎化する
+        if (LIVE) {
+          e.jobText = [...new Set(act.map(a => PUB(a.project)))].join(' / ');
+          e.jobDetail = null;
+          e.bubbles = [...new Set(act.map(a => `${PUB(a.project)}を進めてます`))];
+        } else {
+          e.jobText = act.map(a => a.task ? a.task : a.project + (a.sessions > 1 ? `×${a.sessions}` : '')).join(' / ');
+          e.jobDetail = act.map(a => `${a.project}${a.sessions > 1 ? `×${a.sessions}` : ''}${a.task ? `: ${a.task}` : ''}`).join(' / ');
+          e.bubbles = act.map(a => a.task ? `いま「${Array.from(a.task).slice(0, 34).join('')}」を進めてます` : `「${a.project}」作業中`);
+        }
         if (e.showHp && s.claude.today) e.bubbles.push(`本日 ${fmtTok(s.claude.today.tokensOut)}tok 出力`);
         if (e.tired) e.bubbles.push('5h枠がもうすぐ…');
       } else {
@@ -3945,9 +3954,15 @@ function onSnapshot() {
           return [...c].map(([k, n]) => (n > 1 ? `${k}×${n}` : k));
         };
         const thOf = a => a.thread || a.proj || 'セッション';   // 名無しスレッドは案件名で呼ぶ
-        e.jobText = tally(act.map(thOf)).join(' / ');
-        e.jobDetail = tally(act.map(a => (a.thread && a.proj && a.thread !== a.proj) ? `${a.proj}: ${a.thread}` : thOf(a))).join(' / ');
-        e.bubbles = [...new Set(act.map(thOf))].map(th => `「${Array.from(th).slice(0, 30).join('')}」進行中`);
+        if (LIVE) {
+          e.jobText = [...new Set(act.map(a => PUB(a.proj)))].join(' / ');
+          e.jobDetail = null;
+          e.bubbles = [...new Set(act.map(a => `${PUB(a.proj)}を進めてます`))];
+        } else {
+          e.jobText = tally(act.map(thOf)).join(' / ');
+          e.jobDetail = tally(act.map(a => (a.thread && a.proj && a.thread !== a.proj) ? `${a.proj}: ${a.thread}` : thOf(a))).join(' / ');
+          e.bubbles = [...new Set(act.map(thOf))].map(th => `「${Array.from(th).slice(0, 30).join('')}」進行中`);
+        }
       } else {
         // 消灯帯(22:00-05:00)は mode を idle のままにして think() の夜behaviorに任せる。
         // ここで 'sleep' を被せると加藤の豹変・伊藤×廣瀬の夜デート・月城のスタジオ逃亡が全部死ぬ
@@ -4346,7 +4361,11 @@ function updateHud() {
   ul.innerHTML = '';
   for (const it of (s.tasks.items || [])) {
     const li = document.createElement('li');
-    li.innerHTML = `<b>${esc(it.id)}</b>${esc(it.text)}`;
+    // since が無い行は日数を出さない(起票日を推測しない)
+    const d = it.since ? Math.floor((Date.now() - Date.parse(it.since + 'T00:00:00+09:00')) / 86400000) : null;
+    const cls = d == null ? '' : d >= 90 ? ' style="color:var(--bad)"' : d >= 30 ? ' style="color:var(--warn)"' : '';
+    const ageTag = d == null ? '' : `<span class="age"${cls}>滞留${d}日</span>`;
+    li.innerHTML = `<b>${esc(it.id)}</b>${esc(it.text)}${ageTag}`;
     ul.appendChild(li);
   }
   if (s.tasks.count > (s.tasks.items || []).length) {
@@ -4774,6 +4793,27 @@ setInterval(() => {
   startChimeBreak(performance.now());   // 鐘が鳴ったら全員5分休憩
 }, 5000);
 
+/* ---------- 新しいデプロイの取り込み ----------
+   24時間つけっぱなしのモニターは一度読み込んだきりなので、deploy.sh を打っても
+   誰かが手でリロードするまで永久に古いコードが動き続ける。
+   app.js の ETag を見て、変わっていたら「場面が落ち着いているとき」に自分で読み直す。 */
+let _deployTag = null;
+async function checkDeploy() {
+  try {
+    const r = await fetch('app.js', { method: 'HEAD', cache: 'no-store' });
+    if (!r.ok) return;
+    const tag = r.headers.get('etag') || r.headers.get('last-modified');
+    if (!tag) return;
+    if (_deployTag == null) { _deployTag = tag; return; }
+    if (tag === _deployTag) return;
+    // 見せ場の途中でリロードしない(火災報知器・イベント・朝会・喧嘩・見回り・紙吹雪)
+    const busy = panic.until || officeEvent.active || standup.active || fight.active
+      || patrol.active || directive.active || chat.active || celebration.until > performance.now();
+    if (busy) return;
+    location.reload();
+  } catch {}
+}
+
 /* ---------- 起動 ---------- */
 (async () => {
   fitCanvas();
@@ -4781,5 +4821,7 @@ setInterval(() => {
   await poll();
   setInterval(poll, (CFG.pollSec || 60) * 1000);
   setInterval(updateHud, 10000);
+  checkDeploy();
+  setInterval(checkDeploy, 120000);
   requestAnimationFrame(t => { last = t; loop(t); });
 })();
