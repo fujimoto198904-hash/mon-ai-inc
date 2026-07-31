@@ -31,6 +31,7 @@ window.OFFICE_CONFIG = {
   subscriptions: [
     { name: 'Claude (Anthropic)', plan: '', monthlyJPY: 43200 },
     { name: 'ChatGPT/Codex (OpenAI)', plan: '', monthlyJPY: 16800 },
+    { name: 'Adobe Stock', plan: '', monthlyJPY: 18000 },
     { name: 'Mureka', plan: '', monthlyJPY: 1500 },
     { name: 'Supabase', plan: '', monthlyJPY: 2000 },
     { name: 'Vercel', plan: '', monthlyJPY: 3000 },
