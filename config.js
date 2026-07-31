@@ -12,6 +12,8 @@ window.OFFICE_CONFIG = {
   // (LP出勤板とライブ配信の両方でこれを通す。未知の案件は「制作作業」にfail-closed)
   publicTask: function (proj) {
     if (!proj) return '制作作業';
+    // adobestock は SSD のパスに 'Project-T-SSD' を含むので、動画より先に判定する
+    if (/adobestock|素材/i.test(proj)) return '映像素材の調達';
     if (/koen/i.test(proj)) return '講演コンテンツの制作';
     if (/youtubesozai|Project-T/i.test(proj)) return '動画コンテンツの制作';
     if (/AM38|bottle/i.test(proj)) return 'アプリ開発';
@@ -54,31 +56,40 @@ window.OFFICE_CONFIG = {
       hair: '#b8a8e8', shirt: '#6a5a9a', desk: { x: 230, y: 112 }, tag: 'ルーチン',
       source: 'schedule', shift: [3, 0, 7, 0], deliveryKeys: ['koen', 'daihon'],
       watcherKey: 'com.mon.tsuki.watcher' },
-    { id: 'sasaki', wage: 3000, name: '佐々木', dept: 'プロジェクト-T', role: 'コーデックス作業(BGMUP)',
-      hair: '#4a3a2a', slim: true, shirt: '#2e8a72', desk: { x: 292, y: 112 }, tag: 'BGMUP',
-      source: 'codex', match: '^BGMUP' },
-
-    { id: 'amakawa', wage: 4500, name: '天川', dept: 'アプリ制作部', role: 'クロード作業(アプリ開発)',
-      hair: '#3a3228', fat: true, tall: true, shirt: '#4a7ac8', desk: { x: 364, y: 112 }, tag: 'アプリ開発',
-      source: 'claude', match: '^(AM38|bottlePV)' },
-    { id: 'ando', wage: 3000, name: '安藤', dept: 'アプリ制作部', role: 'コーデックス作業(AM38)',
-      hair: '#2a2a2a', slim: true, shirt: '#3ca88c', desk: { x: 424, y: 112 }, tag: 'AM38',
-      source: 'codex', match: '^AM38', showHp: true, pc: 'mon2' },
+    // --- 映像制作部(2026-07-29 新設) 上段の中央3席にまとめた ---
+    // 有本: 動画素材が7日で41本＝Claude最大案件。koen/Irodoriを外して専任にした
+    { id: 'arimoto', wage: 4500, name: '有本', dept: '映像制作部', role: 'クロード作業(動画素材)',
+      hair: '#2a2220', shirt: '#3a3a4a', desk: { x: 292, y: 112 }, tag: 'youtubesozai',
+      source: 'claude', match: '^youtubesozai' },
+    // 天川: AM38/bottlePVが休眠したのでアプリ制作部から異動。Adobe Stockの素材調達(1日100件)へ
+    { id: 'amakawa', wage: 4500, name: '天川', dept: '映像制作部', role: 'クロード作業(素材調達)',
+      hair: '#3a3228', fat: true, tall: true, shirt: '#4a7ac8', desk: { x: 364, y: 112 }, tag: '素材調達',
+      source: 'claude', match: 'adobestock|素材' },
+    // 安藤: 同じくアプリ制作部から異動。DomoAI(月1万円)の生成AI映像・画像が誰の担当でもなかった。
+    // ★Codexは名簿順に最初にマッチした人が持つので、必ず佐々木(^BGMUP)より前に置くこと
+    //   (BGMUP配下で走る「DomoAIでジャケット画像100枚生成」を佐々木に取られてしまう)
+    { id: 'ando', wage: 3000, name: '安藤', dept: '映像制作部', role: 'コーデックス作業(生成AI映像)',
+      hair: '#2a2a2a', slim: true, shirt: '#3ca88c', desk: { x: 424, y: 112 }, tag: 'DomoAI',
+      source: 'codex', match: 'DOMO\\s*AI|ジャケット|画像生成', showHp: true, pc: 'mon2' },
 
     { id: 'hirose', wage: 4000, name: '廣瀬', dept: 'yorutool制作部', role: 'クロード作業(yorutool)',
       hair: '#d83a2e', shirt: '#c85a8a', desk: { x: 528, y: 112 }, tag: 'yorutool',
       source: 'claude', match: '^yorutool' },
 
-    { id: 'arimoto', wage: 4500, name: '有本', dept: '総務部', role: 'クロード作業(基盤・講演・素材)',
-      hair: '#2a2220', shirt: '#3a3a4a', desk: { x: 240, y: 216 }, tag: '基盤・講演',
-      source: 'claude', match: '^(Irodori|koen|youtubesozai)' },
-    { id: 'kato', wage: 800, name: '加藤', dept: '総務部', role: 'クロード作業(雑務)',
-      hair: '#8a5a2e', shirt: '#c8a04a', desk: { x: 290, y: 216 }, tag: '雑務全般',
+    // --- 楽曲制作部(2026-07-29 新設) BGMUPが7日で59本＝全社最多なので独立させた ---
+    { id: 'sasaki', wage: 3000, name: '佐々木', dept: '楽曲制作部', role: 'コーデックス作業(BGM/楽曲)',
+      hair: '#4a3a2a', slim: true, shirt: '#2e8a72', desk: { x: 240, y: 216 }, tag: 'BGMUP',
+      source: 'codex', match: '^BGMUP' },
+
+    // 加藤=Claudeのfallback(matchを持たせないこと)。koen/Irodori/AM38/bottlePVなど休眠案件の落ち穂を拾う
+    { id: 'kato', wage: 800, name: '加藤', dept: '総務部', role: 'クロード作業(講演・その他)',
+      hair: '#8a5a2e', shirt: '#c8a04a', desk: { x: 290, y: 216 }, tag: '講演・雑務',
       source: 'claude', pc: 'laptop' },
-    { id: 'shirayanagi', wage: 500, name: '白柳', dept: '清掃', role: 'クリーンスタッフ',
-      hair: '#2a2a2a', shirt: '#b8d8cc', desk: { x: 236, y: 320 }, source: 'janitor' },
+    // 座間=Codexのfallback(matchを持たせないこと)
     { id: 'zama', wage: 800, name: '座間', dept: '総務部', role: 'コーデックス作業(その他)',
       hair: '#8a5a2e', slim: true, shirt: '#48a08a', desk: { x: 340, y: 216 }, tag: 'その他案件',
       source: 'codex', pc: 'laptop' },
+    { id: 'shirayanagi', wage: 500, name: '白柳', dept: '清掃', role: 'クリーンスタッフ',
+      hair: '#2a2a2a', shirt: '#b8d8cc', desk: { x: 236, y: 320 }, source: 'janitor' },
   ],
 };
