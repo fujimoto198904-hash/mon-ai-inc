@@ -31,7 +31,6 @@ window.OFFICE_CONFIG = {
   subscriptions: [
     { name: 'Claude (Anthropic)', plan: '', monthlyJPY: 43200 },
     { name: 'ChatGPT/Codex (OpenAI)', plan: '', monthlyJPY: 16800 },
-    { name: 'DomoAI', plan: '', monthlyJPY: 10000 },
     { name: 'Mureka', plan: '', monthlyJPY: 1500 },
     { name: 'Supabase', plan: '', monthlyJPY: 2000 },
     { name: 'Vercel', plan: '', monthlyJPY: 3000 },
@@ -65,20 +64,13 @@ window.OFFICE_CONFIG = {
     { id: 'amakawa', wage: 4500, name: '天川', dept: '映像制作部', role: 'クロード作業(素材調達)',
       hair: '#3a3228', fat: true, tall: true, shirt: '#4a7ac8', desk: { x: 364, y: 112 }, tag: '素材調達',
       source: 'claude', match: 'adobestock|素材' },
-    // 安藤: 同じくアプリ制作部から異動。DomoAI(月1万円)の生成AI映像・画像が誰の担当でもなかった。
-    // ★Codexは名簿順に最初にマッチした人が持つので、必ず佐々木(^BGMUP)より前に置くこと
-    //   (BGMUP配下で走る「DomoAIでジャケット画像100枚生成」を佐々木に取られてしまう)
-    { id: 'ando', wage: 3000, name: '安藤', dept: '映像制作部', role: 'コーデックス作業(生成AI映像)',
-      hair: '#2a2a2a', slim: true, shirt: '#3ca88c', desk: { x: 424, y: 112 }, tag: 'DomoAI',
-      source: 'codex', match: 'DOMO\\s*AI|ジャケット|画像生成', showHp: true, pc: 'mon2' },
-
     { id: 'hirose', wage: 4000, name: '廣瀬', dept: 'yorutool制作部', role: 'クロード作業(yorutool)',
       hair: '#d83a2e', shirt: '#c85a8a', desk: { x: 528, y: 112 }, tag: 'yorutool',
       source: 'claude', match: '^yorutool' },
 
-    // --- 楽曲制作部(2026-07-29 新設) BGMUPが7日で59本＝全社最多なので独立させた ---
+    // --- 楽曲制作部(2026-07-29 新設) BGMUPが14日で96本＝全社最多なので独立させた ---
     { id: 'sasaki', wage: 3000, name: '佐々木', dept: '楽曲制作部', role: 'コーデックス作業(BGM/楽曲)',
-      hair: '#4a3a2a', slim: true, shirt: '#2e8a72', desk: { x: 240, y: 216 }, tag: 'BGMUP',
+      hair: '#4a3a2a', slim: true, shirt: '#2e8a72', desk: { x: 424, y: 112 }, tag: 'BGMUP',
       source: 'codex', match: '^BGMUP' },
 
     // 加藤=Claudeのfallback(matchを持たせないこと)。koen/Irodori/AM38/bottlePVなど休眠案件の落ち穂を拾う
@@ -89,6 +81,11 @@ window.OFFICE_CONFIG = {
     { id: 'zama', wage: 800, name: '座間', dept: '総務部', role: 'コーデックス作業(その他)',
       hair: '#8a5a2e', slim: true, shirt: '#48a08a', desk: { x: 340, y: 216 }, tag: 'その他案件',
       source: 'codex', pc: 'laptop' },
+    // 安藤: 2026-07-31にDomoAIを解約したので担当が消滅 → 調査・ブリーフへ再異動(映像制作部→総務部)。
+    // 席が空いていないので佐々木と交換した(総務3人が島に並ぶ)
+    { id: 'ando', wage: 3000, name: '安藤', dept: '総務部', role: 'コーデックス作業(調査・ブリーフ)',
+      hair: '#2a2a2a', slim: true, shirt: '#3ca88c', desk: { x: 240, y: 216 }, tag: '調査・ブリーフ',
+      source: 'codex', match: 'デイリーブリーフ|ブリーフ|調査|分析|リサーチ|探す', showHp: true, pc: 'mon2' },
     { id: 'shirayanagi', wage: 500, name: '白柳', dept: '清掃', role: 'クリーンスタッフ',
       hair: '#2a2a2a', shirt: '#b8d8cc', desk: { x: 236, y: 320 }, source: 'janitor' },
   ],
