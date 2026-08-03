@@ -30,7 +30,7 @@ window.OFFICE_CONFIG = {
   // 実際の固定費(月額・2026-07-22 MON申告)
   subscriptions: [
     { name: 'Claude (Anthropic)', plan: '', monthlyJPY: 43200 },
-    { name: 'ChatGPT/Codex (OpenAI)', plan: '', monthlyJPY: 16800 },
+    { name: 'ChatGPT/Codex (OpenAI)', plan: '', monthlyJPY: 33000 },
     { name: 'Adobe Stock', plan: '', monthlyJPY: 18000 },
     { name: 'Mureka', plan: '', monthlyJPY: 1500 },
     { name: 'Supabase', plan: '', monthlyJPY: 2000 },
