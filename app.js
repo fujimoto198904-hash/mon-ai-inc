@@ -3776,6 +3776,8 @@ function shiftActive(shift, tm) {
 const fmtYen = n => '¥' + Math.round(n).toLocaleString('ja-JP');
 // 公開向けの汎化タスク。辞書の正典は config.js(collector.mjsも同じ関数を読む)
 const PUB = proj => (typeof CFG.publicTask === 'function' ? CFG.publicTask(proj) : '制作作業');
+// TTSの案件名は 'S088_意志より仕掛け_ショート_2026-08-05' 形式。頭2つだけ見せる
+const ttsShort = t => (t ? Array.from(String(t).split('_').slice(0, 2).join(' ')).slice(0, 20).join('') : '');
 const fmtUsd = n => '$' + (n >= 100 ? Math.round(n) : n.toFixed(1));
 const fmtTok = n => n >= 1e9 ? (n / 1e9).toFixed(1) + 'B' : n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'K' : String(n);
 // 日本語の桁(万/億)。看板は幅が狭いので「24,544」より「2.4万」が読みやすい
@@ -4031,6 +4033,7 @@ function onSnapshot() {
       }
       if (e.showHp && rl && !rlStale) e.bubbles.push(`週次残量 ${codexHp}%${rlAge > 120 ? `(${Math.round(rlAge / 60)}時間前)` : ''}`);
     } else if (e.source === 'schedule') {
+      const tts = s.tts;
       // フォルダが読めなかった場合 countTodayEntries は null を返す。0本と混同しない
       const dvals = s.deliveries ? (e.deliveryKeys || [e.deliveryKey]).map(k => s.deliveries[k]) : null;
       const del = dvals ? (dvals.some(v => v == null) ? null : dvals.reduce((a, v) => a + v, 0)) : null;
@@ -4040,6 +4043,22 @@ function onSnapshot() {
         e.setMode('panic');
         e.jobText = '❌ TTS(watcher)停止中!';
         e.bubbles = ['収録マシンが止まってる!'];
+        e.action = 'stand';
+      } else if (tts && tts.rendering) {
+        // 実際にレンダリングしている間は時計に関係なくスタジオで収録中にする。
+        // launchdのrunningは「常駐しているか」しか見ていないので、これが無いと
+        // 18時に回っていても「待機中」に見えてしまう(2026-08-05 MON指摘)
+        e.setMode('working');
+        e.jobText = LIVE ? '収録中' : `🎤収録中 ${ttsShort(tts.title)}`;
+        e.bubbles = LIVE ? ['収録中です'] : [
+          `「${ttsShort(tts.title)}」を収録中`,
+          tts.sinceMin >= 1 ? `この1本、${tts.sinceMin}分回してます` : 'いま回しはじめました',
+        ].concat(tts.doneToday ? [`今日はもう${tts.doneToday}本あがりました`] : []);
+      } else if (tts && tts.stalledMin) {
+        // watcherは生きているのに「開始」から30分以上「完了」が来ない=固まっている
+        e.setMode('panic');
+        e.jobText = `⚠️収録が${tts.stalledMin}分止まってます`;
+        e.bubbles = [`「${ttsShort(tts.title)}」から進んでません`, '見に行ったほうがいいかも…'];
         e.action = 'stand';
       } else if (shiftActive(e.shift, tm)) {
         e.setMode('working');
