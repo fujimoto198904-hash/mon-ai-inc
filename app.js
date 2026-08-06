@@ -123,16 +123,26 @@ function jstMidnight() {
   return Date.now() - ((n.h * 60 + n.m) * 60000) - (new Date().getSeconds() * 1000);
 }
 
-// 本日の伸び。今日の最初の観測値と今の差。今日の観測が無ければ null(0とは違う)
-function todayDelta(pick) {
+// 本日の伸び。基準は必ず JST 0時。
+// 履歴(300件)が0時まで届かない日があり得るので、そのときは「途中から数えた値」を本日として
+// 出さずに null にする(いつからの数字か分からないものを出さない・2026-08-06 MON指摘)
+const DELTA_BASE_TOL_MIN = 30;   // 0時から何分以内の観測なら「0時基準」と名乗ってよいか
+function todayRange(pick) {
   if (!hist || !hist.length) return null;
   const from = jstMidnight();
   const today = hist.filter(x => x.t >= from);
-  const first = today.map(pick).find(v => v != null);
-  const last = [...today].reverse().map(pick).find(v => v != null);
-  if (first == null || last == null) return null;
-  return last - first;
+  const firstRow = today.find(x => pick(x) != null);
+  const lastRow = [...today].reverse().find(x => pick(x) != null);
+  if (!firstRow || !lastRow) return null;
+  if (firstRow.t - from > DELTA_BASE_TOL_MIN * 60000) return null;   // 0時付近の観測が無い=基準を名乗れない
+  return { at: firstRow.t, base: pick(firstRow), now: pick(lastRow), delta: pick(lastRow) - pick(firstRow) };
 }
+function todayDelta(pick) {
+  const r = todayRange(pick);
+  return r ? r.delta : null;
+}
+// 基準時刻の表示用(JSTのHH:MM)
+const baseAt = r => (r ? new Date(r.at).toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit' }) : null);
 
 // 本日の延べ稼働(人時)。5分間隔の観測からの推定。実測ではないので表示側でそう書く
 function todayWorkedHours() {
@@ -653,7 +663,7 @@ function drawGoalRow(g, label, cur, goal, unit, y, delta) {
   g.fillText(label, L, y);
   const base = `${fmtJa(cur)}${cur == null ? '' : unit} / ${fmtJa(goal)}${unit}`;
   // 本日の伸び。入らないなら諦める(看板の外へ出すくらいなら出さない)
-  const d = delta != null && delta > 0 ? ` +${delta < 10000 ? delta : fmtJa(delta)}` : '';
+  const d = delta != null && delta > 0 ? ` 0時+${delta < 10000 ? delta : fmtJa(delta)}` : '';
   let val = base + d;
   if (L + 24 + g.measureText(val).width > BX - 2) g.font = '6px DotGothic16';
   if (L + 24 + g.measureText(val).width > BX - 2) { val = base; g.font = '7px DotGothic16'; }
@@ -4421,14 +4431,22 @@ function updateHud() {
       const w = gl ? Math.min(100, Math.max(cur > 0 ? 0.6 : 0, cur / gl * 100)) : 0;
       return `<div class="bar"><i style="width:${w}%;background:var(--good)"></i></div>`;
     };
-    const dSubs = todayDelta(x => x.yt && x.yt.subs);
-    const dViews = todayDelta(x => x.yt && x.yt.views);
-    const up = d => (d == null ? '' : d > 0 ? ` <span style="color:var(--good)">本日 +${d.toLocaleString('ja-JP')}</span>` : d < 0 ? ` <span style="color:var(--warn)">本日 ${d.toLocaleString('ja-JP')}</span>` : ' <span style="opacity:.5">本日 ±0</span>');
+    const rSubs = todayRange(x => x.yt && x.yt.subs);
+    const rViews = todayRange(x => x.yt && x.yt.views);
+    // 「いつからの数字か」を必ず書く。基準が取れない日は数字を出さずそう言う
+    const up = r => {
+      if (!r) return ' <span style="opacity:.45">(0時基準の記録なし)</span>';
+      const d = r.delta;
+      const tip = `0時基準 ${baseAt(r)} の ${r.base.toLocaleString('ja-JP')} から`;
+      const col = d > 0 ? 'var(--good)' : d < 0 ? 'var(--warn)' : 'inherit';
+      const txt = d > 0 ? `+${d.toLocaleString('ja-JP')}` : d < 0 ? d.toLocaleString('ja-JP') : '±0';
+      return ` <span title="${esc(tip)}" style="color:${col}${d === 0 ? ';opacity:.5' : ''}">0時から ${txt}</span>`;
+    };
     yt.innerHTML =
-      `<div class="row"><span class="lbl">📺 登録者</span><span><b>${s.youtube.subs.toLocaleString('ja-JP')}</b>人 / 目標 ${fmtJa(goal)}人 (${fmtGoalPct(s.youtube.subs, goal)})${up(dSubs)}</span></div>` +
+      `<div class="row"><span class="lbl">📺 登録者</span><span><b>${s.youtube.subs.toLocaleString('ja-JP')}</b>人 / 目標 ${fmtJa(goal)}人 (${fmtGoalPct(s.youtube.subs, goal)})${up(rSubs)}</span></div>` +
       bar(s.youtube.subs, goal) +
       `<canvas class="spark" id="sparkSubs" width="560" height="48"></canvas>` +
-      `<div class="row"><span class="lbl">📈 総再生</span><span><b>${(s.youtube.views ?? 0).toLocaleString('ja-JP')}</b>回 / 目標 ${fmtJa(vgoal)}回 (${fmtGoalPct(s.youtube.views, vgoal)})${up(dViews)}</span></div>` +
+      `<div class="row"><span class="lbl">📈 総再生</span><span><b>${(s.youtube.views ?? 0).toLocaleString('ja-JP')}</b>回 / 目標 ${fmtJa(vgoal)}回 (${fmtGoalPct(s.youtube.views, vgoal)})${up(rViews)}</span></div>` +
       bar(s.youtube.views ?? 0, vgoal) +
       `<canvas class="spark" id="sparkViews" width="560" height="48"></canvas>` +
       `<div class="row"><span class="lbl">🎬 動画</span><span><b>${s.youtube.videos != null ? s.youtube.videos.toLocaleString('ja-JP') : '-'}</b>本</span></div>`;
@@ -4927,6 +4945,9 @@ async function checkDeploy() {
     const busy = panic.until || officeEvent.active || standup.active || fight.active
       || patrol.active || directive.active || chat.active || celebration.until > performance.now();
     if (busy) return;
+    // reload だけだと Pages の max-age=600 が効いている間は古い app.js を再利用してしまう。
+    // cache:'reload' で先にHTTPキャッシュを新しい実体で置き換えてからリロードする
+    try { await Promise.all(['app.js', 'config.js'].map(f => fetch(f, { cache: 'reload' }))); } catch {}
     location.reload();
   } catch {}
 }
