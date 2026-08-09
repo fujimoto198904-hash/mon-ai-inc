@@ -4766,7 +4766,12 @@ function loop(t) {
     }
   }
   if (dog.bubble && t >= (dog.bubbleFrom || 0) && t < dog.bubbleUntil) drawBubble(cx, dog.pos.x, dog.pos.y - 14, dog.bubble);
-  for (const b of bubbleQ) drawBubble(cx, b.x, b.y, b.text);
+  for (const b of bubbleQ) {
+    // ライブは切り抜くので、窓の外にいる話者の吹き出しは出さない
+    // (出すとクランプで窓内へ引き込まれ、話者のいない吹き出しが浮く)
+    if (LIVE && (b.x < camX - 10 || b.x > camX + CAM_W + 10)) continue;
+    drawBubble(cx, b.x, b.y, b.text);
+  }
   bubbleQ.length = 0;
   if (LIVE) blitLive(t, tm);
   requestAnimationFrame(loop);
@@ -4808,7 +4813,7 @@ function pickShot(t) {
     const who = [r.a, r.b].find(alive);
     if (who) return { key: 'romance', x: who.pos.x, name: '休憩室' };
   }
-  if (officeEvent.active) return { key: 'event', x: 310, name: officeEvent.active.kind === 'bbq' ? '焼肉' : 'トレーニング' };
+  if (officeEvent.active) return { key: 'event', x: 310, name: officeEvent.active.kind === 'bbq' ? '焼肉' : '筋トレ' };
   if (standup.active) return { key: 'standup', x: 414, name: '朝会' };
   if (alive(bossE) && bossE.directing) return { key: 'directive', x: bossE.pos.x, name: '打ち合わせ' };
   if (snap && snap.machine && snap.machine.cpuPct != null && snap.machine.cpuPct >= 85) {
