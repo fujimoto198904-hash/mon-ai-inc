@@ -4796,9 +4796,9 @@ function pickShot(t) {
   const bossE = employees.find(e => e.def.source === 'boss');
   const alive = e => e && e.present && Number.isFinite(e.pos && e.pos.x);
   // 優先度順。上ほど強い
-  if (panic.until && t < panic.until) return { key: 'panic', x: 306, name: '火災報知器' };
-  if (fight.active && alive(fight.active.a)) return { key: 'fight', x: fight.active.a.pos.x, name: 'もめごと' };
-  if (celebration.until && t < celebration.until) return { key: 'celebrate', x: 320, name: 'お祝い' };
+  if (panic.until && t < panic.until) return { key: 'panic', x: 306, name: '火災報知器', prio: 3 };
+  if (fight.active && alive(fight.active.a)) return { key: 'fight', x: fight.active.a.pos.x, name: 'もめごと', prio: 2 };
+  if (celebration.until && t < celebration.until) return { key: 'celebrate', x: 320, name: 'お祝い', prio: 2 };
   if (alive(bossE) && bossE.recording) return { key: 'rec', x: 428, name: 'スタジオ' };
   const tsu = employees.find(e => e.id === 'tsukishiro');
   if (alive(tsu) && tsu.action === 'studio') return { key: 'studio', x: TSUKI_STUDIO_POST.x, name: '収録' };
@@ -4823,9 +4823,12 @@ function pickShot(t) {
 const SHOT_MIN_MS = 6000;   // 最短ショット長。優先度が同着で振動するのを防ぐ
 function liveTarget(t) {
   const next = pickShot(t);
+  const np = next.prio || 1, sp = (shot && shot.prio) || 1;
   if (!shot) shot = { ...next, since: t };
-  else if (next.key !== shot.key && t - shot.since >= SHOT_MIN_MS) shot = { ...next, since: t };
   else if (next.key === shot.key) { shot.x = next.x; shot.name = next.name; }   // 同じショットなら追従
+  // 火災報知器のような緊急ものは最短ショット長を無視して割り込む。
+  // (13秒しかないパニックを6秒待つと事件の頭が映らない)
+  else if (np > sp || t - shot.since >= SHOT_MIN_MS) shot = { ...next, since: t };
   return shot.x;
 }
 function blitLive(t, tm) {
