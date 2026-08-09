@@ -77,15 +77,13 @@ let snap = null, snapAt = 0, fetchFail = false;
 async function poll() {
   if (!viewToken) return;
   try {
-    const r = await fetch(`${CFG.supabaseUrl}/rest/v1/ai_office_snapshots?select=data,created_at&order=created_at.desc&limit=1`, {
-      headers: { apikey: CFG.anonKey, Authorization: `Bearer ${CFG.anonKey}`, 'x-office-view': viewToken },
-    });
+    const r = await fetch(`${CFG.dataBase}/snapshot.json?t=${Date.now()}`, { cache: 'no-store' });
     if (!r.ok) throw new Error(r.status);
-    const rows = await r.json();
-    if (rows.length) {
-      const newAt = new Date(rows[0].created_at).getTime();
+    const row = await r.json();
+    if (row && row.data) {
+      const newAt = new Date(row.at).getTime();
       const isNew = newAt !== snapAt;
-      snap = rows[0].data;
+      snap = row.data;
       snapAt = newAt;
       onSnapshot();
       if (isNew) lastArrivalT = performance.now();  // コレクター受信ランプ用
@@ -106,13 +104,11 @@ let hist = null, histFail = false;
 async function pollHistory() {
   if (!viewToken) return;
   try {
-    const sel = 'created_at,yt:data->youtube,tt:data->totals,dv:data->deliveries,cl:data->claude->active,cx:data->codex->active';
-    const r = await fetch(`${CFG.supabaseUrl}/rest/v1/ai_office_snapshots?select=${sel}&order=created_at.desc&limit=300`, {
-      headers: { apikey: CFG.anonKey, Authorization: `Bearer ${CFG.anonKey}`, 'x-office-view': viewToken },
-    });
+    const r = await fetch(`${CFG.dataBase}/history.json?t=${Date.now()}`, { cache: 'no-store' });
     if (!r.ok) throw new Error(r.status);
     const rows = await r.json();
-    hist = rows.reverse().map(x => ({ ...x, t: new Date(x.created_at).getTime() }));
+    // 配信側は古い順で書き出している。t はミリ秒に直して使う
+    hist = (Array.isArray(rows) ? rows : []).map(x => ({ ...x, t: new Date(x.at).getTime() }));
     histFail = false;
   } catch { histFail = true; }
 }

@@ -1,7 +1,9 @@
 // MON-AI Inc. ダッシュボード設定
 window.OFFICE_CONFIG = {
-  supabaseUrl: 'https://whiukxhomdrpnrjdlyaz.supabase.co',
-  anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndoaXVreGhvbWRycG5yamRseWF6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkzNDY4ODcsImV4cCI6MjA5NDkyMjg4N30.A79wz3R-u-gUB5k7Co4pXi9ep3t7EExluyHm23dDEt8',
+  // データ配信元(2026-08-09にSupabaseを廃止。プロジェクトが消えて20時間停止したため)。
+  // Pagesは main しかビルドしないので data ブランチに置く=ビルド上限に当たらない。
+  // raw は CORS 許可・max-age=300。取得時は毎回クエリを変えてCDNキャッシュを避ける。
+  dataBase: 'https://raw.githubusercontent.com/fujimoto198904-hash/mon-ai-inc/data/data',
   pollSec: 60,
   staleMin: 20,
 
