@@ -125,6 +125,12 @@
   #tasks li b { color: var(--accent); margin-right: 4px; }
   #tasks li .age { float: right; font-size: 10px; opacity: .6; margin-left: 6px; }
   canvas.spark { width: 100%; height: 24px; display: block; margin: -2px 0 6px; opacity: .85; }
+  #routines .rc { display: flex; align-items: baseline; gap: 6px; font-size: 12px; padding: 2px 0; border-bottom: 1px dashed var(--line); }
+  #routines .rc:last-child { border-bottom: none; }
+  #routines .rc .t { opacity: .55; font-size: 10px; min-width: 34px; }
+  #routines .rc .n { flex: 1; }
+  #routines .rc .s { font-size: 10px; opacity: .75; text-align: right; }
+  #routines .sum { font-size: 11px; opacity: .7; margin-top: 4px; }
   #footer { font-size: 11px; opacity: .65; text-align: right; }
   #gate {
     position: fixed; inset: 0; background: var(--bg);
@@ -205,6 +211,10 @@
       <div class="card">
         <h2>🔋 残量ボード</h2>
         <div id="quota"></div>
+      </div>
+      <div class="card">
+        <h2>📋 ルーチン点呼</h2>
+        <div id="routines"></div>
       </div>
       <div class="card">
         <h2>🖥 マシン室(このMacのいま)</h2>

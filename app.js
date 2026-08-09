@@ -4320,6 +4320,24 @@ function updateHud() {
     qEl.innerHTML = rows.length ? rows.join('') : '<div style="opacity:.6;font-size:12px">残量データ待ち(次の収集で反映)</div>';
   }
 
+  // ルーチン点呼: 「起動したか」ではなく「今日の成果物が出たか」
+  const rEl = $('routines');
+  if (rEl) {
+    const rc = s.routines;
+    if (!rc || !rc.items) {
+      rEl.innerHTML = '<div style="opacity:.6;font-size:12px">点呼データなし(収集側の routines.json を確認)</div>';
+    } else {
+      const mark = { ok: '✅', late: '🟡', miss: '🚨', unknown: '❓', waiting: '⏳', paused: '⏸' };
+      const col = { miss: 'var(--bad)', late: 'var(--warn)', unknown: 'var(--warn)' };
+      rEl.innerHTML = rc.items.map(x =>
+        `<div class="rc"><span class="t">${esc(x.at)}</span>` +
+        `<span class="n"${col[x.status] ? ` style="color:${col[x.status]}"` : ''}>${mark[x.status] || ''} ${esc(x.name)}</span>` +
+        `<span class="s">${esc(x.note || (x.status === 'ok' ? '完了' : x.status))}</span></div>`
+      ).join('') +
+      `<div class="sum">正常 ${rc.summary.ok} / 遅れ ${rc.summary.late} / <b style="color:var(--bad)">未達 ${rc.summary.miss}</b> / 不明 ${rc.summary.unknown} / 待ち ${rc.summary.waiting} / 停止 ${rc.summary.paused}</div>`;
+    }
+  }
+
   // マシン室(このMacの実況)
   const mEl = $('machine');
   if (mEl) {
