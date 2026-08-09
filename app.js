@@ -4533,6 +4533,28 @@ function updateHud() {
     ? `${fmtYen(sales.monthlyJPY)}${sales.note ? `(${sales.note})` : ''}`
     : '未設定(config.jsのsalesに記入)';
 
+  // 見積台帳(経理/見積書/台帳.md)。**宛先と件名は収集側で落としてある**(掲載台帳の常に不可)
+  const qEl2 = $('quotes');
+  if (qEl2) {
+    const qz = s.quotes;
+    if (!qz) {
+      qEl2.innerHTML = '<div class="row"><span class="lbl">見積</span><span style="opacity:.6">台帳を読めていません</span></div>';
+    } else if (!qz.count) {
+      qEl2.innerHTML = '<div class="row"><span class="lbl">見積</span><span style="opacity:.6">発行済みなし</span></div>';
+    } else {
+      const soon = qz.items.filter(x => x.daysLeft != null && x.daysLeft <= 7 && x.daysLeft >= 0).length;
+      const over = qz.items.filter(x => x.daysLeft != null && x.daysLeft < 0).length;
+      qEl2.innerHTML =
+        `<div class="row"><span class="lbl">見積(有効)</span><span><b>${qz.count}</b>件 / <b>${fmtYen(qz.totalJPY)}</b>` +
+        (soon ? ` <span style="color:var(--warn)">期限7日内 ${soon}</span>` : '') +
+        (over ? ` <span style="color:var(--bad)">期限切れ ${over}</span>` : '') + '</span></div>' +
+        qz.items.map(x => `<div class="row"><span class="lbl" style="opacity:.7">${esc(x.id)}</span>` +
+          `<span style="font-size:11px;opacity:.8">${fmtYen(x.jpy)}・期限 ${esc(x.expiresAt)}` +
+          `<span style="color:${x.daysLeft < 0 ? 'var(--bad)' : x.daysLeft <= 7 ? 'var(--warn)' : 'inherit'}">` +
+          `(${x.daysLeft < 0 ? '超過' + (-x.daysLeft) : 'あと' + x.daysLeft}日)</span></span></div>`).join('');
+    }
+  }
+
   const del = $('deliveries');
   const wh = todayWorkedHours();
   del.innerHTML = `<span>🎤 講演 <b>${s.deliveries.koen ?? '-'}</b>本</span><span>📜 台本 <b>${s.deliveries.daihon ?? '-'}</b>本</span><span>🔤 出力 <b>${fmtTok(s.totals.todayTokens || 0)}</b>tok</span>`
