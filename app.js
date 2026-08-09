@@ -672,6 +672,58 @@ function drawGoalRow(g, label, cur, goal, unit, y, delta) {
   }
 }
 
+// 画面下端の帯。**全画面(body.fakefs)とライブでは右HUDが丸ごと消える**ので、
+// 24時間モニターの主モードで数字が1つも見えなくなっていた。ここに最小限だけ残す。
+// 帯は y=348〜360。人の足元は最下でも y=346(入口)、名札の下端も346なので踏まない(実測)。
+// LIVEでは描かない(#liveBot が画面最下部を覆うので裏に隠れる)
+function drawTicker(g, tm) {
+  if (LIVE || !snap) return;
+  const s = snap;
+  const items = [];
+  const rc = s.routines;
+  // いちばん上に「壊れているか」を出す。未達・不明が無ければ触れない
+  if (rc && rc.summary) {
+    const bad = rc.summary.miss + rc.summary.unknown;
+    if (bad > 0) items.push({ t: `🚨ルーチン未達 ${bad}`, c: '#ff8a7a' });
+  }
+  items.push({ t: `稼働 ${employees.filter(e => e.present && e.mode === 'working').length}人` });
+  const d = s.deliveries && s.deliveries.koen != null && s.deliveries.daihon != null
+    ? s.deliveries.koen + s.deliveries.daihon : null;
+  items.push({ t: `納品 ${d == null ? '--' : d}本` });
+  const q = s.quota && s.quota.claude;
+  const qs = q && q.session && !(q.session.resetsAt && Date.parse(q.session.resetsAt) < Date.now())
+    ? Math.max(0, Math.round(100 - q.session.pct)) : null;
+  items.push({ t: `Claude ${qs == null ? '--' : qs + '%'}` });
+  const rl = s.codex && s.codex.rateLimit;
+  const rlOk = rl && !(rl.asOf && Date.now() - rl.asOf > 720 * 60000);
+  items.push({ t: `Codex ${rlOk ? Math.max(0, Math.round(100 - rl.usedPercent)) + '%' : '--'}` });
+  const blk = s.claude && s.claude.block;
+  const rate = (s.billing && s.billing.jpyPerUsd) || 155;
+  items.push({ t: `燃焼 ${blk && blk.costPerHour ? fmtYen(blk.costPerHour * rate) + '/h' : '--'}` });
+  const up = s.machine && s.machine.uptimeDays;
+  items.push({ t: `連続 ${up == null ? '--' : Math.round(up) + '日'}` });
+
+  const Y = 348, HH = 12;
+  g.fillStyle = 'rgba(24,22,20,.82)';
+  g.fillRect(0, Y, W, HH);
+  g.fillStyle = 'rgba(200,168,120,.35)';
+  g.fillRect(0, Y, W, 1);
+  g.font = '7px DotGothic16';
+  let x = 8;
+  for (const it of items) {
+    const w = g.measureText(it.t).width;
+    if (x + w > W - 46) break;              // 右端の時計ぶんを空ける
+    g.fillStyle = it.c || '#e8dcc4';
+    g.fillText(it.t, x, Y + 8.5);
+    x += w + 7;
+    g.fillStyle = 'rgba(200,168,120,.28)';
+    g.fillText('/', x - 4.5, Y + 8.5);
+  }
+  g.fillStyle = '#c8a878';
+  const clock = tm.hm;
+  g.fillText(clock, W - 8 - g.measureText(clock).width, Y + 8.5);
+}
+
 function drawOffice(g, t, tm) {
   const hour = tm.h + tm.m / 60;
   const night = hour >= 19 || hour < 5;   // 5:00には外が明るい
@@ -4690,6 +4742,7 @@ function loop(t) {
       cx.fillText('🌙 消灯中 22:00-5:00', 10, 15);
     }
   }
+  drawTicker(cx, tm);   // 消灯ベールの上に描く(夜でも読めるように)
   // BBQの煙もや: 部屋全体がもくもくする(イベント終了後はゆっくり晴れる)
   const hazeTarget = officeEvent.active && officeEvent.active.kind === 'bbq' ? (officeEvent.active.haze || 0) : 0;
   hazeLevel += (hazeTarget - hazeLevel) * (dt / 1000) * 0.9;
