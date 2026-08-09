@@ -86,7 +86,8 @@ window.OFFICE_CONFIG = {
     // 席が空いていないので佐々木と交換した(総務3人が島に並ぶ)
     { id: 'ando', wage: 3000, name: '安藤', dept: '総務部', role: 'コーデックス作業(調査・ブリーフ)',
       hair: '#2a2a2a', slim: true, shirt: '#3ca88c', desk: { x: 240, y: 216 }, tag: '調査・ブリーフ',
-      source: 'codex', match: 'デイリーブリーフ|ブリーフ|調査|分析|リサーチ|探す', showHp: true, pc: 'mon2' },
+      // 「分析」は語として広すぎ、掲載台帳で⛔の法務スレッドまで拾ってしまったので外した(2026-08-09)
+      source: 'codex', match: 'デイリーブリーフ|ブリーフ|リサーチ|市場調査|調べる|探す', showHp: true, pc: 'mon2' },
     { id: 'shirayanagi', wage: 500, name: '白柳', dept: '清掃', role: 'クリーンスタッフ',
       hair: '#2a2a2a', shirt: '#b8d8cc', desk: { x: 236, y: 320 }, source: 'janitor' },
   ],
