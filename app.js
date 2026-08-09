@@ -2071,20 +2071,23 @@ function makeChatLines(pa, pb) {
   if (snap) {
     const rate = (snap.billing && snap.billing.jpyPerUsd) || 155;
     const cost = snap.totals.todayCost || 0;
-    sets.push({ o: `今日もう${fmtYen(cost * rate)}分働いたって`, r: ['うちの人件費、安いのにね', '成果で返そう', '電気代くらいは稼がないと'] });
+    // 雑談は吹き出し=LIVE(9:16)にも出る。READMEの「公開セーフ画面=金額・残量・保留タスクを
+    // 出さない」はここにも掛かるが、2026-08-10までガードが無く素通りしていた。
+    // YouTubeの登録者・再生数はYouTube上で誰でも見られるので対象外(伏せる意味がない)
+    if (!LIVE) sets.push({ o: `今日もう${fmtYen(cost * rate)}分働いたって`, r: ['うちの人件費、安いのにね', '成果で返そう', '電気代くらいは稼がないと'] });
     if (snap.youtube && snap.youtube.subs != null) sets.push({ o: `登録者${snap.youtube.subs}人になったね`, r: ['じわじわ増えてる!', '目標1万人、いけるよ', 'ありがたいねえ'] });
     if (snap.youtube && snap.youtube.views != null) {
       sets.push({ o: `総再生${fmtJa(snap.youtube.views)}回まできたよ`, r: ['1億回まであと少し…ではない', '塵も積もればって言うし', '一本ずつ増やすしかないね'] });
       const left = Math.max(0, (CFG.youtubeViewGoal || 0) - snap.youtube.views);
       if (left > 0) sets.push({ o: `1億回まであと${fmtJa(left)}回だって`, r: ['気が遠くなる数字だ…', '毎日出せば必ず近づく', '逆算するとやることは見えてる'] });
     }
-    if (snap.tasks && snap.tasks.count) sets.push({ o: `保留タスク${snap.tasks.count}件だって`, r: ['社長、抱えすぎでは', '手伝えることあるかな', '減る気配がない…'] });
-    if (snap.claude.block && snap.claude.block.remainingMinutes != null && snap.claude.block.remainingMinutes < 90) sets.push({ who: 'ito', o: '伊藤さん5h枠もうすぐらしい', r: ['無理しないでほしいね', 'きょうこさんが心配してたよ', '休憩はさませよう'] });
+    if (!LIVE && snap.tasks && snap.tasks.count) sets.push({ o: `保留タスク${snap.tasks.count}件だって`, r: ['社長、抱えすぎでは', '手伝えることあるかな', '減る気配がない…'] });
+    if (!LIVE && snap.claude.block && snap.claude.block.remainingMinutes != null && snap.claude.block.remainingMinutes < 90) sets.push({ who: 'ito', o: '伊藤さん5h枠もうすぐらしい', r: ['無理しないでほしいね', 'きょうこさんが心配してたよ', '休憩はさませよう'] });
     if (snap.deliveries && snap.deliveries.daihon) sets.push({ who: 'tsukishiro', o: `台本もう${snap.deliveries.daihon}本納品って`, r: ['ペース早いね', '月城さん、さすがだわ', '品質も落ちてないのがすごい'] });
     // 3日前の読み取りを「今の話」として喋らせない
     const rlC = snap.codex.rateLimit;
-    if (rlC && !(rlC.asOf && Date.now() - rlC.asOf > 720 * 60000)) sets.push({ o: `コデックス週次残り${Math.max(0, Math.round(100 - rlC.usedPercent))}%だって`, r: ['ペース配分しないとね', '今週も走ってるなあ', '残量は計画的に'] });
-    if (snap.claude.block && snap.claude.block.costPerHour) sets.push({ o: `いま燃焼率${fmtYen(snap.claude.block.costPerHour * rate)}/hらしい`, r: ['社長の顔が青くなるやつ', '景気いいねえ…', '成果物で黒字にしよう'] });
+    if (!LIVE && rlC && !(rlC.asOf && Date.now() - rlC.asOf > 720 * 60000)) sets.push({ o: `コデックス週次残り${Math.max(0, Math.round(100 - rlC.usedPercent))}%だって`, r: ['ペース配分しないとね', '今週も走ってるなあ', '残量は計画的に'] });
+    if (!LIVE && snap.claude.block && snap.claude.block.costPerHour) sets.push({ o: `いま燃焼率${fmtYen(snap.claude.block.costPerHour * rate)}/hらしい`, r: ['社長の顔が青くなるやつ', '景気いいねえ…', '成果物で黒字にしよう'] });
   }
   const all = sets.concat(CHAT_SETS);
   const lines = [];
@@ -4122,7 +4125,11 @@ function onSnapshot() {
         // watcherは生きているのに「開始」から30分以上「完了」が来ない=固まっている
         e.setMode('panic');
         e.jobText = `⚠️収録が${tts.stalledMin}分止まってます`;
-        e.bubbles = [`「${ttsShort(tts.title)}」から進んでません`, '見に行ったほうがいいかも…'];
+        // 収録中の枝(:4116)はLIVEガード済みだったが、この停止の枝だけ抜けていて
+        // 作品名(S095_… の通し番号つき)が9:16に出ていた
+        e.bubbles = LIVE
+          ? ['収録が止まっているみたいです', '見に行ったほうがいいかも…']
+          : [`「${ttsShort(tts.title)}」から進んでません`, '見に行ったほうがいいかも…'];
         e.action = 'stand';
       } else if (shiftActive(e.shift, tm)) {
         e.setMode('working');
@@ -4208,11 +4215,16 @@ function onSnapshot() {
       } else if (busy > 0) {
         e.setMode('working');
         e.jobText = `指揮中(稼働 ${busy}件)`;
-        e.bubbles = ['現場は頼んだぞ…', `今日は ${fmtYen((s.totals.todayCost || 0) * rate)} 分か…`, `保留が${tc ?? '-'}件…`];
+        // LIVE(9:16 Instagram)は公開セーフ画面。README §ライブ配信用9:16 のとおり
+        // 金額・残量・保留件数を出さない。2026-08-10 まで宣言と実装が食い違っていた
+        e.bubbles = LIVE
+          ? ['現場は頼んだぞ…', '今日もよく回っている', '次の一手を考えるか']
+          : ['現場は頼んだぞ…', `今日は ${fmtYen((s.totals.todayCost || 0) * rate)} 分か…`, `保留が${tc ?? '-'}件…`];
       } else {
         e.setMode('idle');
-        e.jobText = `保留 ${tc ?? '-'}件を検討中`;
-        e.bubbles = [`保留タスク ${tc ?? '-'}件…`, '次は何を仕込むか'].concat(PERSONAL_MUTTER.fujimoto);
+        e.jobText = LIVE ? '考えごと中' : `保留 ${tc ?? '-'}件を検討中`;
+        e.bubbles = (LIVE ? ['次は何を仕込むか'] : [`保留タスク ${tc ?? '-'}件…`, '次は何を仕込むか'])
+          .concat(PERSONAL_MUTTER.fujimoto);
       }
     }
   }
@@ -4244,7 +4256,8 @@ function onSnapshot() {
   }
   const tc = (s.totals && s.totals.todayCost) || 0;
   const mile = Math.floor(tc / 100);
-  if (!firstSnap && mile > costMilestone) {
+  // バーンレートの吹き出しは金額そのものなので LIVE では鳴らさない(公開セーフ画面)
+  if (!firstSnap && mile > costMilestone && !LIVE) {
     const bossB = employees.find(e => e.def.source === 'boss');
     if (bossB && bossB.present && !bossB.inChat && !bossB.recording) {
       bossB.say(now + 3000, pickFresh('burn', BURN_LINES).replace(/\{d\}/g, '$' + mile + '00'), 4200);
@@ -4568,7 +4581,9 @@ function updateHud() {
     const d = it.since ? Math.floor((Date.now() - Date.parse(it.since + 'T00:00:00+09:00')) / 86400000) : null;
     const cls = d == null ? '' : d >= 90 ? ' style="color:var(--bad)"' : d >= 30 ? ' style="color:var(--warn)"' : '';
     const ageTag = d == null ? '' : `<span class="age"${cls}>滞留${d}日</span>`;
-    li.innerHTML = `<b>${esc(it.id)}</b>${esc(it.text)}${ageTag}`;
+    // 本文は収集側で落としている(2026-08-10 MON決定・P61②)。古いスナップショットが
+    // まだ text を持っている間だけ後方互換で出す。docs は手元で読む前提
+    li.innerHTML = `<b>${esc(it.id)}</b>${it.text ? esc(it.text) : '<span style="opacity:.45">docs/04_PENDING.md を参照</span>'}${ageTag}`;
     ul.appendChild(li);
   }
   if (s.tasks.count > (s.tasks.items || []).length) {
@@ -4943,18 +4958,21 @@ function stepMachineTalk(t) {
   const tp = mc.topProcs && mc.topProcs[0];
   // psの%は「1コア=100%」なので、板(759/4033)と同じくマシン全体比に直してから比べる
   const tpShare = (tp && mc.cores) ? tp.cpu / mc.cores : null;
+  // LIVEはプロセス名を出さない。mc.topProcs には許可リストが無く、未公開アプリや
+  // 内部ツール名(ccusage / codex 等)が素で入る＝掲載台帳の「未公開アプリの内部仕様」に触れる
+  const tpSay = LIVE ? null : tp;
   let line = null;
   // 目立つ状況を優先順で1つ選ぶ(意味のある実況にする)
   if (mc.cpuPct != null && mc.cpuPct >= 85) line = pickFresh('mcpu', M_CPU_HOT).replace('{n}', mc.cpuPct);
   else if (!mc.battCharging && mc.battPct != null && mc.battPct < 20) line = pickFresh('mbatt', M_BATT).replace('{n}', mc.battPct);
   else if (!mc.battCharging && mc.battPct != null && mc.battPct < 40) line = pickFresh('mbattlow', M_BATT_LOW).replace('{n}', mc.battPct);
   else if (mc.diskUsedPct != null && mc.diskUsedPct >= 90) line = pickFresh('mdisk', M_DISK).replace('{n}', mc.diskUsedPct).replace('{g}', mc.diskFreeGB ?? '?');
-  else if (tpShare != null && tpShare >= 50) line = pickFresh('mtop', M_TOP).replace(/\{p\}/g, tp.name);
+  else if (tpShare != null && tpShare >= 50 && tpSay) line = pickFresh('mtop', M_TOP).replace(/\{p\}/g, tpSay.name);
   else if (mc.netTxMB != null && mc.netTxMB >= 300) line = pickFresh('mnetu', M_NET_UP).replace('{n}', Math.round(mc.netTxMB));
   else if (mc.netRxMB != null && mc.netRxMB >= 300) line = pickFresh('mnetd', M_NET_DOWN).replace('{n}', Math.round(mc.netRxMB));
   else if (mc.memUsedPct != null && mc.memUsedPct >= 80) line = pickFresh('mmem', M_MEM).replace('{n}', mc.memUsedPct);
   else if (mc.uptimeDays != null && mc.uptimeDays >= 7) line = pickFresh('mupt', M_UPTIME).replace(/\{n\}/g, Math.round(mc.uptimeDays));
-  else if (mc.cpuPct != null && mc.cpuPct >= 60 && tp) line = pickFresh('mtop', M_TOP).replace(/\{p\}/g, tp.name);
+  else if (mc.cpuPct != null && mc.cpuPct >= 60 && tpSay) line = pickFresh('mtop', M_TOP).replace(/\{p\}/g, tpSay.name);
   else if (Math.random() < 0.25) line = pickFresh('mcalm', M_CALM);
   if (line) {
     who.say(t, line, 4200);

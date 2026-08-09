@@ -1,4 +1,12 @@
 // MON-AI Inc. ダッシュボード設定
+//
+// 🚨 このファイルは index.html が <script src="config.js"> で読む＝**公開アセット**。
+// GitHub Pages が素で配るので、値だけでなく**コメントも世界中から読める**
+// (実測: https://fujimoto198904-hash.github.io/mon-ai-inc/config.js が 200)。
+// したがって掲載台帳の「常に不可(例外なし)」がこのファイルにもそのまま掛かる —
+// 顧客名・事業所名・法務・**ファイルパス・SSDのボリューム名・データ規模の具体的な数字**を書かない。
+// 2026-08-10に「7日で41本」「1日100件」「14日で96本」「Project-T-SSD」をコメントから削除した。
+// 画面に出ないから安全、ではない。**リポジトリに置いた時点で公開**。
 window.OFFICE_CONFIG = {
   // データ配信元(2026-08-09にSupabaseを廃止。プロジェクトが消えて20時間停止したため)。
   // Pagesは main しかビルドしないので data ブランチに置く=ビルド上限に当たらない。
@@ -14,7 +22,8 @@ window.OFFICE_CONFIG = {
   // (LP出勤板とライブ配信の両方でこれを通す。未知の案件は「制作作業」にfail-closed)
   publicTask: function (proj) {
     if (!proj) return '制作作業';
-    // adobestock は SSD のパスに 'Project-T-SSD' を含むので、動画より先に判定する
+    // 素材調達を動画より先に判定する(SSD側のパス由来の文字列が youtubesozai の条件にも
+    // 引っかかるため。順番を入れ替えると素材調達が動画に吸われる)
     if (/adobestock|素材/i.test(proj)) return '映像素材の調達';
     if (/koen/i.test(proj)) return '講演コンテンツの制作';
     if (/youtubesozai|Project-T/i.test(proj)) return '動画コンテンツの制作';
@@ -83,11 +92,11 @@ window.OFFICE_CONFIG = {
       source: 'schedule', shift: [3, 0, 7, 0], deliveryKeys: ['koen', 'daihon'],
       watcherKey: 'com.mon.tsuki.watcher' },
     // --- 映像制作部(2026-07-29 新設) 上段の中央3席にまとめた ---
-    // 有本: 動画素材が7日で41本＝Claude最大案件。koen/Irodoriを外して専任にした
+    // 有本: 動画素材がClaude最大案件。koen/Irodoriを外して専任にした
     { id: 'arimoto', wage: 4500, name: '有本', dept: '映像制作部', role: 'クロード作業(動画素材)',
       hair: '#2a2220', shirt: '#3a3a4a', desk: { x: 292, y: 112 }, tag: 'youtubesozai',
       source: 'claude', match: '^youtubesozai' },
-    // 天川: AM38/bottlePVが休眠したのでアプリ制作部から異動。Adobe Stockの素材調達(1日100件)へ
+    // 天川: AM38/bottlePVが休眠したのでアプリ制作部から異動。Adobe Stockの素材調達へ
     { id: 'amakawa', wage: 4500, name: '天川', dept: '映像制作部', role: 'クロード作業(素材調達)',
       hair: '#3a3228', fat: true, tall: true, shirt: '#4a7ac8', desk: { x: 364, y: 112 }, tag: '素材調達',
       source: 'claude', match: 'adobestock|素材' },
@@ -95,7 +104,7 @@ window.OFFICE_CONFIG = {
       hair: '#d83a2e', shirt: '#c85a8a', desk: { x: 528, y: 112 }, tag: 'yorutool',
       source: 'claude', match: '^yorutool' },
 
-    // --- 楽曲制作部(2026-07-29 新設) BGMUPが14日で96本＝全社最多なので独立させた ---
+    // --- 楽曲制作部(2026-07-29 新設) BGMUPが全社最多なので独立させた ---
     { id: 'sasaki', wage: 3000, name: '佐々木', dept: '楽曲制作部', role: 'コーデックス作業(BGM/楽曲)',
       hair: '#4a3a2a', slim: true, shirt: '#2e8a72', desk: { x: 424, y: 112 }, tag: 'BGMUP',
       source: 'codex', match: '^BGMUP' },
