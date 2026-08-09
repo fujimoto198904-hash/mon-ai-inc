@@ -3941,7 +3941,9 @@ function onSnapshot() {
   const buckets = {};
   for (const e of claudeEmps) buckets[e.id] = [];
   for (const a of (s.claude.active || [])) {
-    const owner = claudeEmps.find(e => e.match && new RegExp(e.match).test(a.project)) || claudeFallback;
+    // 担当はコレクタ側で確定済み(生パスを送らないため)。旧payload向けに従来判定も残す
+    const owner = (a.owner && claudeEmps.find(e => e.id === a.owner))
+      || claudeEmps.find(e => e.match && new RegExp(e.match).test(a.project || '')) || claudeFallback;
     if (owner) buckets[owner.id].push(a);
   }
   const blk = s.claude.block;
@@ -3962,7 +3964,7 @@ function onSnapshot() {
   for (const a of (s.codex.active || [])) {
     // 作業フォルダ(proj)だけでなくスレッド名でも担当を判定
     // (別フォルダでAM38の作業をしているセッションを座間に回さない)
-    const owner = codexEmps.find(e => {
+    const owner = (a.owner && codexEmps.find(e => e.id === a.owner)) || codexEmps.find(e => {
       if (!e.match) return false;
       const re = new RegExp(e.match, 'i');
       return (a.proj && re.test(a.proj)) || (a.thread && re.test(a.thread));
@@ -3989,13 +3991,14 @@ function onSnapshot() {
         // 頭上タグ=いま実際にやっている作業(最後の指示)。名簿にはプロジェクト名込みの詳細。
         // ただしライブ配信(9:16)はcanvasをそのまま切り出すので、指示原文が映らないよう汎化する
         if (LIVE) {
-          e.jobText = [...new Set(act.map(a => PUB(a.project)))].join(' / ');
+          e.jobText = [...new Set(act.map(a => PUB(a.label || a.project)))].join(' / ');
           e.jobDetail = null;
-          e.bubbles = [...new Set(act.map(a => `${PUB(a.project)}を進めてます`))];
+          e.bubbles = [...new Set(act.map(a => `${PUB(a.label || a.project)}を進めてます`))];
         } else {
-          e.jobText = act.map(a => a.task ? a.task : a.project + (a.sessions > 1 ? `×${a.sessions}` : '')).join(' / ');
-          e.jobDetail = act.map(a => `${a.project}${a.sessions > 1 ? `×${a.sessions}` : ''}${a.task ? `: ${a.task}` : ''}`).join(' / ');
-          e.bubbles = act.map(a => a.task ? `いま「${Array.from(a.task).slice(0, 34).join('')}」を進めてます` : `「${a.project}」作業中`);
+          const pn = a => a.label || a.project || 'その他';
+          e.jobText = act.map(a => a.task ? a.task : pn(a) + (a.sessions > 1 ? `×${a.sessions}` : '')).join(' / ');
+          e.jobDetail = act.map(a => `${pn(a)}${a.sessions > 1 ? `×${a.sessions}` : ''}${a.task ? `: ${a.task}` : ''}`).join(' / ');
+          e.bubbles = act.map(a => a.task ? `いま「${Array.from(a.task).slice(0, 34).join('')}」を進めてます` : `「${pn(a)}」作業中`);
         }
         if (e.showHp && s.claude.today) e.bubbles.push(`本日 ${fmtTok(s.claude.today.tokensOut)}tok 出力`);
         if (e.tired) e.bubbles.push('5h枠がもうすぐ…');
@@ -4020,14 +4023,14 @@ function onSnapshot() {
           for (const x of ts) c.set(x, (c.get(x) || 0) + 1);
           return [...c].map(([k, n]) => (n > 1 ? `${k}×${n}` : k));
         };
-        const thOf = a => a.thread || a.proj || 'セッション';   // 名無しスレッドは案件名で呼ぶ
+        const thOf = a => a.label || a.thread || a.proj || 'セッション';   // 名無しスレッドは案件名で呼ぶ
         if (LIVE) {
-          e.jobText = [...new Set(act.map(a => PUB(a.proj)))].join(' / ');
+          e.jobText = [...new Set(act.map(a => PUB(a.label || a.proj)))].join(' / ');
           e.jobDetail = null;
-          e.bubbles = [...new Set(act.map(a => `${PUB(a.proj)}を進めてます`))];
+          e.bubbles = [...new Set(act.map(a => `${PUB(a.label || a.proj)}を進めてます`))];
         } else {
           e.jobText = tally(act.map(thOf)).join(' / ');
-          e.jobDetail = tally(act.map(a => (a.thread && a.proj && a.thread !== a.proj) ? `${a.proj}: ${a.thread}` : thOf(a))).join(' / ');
+          e.jobDetail = tally(act.map(thOf)).join(' / ');
           e.bubbles = [...new Set(act.map(thOf))].map(th => `「${Array.from(th).slice(0, 30).join('')}」進行中`);
         }
       } else {

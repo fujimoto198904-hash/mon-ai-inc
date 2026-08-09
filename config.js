@@ -26,6 +26,30 @@ window.OFFICE_CONFIG = {
     return '制作作業';
   },
 
+  // 画面に出す案件名の正典。**生のフォルダ名を出さない**ための変換。
+  // 掲載台帳の「常に不可: ファイルパス・リポジトリ構成」に該当するもの(SSDのボリューム名・
+  // 一時フォルダ・チャット由来のフォルダ名など)を素通しさせない。未知は fail-closed で「その他」。
+  // 新しい案件を出したくなったらここに1行足す(＝出す判断を明示的に通す)
+  projectLabel: function (raw) {
+    if (!raw) return 'その他';
+    var s = String(raw);
+    var known = [
+      [/adobestock|素材/i, '素材調達'],
+      [/^youtubesozai/i, 'youtubesozai'],
+      [/^koen/i, 'koen'],
+      [/^Irodori/i, 'Irodori-TTS'],
+      [/^yorutool/i, 'yorutool'],
+      [/^BGMUP/i, 'BGMUP'],
+      [/^AM38/i, 'AM38'],
+      [/^bottlePV/i, 'bottlePV'],
+      [/^BIGtime/i, 'BIGtime'],
+      [/mon-ai/i, 'mon-ai-site'],
+      [/^Project-T/i, 'Project-T'],
+    ];
+    for (var i = 0; i < known.length; i++) if (known[i][0].test(s)) return known[i][1];
+    return 'その他';
+  },
+
   youtubeGoal: 10000,          // 登録者の目標
   youtubeViewGoal: 100000000,  // 総再生回数の目標(1億回・2026-07-28 MON設定)
 
