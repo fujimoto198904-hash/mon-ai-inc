@@ -4575,15 +4575,22 @@ function updateHud() {
 
   const ul = $('tasks');
   ul.innerHTML = '';
-  for (const it of (s.tasks.items || [])) {
+  const items = s.tasks.items || [];
+  // 本文は収集側で落とした(2026-08-10 MON決定・P61②)。本文が無いなら1行ずつ並べても
+  // 同じ文字列が8回続くだけなので、**IDを1行に畳む**。中身はMONが手元のdocsで読む
+  const hasText = items.some(it => it.text);
+  if (items.length && !hasText) {
+    const li = document.createElement('li');
+    li.innerHTML = items.map(it => `<b>${esc(it.id)}</b>`).join('<span style="opacity:.3"> · </span>')
+      + `<div style="opacity:.45;font-size:11px;margin-top:3px">中身は docs/04_PENDING.md（公開JSONには載せない）</div>`;
+    ul.appendChild(li);
+  } else for (const it of items) {
     const li = document.createElement('li');
     // since が無い行は日数を出さない(起票日を推測しない)
     const d = it.since ? Math.floor((Date.now() - Date.parse(it.since + 'T00:00:00+09:00')) / 86400000) : null;
     const cls = d == null ? '' : d >= 90 ? ' style="color:var(--bad)"' : d >= 30 ? ' style="color:var(--warn)"' : '';
     const ageTag = d == null ? '' : `<span class="age"${cls}>滞留${d}日</span>`;
-    // 本文は収集側で落としている(2026-08-10 MON決定・P61②)。古いスナップショットが
-    // まだ text を持っている間だけ後方互換で出す。docs は手元で読む前提
-    li.innerHTML = `<b>${esc(it.id)}</b>${it.text ? esc(it.text) : '<span style="opacity:.45">docs/04_PENDING.md を参照</span>'}${ageTag}`;
+    li.innerHTML = `<b>${esc(it.id)}</b>${esc(it.text)}${ageTag}`;
     ul.appendChild(li);
   }
   if (s.tasks.count > (s.tasks.items || []).length) {
