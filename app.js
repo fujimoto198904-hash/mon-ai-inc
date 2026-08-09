@@ -712,7 +712,7 @@ function drawTicker(g, tm) {
   let x = 8;
   for (const it of items) {
     const w = g.measureText(it.t).width;
-    if (x + w > W - 46) break;              // 右端の時計ぶんを空ける
+    if (x + w > W - 118) break;             // 右端の日付+時計ぶんを空ける
     g.fillStyle = it.c || '#e8dcc4';
     g.fillText(it.t, x, Y + 8.5);
     x += w + 7;
@@ -720,8 +720,8 @@ function drawTicker(g, tm) {
     g.fillText('/', x - 4.5, Y + 8.5);
   }
   g.fillStyle = '#c8a878';
-  const clock = tm.hm;
-  g.fillText(clock, W - 8 - g.measureText(clock).width, Y + 8.5);
+  const clock = `${tm.dateStr || ''} ${tm.hm}`.trim();
+  g.fillText(clock, W - 10 - g.measureText(clock).width, Y + 8.5);
 }
 
 function drawOffice(g, t, tm) {
