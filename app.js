@@ -537,7 +537,10 @@ function drawBubble(g, x, y, text) {
   if (cps.length > 42) lines[2] = cps.slice(28, 41).join('') + '…';
   const w = Math.max(...lines.map(l => g.measureText(l).width)) + 8;
   const h = lines.length * 8 + 5;
-  let bx = Math.min(Math.max(4, x - w / 2), W - w - 4);
+  // ライブは203px幅に切り抜くので、キャンバス全幅ではなくカメラ窓でクランプしないと端で切れる
+  const cl = LIVE ? camX + 4 : 4;
+  const cr = LIVE ? camX + CAM_W - 4 : W - 4;
+  let bx = Math.min(Math.max(cl, x - w / 2), cr - w);
   const by = Math.max(4, y - 20 - h);
   g.fillStyle = 'rgba(255,255,255,.95)';
   g.strokeStyle = INK; g.lineWidth = 1;
@@ -4777,24 +4780,68 @@ const camCx = camCv ? camCv.getContext('2d') : null;
 if (camCx) camCx.imageSmoothingEnabled = false;
 const CAM_W = 203;                 // 論理クロップ幅(203x360 ≒ 9:16)
 let camX = (W - CAM_W) / 2, lastLiveDom = -9999;
-function liveTarget(t) {
-  // 見どころがあればカメラが寄る: イベント > 朝会 > 社長の指示行脚
-  if (officeEvent.active) return 310 - CAM_W / 2;
-  if (standup.active) return 414 - CAM_W / 2;
+// ---- ライブのショット選択 ----
+// **返すのは「注目点の中心x」**(以前は左端xだった)。blitLive側で -CAM_W/2 する。
+// 以前は イベント/朝会/社長の指示 の3つしか追っておらず、火災報知器の15役パニック・口喧嘩・
+// 紙吹雪・収録・月城のスタジオ・夜デート・マシン高負荷を全部素通ししていた。
+// 公開画面なので**ショット名は汎化する**(MONの行動をそのまま出さない)。
+const IDLE_SHOTS = [
+  { x: 100, name: 'オフィス' },
+  { x: 320, name: 'フロア' },
+  { x: 570, name: 'スタジオ' },
+];
+let shot = null;   // { key, x, name, since }
+
+function pickShot(t) {
   const bossE = employees.find(e => e.def.source === 'boss');
-  if (bossE && bossE.directing) return bossE.pos.x - CAM_W / 2;
-  return (W - CAM_W) / 2 * (1 + Math.sin(t / 60000 * Math.PI * 2));
+  const alive = e => e && e.present && Number.isFinite(e.pos && e.pos.x);
+  // 優先度順。上ほど強い
+  if (panic.until && t < panic.until) return { key: 'panic', x: 306, name: '火災報知器' };
+  if (fight.active && alive(fight.active.a)) return { key: 'fight', x: fight.active.a.pos.x, name: 'もめごと' };
+  if (celebration.until && t < celebration.until) return { key: 'celebrate', x: 320, name: 'お祝い' };
+  if (alive(bossE) && bossE.recording) return { key: 'rec', x: 428, name: 'スタジオ' };
+  const tsu = employees.find(e => e.id === 'tsukishiro');
+  if (alive(tsu) && tsu.action === 'studio') return { key: 'studio', x: TSUKI_STUDIO_POST.x, name: '収録' };
+  if (romance.active) {
+    // cheer種別は spotA を持たないので参加者の位置から取る
+    const r = romance.active;
+    const who = [r.a, r.b].find(alive);
+    if (who) return { key: 'romance', x: who.pos.x, name: '休憩室' };
+  }
+  if (officeEvent.active) return { key: 'event', x: 310, name: officeEvent.active.kind === 'bbq' ? '焼肉' : 'トレーニング' };
+  if (standup.active) return { key: 'standup', x: 414, name: '朝会' };
+  if (alive(bossE) && bossE.directing) return { key: 'directive', x: bossE.pos.x, name: '打ち合わせ' };
+  if (snap && snap.machine && snap.machine.cpuPct != null && snap.machine.cpuPct >= 85) {
+    return { key: 'machine', x: 578, name: 'マシン室' };
+  }
+  // 無事件は定点3ショットを25秒ずつ巡回(等速スライドは酔うのでやめた)
+  const i = Math.floor(t / 25000) % IDLE_SHOTS.length;
+  const s = IDLE_SHOTS[i];
+  return { key: 'idle' + i, x: s.x, name: s.name };
+}
+
+const SHOT_MIN_MS = 6000;   // 最短ショット長。優先度が同着で振動するのを防ぐ
+function liveTarget(t) {
+  const next = pickShot(t);
+  if (!shot) shot = { ...next, since: t };
+  else if (next.key !== shot.key && t - shot.since >= SHOT_MIN_MS) shot = { ...next, since: t };
+  else if (next.key === shot.key) { shot.x = next.x; shot.name = next.name; }   // 同じショットなら追従
+  return shot.x;
 }
 function blitLive(t, tm) {
   if (!camCx) return;
   if (!Number.isFinite(camX)) camX = (W - CAM_W) / 2;   // NaN汚染からの自己回復
-  let tgt = Math.max(0, Math.min(W - CAM_W, liveTarget(t)));
+  const centre = liveTarget(t);
+  let tgt = Math.max(0, Math.min(W - CAM_W, (Number.isFinite(centre) ? centre : W / 2) - CAM_W / 2));
   if (!Number.isFinite(tgt)) tgt = (W - CAM_W) / 2;
-  camX += (tgt - camX) * 0.012;
+  // 遠いショットへはカット(補間だと10秒かかって事件の頭が映らない)、近ければパン
+  if (Math.abs(tgt - camX) > 120) camX = tgt; else camX += (tgt - camX) * 0.05;
   camCx.drawImage(cv, Math.round(camX * 4), 0, CAM_W * 4, 1440, 0, 0, CAM_W * 4, 1440);
   if (t - lastLiveDom > 1000) {
     lastLiveDom = t;
     $('lvClock').textContent = tm.hm;
+    const sh = $('lvShot');
+    if (sh) sh.textContent = shot ? shot.name : '';
     $('lvMission').textContent = `「${CFG.mission}」`;
     const subs = snap && snap.youtube && snap.youtube.subs != null ? snap.youtube.subs.toLocaleString('ja-JP') + '人' : '---';
     $('lvSubs').textContent = `📺 YT登録者 ${subs}`;
